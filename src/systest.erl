@@ -30,7 +30,7 @@
 -export([active_cluster/1, clusters/1, cluster_nodes/1]).
 -export([static_config/2, merge_config/2, global_config/2,
          runtime_config/3, cluster_config/1]).
--export([interact/2, write_pid_file/1]).
+-export([interact/2, write_pid_file/1, write_pid_file/2]).
 
 %%
 %% Public APIs
@@ -55,9 +55,13 @@ stop(Scope, Config) ->
 interact(Node, Inputs) ->
     systest_node:interact(Node, Inputs).
 
-write_pid_file({dir, Dir}) ->
+write_pid_file(Dir) ->
     Pid = os:getpid(),
-    File = filename:join(Dir, Pid ++ ".pid"),
+    write_pid_file(Pid ++ ".pid", Dir).
+
+write_pid_file(Name, {dir, Dir}) ->
+    Pid = os:getpid(),
+    File = filename:join(Dir, Name),
     file:write_file(File, Pid, [write]).
 
 %% config handling

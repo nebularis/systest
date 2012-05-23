@@ -102,7 +102,7 @@ extend({Path, Spec}=New, Existing) when Path =:= dir orelse
                                      {[], ScratchDir}, Members),
             [{Path, Rewrite(Value)}|Existing]
     end;
-extend({extra, [{_, _, _}|_]=Stuff}=New, Existing) ->
+extend({extra, [{_, _, _}|_]=Stuff}, Existing) ->
     Items = [{M,F,[hd(extend(A, Existing)) || A <- Args]} || {M,F,Args} <- Stuff],
     [{extra, Items}|Existing];
 extend({K, NewVal}=New, Existing) when is_list(NewVal) ->

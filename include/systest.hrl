@@ -27,12 +27,31 @@
 
 -type application_info() :: {atom(), [{atom(), term()}]}.
 
+-type command()          :: atom().
+-type script_name()      :: string().
+-type name()             :: string().
+-type account()          :: string().
+-type prefix()           :: string().
+-type value()            :: string().
+-type has_value()        :: boolean().
+-type argv_switch(A)     :: {prefix(), value()} | {'argument', value()}.
+-type argv_flags()       :: argv_switch(name()).
+-type attribute()        :: atom().
+-type setenv_flags()     :: {'environment', name(), string()}   |   %% explicit
+                            {'environment', string()}           |   %% from os
+                            {'node', attribute()}.      %% from node_info record
+-type vmflags()          :: string().
+-type script_flags()     :: {command(), [script_name()  |
+                                         setenv_flags() |
+                                         argv_flags()]}.
+
 -record('systest.node_info', {
     host    :: atom(),
     name    :: atom(),
     id      :: atom(),
     handler :: module(),
-    vmflags :: string(),
+    user    :: account(),
+    flags   :: vmflags() | script_flags(),
     apps    :: [application_info()],
     extra   :: term(),
     os_pid  :: string(),

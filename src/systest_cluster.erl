@@ -77,6 +77,21 @@ status(#'systest.cluster'{nodes=Nodes}) ->
 print_status(Cluster) ->
     ct:pal(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
 
+check_config(Cluster) ->
+    with_cluster(Cluster, fun build_node_info/3).
+
+with_cluster(Cluster, NodeHandler) ->
+    case systest:cluster_config(ClusterId) of
+        undefined -> noconfig;
+        Hosts -> 
+            ct:pal("Configured hosts: ~p~n", [Hosts]),
+            Nodes = lists:flatten(
+                     [NodeHandler(ClusterId, Host, Config) || Host <- Hosts]),
+            ct:pal("Configured nodes: ~p~n",
+                    [[N#'systest.node_info'.id || N <- Nodes]]),
+            #'systest.cluster'{name=ClusterId, nodes=Nodes}
+    end.
+
 %%
 %% Internal API
 %%
@@ -84,7 +99,7 @@ print_status(Cluster) ->
 print_status_info({#'systest.node_info'{host=Host,
                                         id=Name,
                                         handler=Type,
-                                        vmflags=Args,
+                                        flags=Args,
                                         apps=Apps,
                                         os_pid=Proc,
                                         extra=Xtra,
@@ -100,6 +115,8 @@ print_status_info({#'systest.node_info'{host=Host,
                    "         port: ~p~n"
                    "----------------------------------------------------~n",
                    [Host, Status, Name, Type, Args, Apps, Proc, Xtra, Port]).
+
+build_node_info(Cluster, {Host, Nodes}, Config)
 
 start_host(Cluster, {Host, Nodes}, Config) when is_atom(Host) andalso
                                                 is_list(Nodes) ->

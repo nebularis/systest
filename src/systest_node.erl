@@ -34,6 +34,8 @@
 -export([start/1, stop/1, kill/1]).
 -export([status/1, interact/2]).
 
+-export([status_check/1]).
+
 -exprecs_prefix([operation, "_"]).
 -exprecs_fname([prefix, "node_info"]).
 -exprecs_vfname([fname, "__", version]).
@@ -102,6 +104,15 @@ interact(NI=#'systest.node_info'{handler=Handler}, Inputs) ->
     Handler:interact(NI, Inputs).
 
 %%
+%% Handler facing API
+%%
+status_check(Node) when is_atom(Node) ->
+    case net_adm:ping(Node) of
+        pong  -> nodeup;
+        Other -> {nodedown, Other}
+    end.
+
+%%
 %% Private API
 %%
 
@@ -113,7 +124,7 @@ setup(NI, {App, Vars}) ->
 make_node(Config) ->
     new_node_info([{host,    ?REQUIRE(host, Config)},
                    {name,    ?REQUIRE(name, Config)},
-                   {vmflags, ?CONFIG(emulator_flags, Config)},
+                   {flags,   ?CONFIG(flags, Config)},
                    {apps,    ?CONFIG(applications, Config)},
                    {extra,   ?CONFIG(extra, Config)}]).
 

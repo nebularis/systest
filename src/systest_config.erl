@@ -116,7 +116,9 @@ extend({K, NewVal}=New, Existing) when is_list(NewVal) ->
             ct:fail("Cannot merge incoming config ~p with ~p~n", [New, Other])
     end;
 extend({_, _}=New, Existing) ->
-    merge(New, Existing).
+    merge(New, Existing);
+extend(Other, _Existing) ->
+    Other.
     %append_if_missing(fun({K, _}, Items) -> lists:keymember(K, 1, Items) end,
     %                  New, Existing);
 

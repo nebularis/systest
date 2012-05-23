@@ -22,7 +22,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% -----------------------------------------------------------------------------
--module(systest_slave).
+-module(systest_cli).
 
 -behaviour(systest_node).
 
@@ -31,15 +31,14 @@
 
 -include("systest.hrl").
 
--spec start(systest_node:node_info()) ->
-                            systest_node:node_info() | term().
-start(NI=#'systest.node_info'{host=Host, name=Name, flags=VmArgs}) ->
-    on_start(NI, slave:start(Host, Name, VmArgs)).
+-spec start(systest_node:node_info()) -> systest_node:node_info() | term().
+start(NI=#'systest.node_info'{host=Host, name=Name, flags=Flags}) ->
+    NI.
 
 -spec start_link(systest_node:node_info()) ->
                             systest_node:node_info() | term().
-start_link(NI=#'systest.node_info'{host=Host, name=Name, flags=VmArgs}) ->
-    on_start(NI, slave:start_link(Host, Name, VmArgs)).
+start_link(NI=#'systest.node_info'{host=Host, name=Name, flags=Flags}) ->
+    NI.
 
 -spec stop(systest_node:node_info()) -> 'ok'.
 stop(#'systest.node_info'{id=Node}) ->
@@ -51,7 +50,10 @@ kill(Node) ->
 
 -spec status(systest_node:node_info()) -> 'nodeup' | {'nodedown', term()}.
 status(#'systest.node_info'{id=Node}) ->
-    systest_node:status_check(Node).
+    case net_adm:ping(Node) of
+        pong  -> nodeup;
+        Other -> {nodedown, Other}
+    end.
 
 -spec interact(systest_node:node_info(),
                {module(), atom(), [term()]}) -> term().
@@ -67,4 +69,3 @@ on_start(NI, {ok, Node}) ->
     NI#'systest.node_info'{owner=self(), os_pid=OsPid, id=Node};
 on_start(_, Error) ->
     Error.
-

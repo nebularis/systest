@@ -22,49 +22,18 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% -----------------------------------------------------------------------------
--module(systest_slave).
+-module(systest_app).
+-behaviour(application).
 
--behaviour(systest_node).
-
--export([start/1, start_link/1, stop/1, kill/1]).
--export([status/1, interact/2]).
-
--include("systest.hrl").
-
--spec start(systest_node:node_info()) ->
-                            systest_node:node_info() | term().
-start(NI=#'systest.node_info'{host=Host, name=Name, flags=VmArgs}) ->
-    on_start(NI, slave:start(Host, Name, VmArgs)).
-
--spec start_link(systest_node:node_info()) ->
-                            systest_node:node_info() | term().
-start_link(NI=#'systest.node_info'{host=Host, name=Name, flags=VmArgs}) ->
-    on_start(NI, slave:start_link(Host, Name, VmArgs)).
-
--spec stop(systest_node:node_info()) -> 'ok'.
-stop(#'systest.node_info'{id=Node}) ->
-    slave:stop(Node).
-
--spec kill(systest_node:node_info()) -> 'ok'.
-kill(Node) ->
-    stop(Node).
-
--spec status(systest_node:node_info()) -> 'nodeup' | {'nodedown', term()}.
-status(#'systest.node_info'{id=Node}) ->
-    systest_node:status_check(Node).
-
--spec interact(systest_node:node_info(),
-               {module(), atom(), [term()]}) -> term().
-interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}) ->
-    rpc:call(Node, Mod, Func, Args).
+%% Application callbacks
+-export([start/2, stop/1]).
 
 %%
-%% Private API
+%% Application callbacks
 %%
 
-on_start(NI, {ok, Node}) ->
-    OsPid = rpc:call(Node, os, getpid, []),
-    NI#'systest.node_info'{owner=self(), os_pid=OsPid, id=Node};
-on_start(_, Error) ->
-    Error.
+start(_StartType, _StartArgs) ->
+    systest_sup:start_link().
 
+stop(_State) ->
+    ok.

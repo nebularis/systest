@@ -22,21 +22,17 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% -----------------------------------------------------------------------------
--module(systest_config_tests).
--include_lib("eunit/include/eunit.hrl").
+-module(systest_suite).
 
-simple_config_merge_test() ->
-    ?assertEqual([{a, 2}, {b, 3}],
-                 systest_config:merge_config([{a, 2}, {b, 1}],
-                                             [{b, 3}])).
+-compile(export_all).
 
-path_merge_test() ->
-    ?assertEqual([{file,"tmp/mnesia/running.pid"},
-                  {dir,"tmp-db"},
-                  {priv_dir,"tmp"}],
-        systest_config:merge_config(
-                [{priv_dir, "tmp"}],
-                [{dir, [scratch, "-db"]},
-                 {file, {path, [scratch, "mnesia", "running.pid"]}}])).
-
-
+export_all(Mod) ->
+    [ {exports, Functions} | _ ] = Mod:module_info(),
+    [ FName || {FName, _} <- lists:filter(
+                               fun ({module_info,_}) -> false;
+                                   ({all,_}) -> false;
+                                   ({init_per_suite,1}) -> false;
+                                   ({end_per_suite,1}) -> false;
+                                   ({_,1}) -> true;
+                                   ({_,_}) -> false
+                               end, Functions)].

@@ -31,6 +31,7 @@
 -export_type([node_info/0]).
 
 -export([behaviour_info/1]).
+-export([make_node/3]).
 -export([start/1, stop/1, kill/1]).
 -export([status/1, interact/2]).
 
@@ -58,21 +59,16 @@ behaviour_info(callbacks) ->
 behaviour_info(_) ->
     undefined.
 
--spec start([{atom(), term()}]) -> node_info() | term().
-start(Config) ->
-    Callback = case lists:keyfind(handler, 1, Config) of
-                   {handler, Handler} -> Handler;
-                   false              -> systest_external
-               end,
-    NodeInfo = make_node(Config),
-    Startup = case ?CONFIG(link_to_parent, Config) of
-                  true  -> start_link;
-                  _     -> start
-              end,
-    ct:pal("~p starting node: ~p~n", [Callback, NodeInfo]),
-    case catch( apply(Callback, Startup, [NodeInfo]) ) of
-        NI when is_record(NI, 'systest.node_info') ->
-            NI2 = NI#'systest.node_info'{handler=Callback},
+-spec make_node(atom(), atom(), systest_config:config()) -> node_info().
+make_node(Cluster, Node, Config) ->
+    make_node(node_config(Cluster, Node, Config)).
+
+-spec start(node_info()) -> node_info() | term().
+start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink}) ->
+    Startup = case ShouldLink of true -> start_link; _ -> start end,
+    ct:pal("~p starting node: ~p~n", [Handler, NodeInfo]),
+    case catch( apply(Handler, Startup, [NodeInfo]) ) of
+        NI2 when is_record(NI2, 'systest.node_info') ->
             case NI2#'systest.node_info'.apps of
                 []   -> ok;
                 Apps -> [setup(NI2, App) || App <- Apps]
@@ -116,15 +112,41 @@ status_check(Node) when is_atom(Node) ->
 %% Private API
 %%
 
+make_node(Config) ->
+    %% NB: new_node_info is an exprecs generated function
+    new_node_info([{host, ?REQUIRE(host, Config)},
+                   {name, ?REQUIRE(name, Config)},
+                   {handler, ?CONFIG(handler, Config, systest_cli)},
+                   {link, ?CONFIG(link, Config, false)},
+                   {user, ?CONFIG(user, Config, os:getenv("USER"))},
+                   {flags, ?CONFIG(flags, Config)},
+                   {apps, ?CONFIG(applications, Config)},
+                   {extra, ?CONFIG(extra, Config)},
+                   {config, Config}]).
+
+node_config(Cluster, Node, Config) ->
+    Globals         = systest_config:get_config(global_node_config),
+    NodeConfig      = systest_config:get_config({Cluster, Node}),
+    {Static, Runtime, Flags} = lists:foldl(fun extract_config/2,
+                                           {[], [], []}, NodeConfig),
+
+    RuntimeConfig1  = systest_config:merge_config(Config, NodeConfig),
+    RuntimeConfig2  = systest_config:merge_config(RuntimeConfig1, Runtime),
+    Config2         = systest_config:merge_config(Static, RuntimeConfig2),
+    MergedGlobals1  = systest_config:merge_config(Globals, Config2),
+    MergedFlags     = systest_config:merge_config(MergedGlobals1, Flags),
+    MergedFlags.
+
+extract_config({static, Static}, {SoFar, _, _}=Acc) ->
+    setelement(1, Acc, Static ++ SoFar);
+extract_config({startup, Startup}, {SoFar, _, _}=Acc) ->
+    setelement(1, Acc, Startup ++ SoFar);
+extract_config({runtime, Runtime}, {_, SoFar, _}=Acc) ->
+    setelement(2, Acc, Runtime ++ SoFar);
+extract_config({flags, Flags}, {_, _, SoFar}=Acc) ->
+    setelement(3, Acc, Flags ++ SoFar).
+
 setup(NI, {App, Vars}) ->
     interact(NI, {applicaiton, load, [App]}),
     [interact(NI, {application, set_env, [App, Env, Var]}) ||
                                             {Env, Var} <- Vars].
-
-make_node(Config) ->
-    new_node_info([{host,    ?REQUIRE(host, Config)},
-                   {name,    ?REQUIRE(name, Config)},
-                   {flags,   ?CONFIG(flags, Config)},
-                   {apps,    ?CONFIG(applications, Config)},
-                   {extra,   ?CONFIG(extra, Config)}]).
-

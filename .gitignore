@@ -2,3 +2,6 @@
 *.swp
 deps
 ebin
+*.beam
+logs
+.eunit

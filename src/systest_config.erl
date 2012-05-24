@@ -25,19 +25,27 @@
 -module(systest_config).
 -include_lib("eunit/include/eunit.hrl").
 
--export([read/2, require/2]).
+-type config_key() :: atom() | string() | binary(). 
+-type config()     :: [{config_key(), term()}].
+
+-export_type([config_key/0, config/0]).
+
+-export([read/2, read/3, require/2]).
 -export([replace_value/3, ensure_value/3]).
--export([get_config/3, merge_config/2]).
+-export([get_config/1, get_config/3, merge_config/2]).
 
 %%
 %% Public API
 %%
 
-read(Key, Config) ->
+read(Key, Config, Default) ->
     case lists:keyfind(Key, 1, Config) of
-        false        -> [];
+        false        -> Default;
         {Key, Value} -> Value
     end.
+
+read(Key, Config) ->
+    read(Key, Config, []).
 
 require(Key, Config) ->
     case lists:keyfind(Key, 1, Config) of
@@ -46,6 +54,9 @@ require(Key, Config) ->
         {Key, Value} ->
             Value
     end.
+
+get_config(Key) ->
+    ct:get_config(Key, [all], []).
 
 get_config(Scope, Node, Type) ->
     Nodes = ct:get_config({Scope, Node}, [all], []),

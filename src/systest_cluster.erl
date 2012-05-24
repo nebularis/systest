@@ -25,7 +25,7 @@
 -module(systest_cluster).
 
 -export([start/1, start/2, stop/2]).
--export([status/1, print_status/1]).
+-export([check_config/2, status/1, print_status/1]).
 
 -include("systest.hrl").
 
@@ -38,16 +38,10 @@ start(Config) ->
 
 start(ClusterId, Config) ->
     ct:pal("Processing cluster info for ~p~n", [ClusterId]),
-    case systest:cluster_config(ClusterId) of
-        undefined ->
+    case with_cluster(ClusterId, fun start_host/3, Config) of
+        noconfig ->
             Config;
-        Hosts ->
-            ct:pal("Configured hosts: ~p~n", [Hosts]),
-            Nodes = lists:flatten(
-                    [start_host(ClusterId, Host, Config) || Host <- Hosts]),
-            ct:pal("Configured nodes: ~p~n",
-                   [[N#'systest.node_info'.id || N <- Nodes]]),
-            Cluster = #'systest.cluster'{name=ClusterId, nodes=Nodes},
+        #'systest.cluster'{}=Cluster ->
             Config2 = systest_config:ensure_value(?MODULE, Cluster, Config),
             systest_config:replace_value(active, Cluster, Config2)
     end.
@@ -77,10 +71,14 @@ status(#'systest.cluster'{nodes=Nodes}) ->
 print_status(Cluster) ->
     ct:pal(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
 
-check_config(Cluster) ->
-    with_cluster(Cluster, fun build_node_info/3).
+check_config(Cluster, Config) ->
+    with_cluster(Cluster, fun build_nodes/3, Config).
 
-with_cluster(Cluster, NodeHandler) ->
+%%
+%% Internal API
+%%
+
+with_cluster(ClusterId, NodeHandler, Config) ->
     case systest:cluster_config(ClusterId) of
         undefined -> noconfig;
         Hosts -> 
@@ -88,54 +86,48 @@ with_cluster(Cluster, NodeHandler) ->
             Nodes = lists:flatten(
                      [NodeHandler(ClusterId, Host, Config) || Host <- Hosts]),
             ct:pal("Configured nodes: ~p~n",
-                    [[N#'systest.node_info'.id || N <- Nodes]]),
+                    [[N#'systest.node_info'.name || N <- Nodes]]),
             #'systest.cluster'{name=ClusterId, nodes=Nodes}
     end.
-
-%%
-%% Internal API
-%%
 
 print_status_info({#'systest.node_info'{host=Host,
                                         id=Name,
                                         handler=Type,
-                                        flags=Args,
+                                        flags=Flags,
                                         apps=Apps,
                                         os_pid=Proc,
                                         extra=Xtra,
                                         owner=Port}, Status}) ->
-     io_lib:format("Node Info~n"
-                   "         name: ~p (status=~p)~n"
-                   "         host: ~p~n"
-                   "         type: ~p~n"
-                   "         args: ~s~n"
-                   "         apps: ~p~n"
-                   "         proc: ~p~n"
-                   "         xtra: ~p~n"
-                   "         port: ~p~n"
+     io_lib:format("----------------------------------------------------~n"
+                   "Node Info~n"
+                   "         name:  ~p (status=~p)~n"
+                   "         host:  ~p~n"
+                   "         type:  ~p~n"
+                   "         args:  ~p~n"
+                   "         apps:  ~p~n"
+                   "         proc:  ~p~n"
+                   "         xtra:  ~p~n"
+                   "         port:  ~p~n"
                    "----------------------------------------------------~n",
-                   [Host, Status, Name, Type, Args, Apps, Proc, Xtra, Port]).
+                   [Host, Status, Name, Type, Flags, Apps, Proc, Xtra, Port]).
 
-build_node_info(Cluster, {Host, Nodes}, Config)
+build_nodes(Cluster, {Host, Nodes}, Config) ->
+    [systest_node:make_node(Cluster, N, [{host, Host},
+                                         {name, N}|Config]) || N <- Nodes].
 
-start_host(Cluster, {Host, Nodes}, Config) when is_atom(Host) andalso
-                                                is_list(Nodes) ->
-    verify_host(Host),
-    [start_node(Host, Cluster, Node, Config) || Node <- Nodes].
-
-start_node(localhost, Cluster, Node, Config) ->
+start_host(Cluster, {localhost, Nodes}=HostConf, Config) ->
     {ok, Hostname} = inet:gethostname(),
-    start_node(list_to_atom(Hostname), Cluster, Node, Config);
-start_node(Host, Cluster, Node, Config) ->
-    BasicConfig = [{host, Host},
-                   {name, Node}],
-    Globals = systest:global_config(Cluster, Node),
-    AppConfig = systest:static_config(Cluster, Node),
-    RuntimeConfig = systest:runtime_config(Cluster, Node, Config),
-    Config2 = systest:merge_config(AppConfig, RuntimeConfig),
-    %% TODO: if we *die* performing the start, who rolls back pre-existing
-    %% nodes we've already set up!???
-    {ok, NI} = systest_node:start(BasicConfig ++ Globals ++ Config2),
+    start_host(Cluster, {Hostname, Nodes}=HostConf, Config);
+start_host(Cluster, {Host, Nodes}=HostConf, Config) when is_atom(Host) andalso
+                                                         is_list(Nodes) ->
+    case ?CONFIG(verify_hosts, Config) of
+        true  -> verify_host(Host);
+        false -> ok
+    end,
+    [start_node(Node) || Node <- build_nodes(Cluster, HostConf, Config)].
+
+start_node(Node) ->
+    {ok, NI} = systest_node:start(Node),
     NI.
 
 verify_host(Host) ->
@@ -146,4 +138,3 @@ verify_host(Host) ->
             ct:pal("Unable to contact ~p: ~p~n", [Host, Reason]),
             ct:fail("Cluster configuration failed!~n", [])
     end.
-

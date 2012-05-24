@@ -28,8 +28,7 @@
 
 -export([start_suite/2, stop_suite/2, start/2, stop/2]).
 -export([active_cluster/1, clusters/1, cluster_nodes/1]).
--export([static_config/2, merge_config/2, global_config/2,
-         runtime_config/3, cluster_config/1]).
+-export([cluster_config/1]).
 -export([interact/2, write_pid_file/1, write_pid_file/2]).
 
 %%
@@ -75,31 +74,18 @@ clusters(Config) ->
 cluster_nodes(#'systest.cluster'{nodes=Nodes}) ->
     Nodes.
 
-static_config(Scope, Node) ->
-    Config1 = systest_config:get_config(Scope, Node, static),
-    Config2 = systest_config:get_config(Scope, Node, startup),
-    Config1 ++ Config2.
-
-global_config(Scope, Node) ->
-    VmFlags = systest_config:get_config(Scope, Node, emulator_flags),
-    SysTestPath = filename:absname(filename:dirname(code:which(systest))),
-    [{emulator_flags, "-pa " ++ SysTestPath ++ " " ++ VmFlags}].
-
 cluster_config(Scope) ->
     ct:get_config({Scope, cluster}).
-
-runtime_config(Scope, Node, Config) ->
-    RtConfig = systest_config:get_config(Scope, Node, runtime),
-    merge_config(Config, RtConfig).
-
-merge_config(Config1, Config2) ->
-    systest_config:merge_config(Config1, Config2).
 
 %%
 %% Private API
 %%
 
+%global_config(Scope, Node#'systest.node_info'{handler=systest_slave}) ->
+%    VmFlags = systest_config:get_config(Scope, Node, flags),
+%    SysTestPath = filename:absname(filename:dirname(code:which(systest))),
+%    [{flags, "-pa " ++ SysTestPath ++ " " ++ VmFlags}];
+
 strip_suite_suffix(Suite) ->
     S = atom_to_list(Suite),
     list_to_atom(re:replace(S, "_SUITE", "", [{return, list}])).
-

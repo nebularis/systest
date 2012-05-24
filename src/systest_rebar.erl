@@ -68,6 +68,7 @@ run_tests(Config) ->
             rebar_core:process_commands([ct], Config);
         true ->
             Env = clean_config_dirs(Config) ++ rebar_env() ++ os_env(Config),
+            
             {ok, SpecOutput} = transform_file(Spec, temp_dir(), Env),
 
             {ok, FinalSpec} = process_config_files(ScratchDir, SpecOutput, Env),
@@ -151,7 +152,10 @@ is_base_dir(Cwd) ->
 
 clean_config_dirs(Config) ->
     [{plugin_dir, rebar_config:get_local(Config, plugin_dir, "")}] ++
-    rebar_config:get_env(Config, rebar_deps).
+    lower_case_key_names(rebar_config:get_env(Config, rebar_deps)).
+
+lower_case_key_names(Items) ->
+    [{string:to_lower(K), V} || {K, V} <- Items].
 
 rebar_env() ->
     [{base_dir, rebar_config:get_global(base_dir, rebar_utils:get_cwd())}] ++

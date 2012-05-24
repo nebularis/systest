@@ -23,39 +23,38 @@
 %% THE SOFTWARE.
 %% -----------------------------------------------------------------------------
 -define(CONFIG(Key, Conf), systest_config:read(Key, Conf)).
+-define(CONFIG(Key, Conf, Default), systest_config:read(Key, Conf, Default)).
 -define(REQUIRE(Key, Conf), systest_config:require(Key, Conf)).
 
 -type application_info() :: {atom(), [{atom(), term()}]}.
 
 -type command()          :: atom().
--type script_name()      :: string().
 -type name()             :: string().
 -type account()          :: string().
--type prefix()           :: string().
--type value()            :: string().
--type has_value()        :: boolean().
--type argv_switch(A)     :: {prefix(), value()} | {'argument', value()}.
--type argv_flags()       :: argv_switch(name()).
+-type value()            :: string() | binary().
 -type attribute()        :: atom().
--type setenv_flags()     :: {'environment', name(), string()}   |   %% explicit
-                            {'environment', string()}           |   %% from os
+-type setenv_flags()     :: {'environment', name(), value()}   |   %% explicit
+                            {'environment', value()}           |   %% from os
                             {'node', attribute()}.      %% from node_info record
 -type vmflags()          :: string().
--type script_flags()     :: {command(), [script_name()  |
-                                         setenv_flags() |
-                                         argv_flags()]}.
+-type script_flags()     :: {command(), [value() | setenv_flags()]}.
+
+%% TODO: deprecate the 'apps' field (merge into flags?)
 
 -record('systest.node_info', {
-    host    :: atom(),
-    name    :: atom(),
-    id      :: atom(),
-    handler :: module(),
-    user    :: account(),
-    flags   :: vmflags() | script_flags(),
-    apps    :: [application_info()],
-    extra   :: term(),
-    os_pid  :: string(),
-    owner   :: pid() | port()
+    host    :: atom(),                      %% configured when we 'make' this
+    name    :: atom(),                      %% configured when we 'make' this
+    handler :: module(),                    %% backing module
+    link    :: boolean(),                   %% use start_link, or just start?
+    user    :: account(),                   %% optional - used by ssh client
+    flags   :: vmflags() | script_flags(),  %% used for 'all kinds of things',
+                                            %% depending on the handler...
+    apps    :: [application_info()],        %% mainly used by slave
+    extra   :: term(),                      %% mainly used by slave, or tc
+    id      :: atom(),                      %% set by the handler!
+    os_pid  :: string(),                    %% set by the handler!
+    owner   :: pid() | port(),              %% set by the handler!
+    config  :: systest_config:config()
 }).
 
 -record('systest.cluster', {

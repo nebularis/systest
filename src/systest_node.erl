@@ -96,6 +96,8 @@ status(NI=#'systest.node_info'{handler=Handler}) ->
     Handler:status(NI).
 
 -spec interact(node_info(), term()) -> term().
+interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}) ->
+    rpc:call(Node, Mod, Func, Args);
 interact(NI=#'systest.node_info'{handler=Handler}, Inputs) ->
     Handler:interact(NI, Inputs).
 

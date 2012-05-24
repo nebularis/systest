@@ -40,21 +40,6 @@ cli_flags_test_() ->
                       systest_cli:convert_flags(Node, Flags, Config))
      end].
 
-coordinator(Pid) ->
-    ?debugFmt("spawned ~p, trapping exists....~n", [self()]),
-    process_flag(trap_exit, true),
-    receive
-        {link, To} -> link(To);
-        stop    -> ?debugFmt("stopping self~n", []), ok;
-        kill    -> ?debugFmt("stopping ~p~n", [Pid]), Pid ! stop;
-        spawn   -> Child = spawn_link(fun() -> coordinator(self()) end),
-                   ?debugFmt("~p spawning ~p~n", [self(), Child]),
-                   Child ! {link, self()},
-                   coordinator(Child);
-        Other   -> ?debugFmt("~p got ~p~n", [self(), Other]),
-                   coordinator(Pid)
-    end.
-
 %% config handling
 
 overwrite_globals_with_local_value_test() ->

@@ -36,7 +36,7 @@ cli_flags_test_() ->
                  {node, id},
                  {environment, "LOGDIR"}],
         Config = [{"logdir", "/tmp/logs"}],
-        ?_assertEqual(["LOGDIR=/tmp/logs", "priv/start", "cli"],
+        ?_assertEqual({[{"LOGDIR", "/tmp/logs"}], ["priv/start", "cli"]},
                       systest_cli:convert_flags(Node, Flags, Config))
      end].
 

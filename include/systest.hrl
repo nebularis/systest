@@ -47,6 +47,8 @@
     handler :: module(),                    %% backing module
     link    :: boolean(),                   %% use start_link, or just start?
     user    :: account(),                   %% optional - used by ssh client
+
+    %% TODO: this spec is *clearly* inadequate for the various types we consume!
     flags   :: vmflags() | script_flags(),  %% used for 'all kinds of things',
                                             %% depending on the handler...
     apps    :: [application_info()],        %% mainly used by slave

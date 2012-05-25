@@ -49,7 +49,7 @@
 -include("systest.hrl").
 
 -ifdef(TEST).
--export([convert_flags/3]).
+-export([convert_flags/4]).
 -endif.
 
 -spec start(systest_node:node_info()) -> systest_node:node_info() | term().
@@ -86,12 +86,13 @@ interact(#'systest.node_info'{owner=Server}, Data) ->
 
 init([Node, Cmd, Extra]) ->
     Id = systest_node:get_node_info(id, Node),
-    RpcEnabled = systest_node:get_node_info(rpc_enabled, Node),
+    Config = systest_node:get_node_info(config, Node),
+    Startup = ?CONFIG(startup, Config, true),
+    {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
+                                         Startup, {true, default}),
     case check_command(Cmd, RpcEnabled) of
         ok ->
             Env = ?CONFIG(env, Extra, []),
-            {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
-                                                 Extra, {true, default}),
             ExecutableCommand = maybe_patch_command(Cmd, Env, RpcEnabled),
             Port = open_port({spawn, ExecutableCommand},
                              [exit_status, hide, stderr_to_stdout,
@@ -110,8 +111,6 @@ init([Node, Cmd, Extra]) ->
         StopError ->
             StopError
     end.
-
-%% port_close(Port)
 
 handle_call({command, Data}, _From, Sh=#sh{port=Port}) ->
     port_command(Port, Data, [nosuspend]),
@@ -169,8 +168,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 
 start_it(NI=#'systest.node_info'{config=Config, flags=Flags}, StartType) ->
-    {Env, Cmd} = convert_flags(NI, Flags, Config),
+    {Env, Cmd} = convert_flags(start, NI, Flags, Config),
     Extra = [{env, Env}|?CONFIG(extra, Config, [])],
+    ShellCommand = 
     case apply(gen_server, StartType, [?MODULE, [NI, Cmd, Extra], []]) of
         {ok, Pid} -> systest_node:set_node_info([{owner, Pid}], NI);
         Error     -> Error
@@ -237,17 +237,22 @@ expand_env_variable(InStr, VarName, RawVarValue) ->
 
 %% node configuration/setup
 
-convert_flags(Node, Flags, Config) ->
+convert_flags(Operation, Node, AllFlags, Config) ->
+    Flags = ?REQUIRE(Operation, AllFlags),
     {_, _, Env, Acc} = lists:foldl(fun process/2,
                                   {Node, Config, [], [hd(Flags)]}, tl(Flags)),
+    ct:pal("Env: ~p~n"
+           "Acc: ~p~n", [Env, Acc]),
     {Env, Acc}.
 
 process({node, Attr}, {Node, _, _, Output}=Acc) ->
     setelement(4, Acc, Output ++
                        [atom_to_list(systest_node:get_node_info(Attr, Node))]);
 process({environment, Attr}, {_, Config, Output, _}=Acc) ->
-    Value = ?REQUIRE(string:to_lower(Attr), Config),
-    setelement(3, Acc, [{Attr, Value}|Output]);
+    case systest_config:get_env(Attr) of
+        {Attr, _Value}=Env -> setelement(3, Acc, [Env|Output]);
+        _                  -> Acc
+    end;
 process({environment, Attr, Value}, {_, _, Output, _}=Acc) ->
     setelement(3, Acc, [{Attr, Value}|Output]);
 process(Data, {_, _, _, Output}=Acc) ->

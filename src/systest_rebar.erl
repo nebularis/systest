@@ -31,20 +31,7 @@
 %%
 
 systest(Config, _) ->
-    Cwd = rebar_utils:get_cwd(),
-    case is_base_dir(Cwd) of
-        false ->
-            rebar_log:log(debug, "skipping ~p in ~s", [?MODULE, Cwd]);
-        true ->
-            run_tests(Config)
-    end.
-
-%%
-%% Private API
-%%
-
-run_tests(Config) ->
-    %% TODO: consider adding a time stamp to the scratch 
+    %% TODO: consider adding a time stamp to the scratch
     %%       dir like common test does
     ScratchDir = case os:getenv("SYSTEST_SCRATCH_DIR") of
                      false -> filename:join(temp_dir(), "systest");

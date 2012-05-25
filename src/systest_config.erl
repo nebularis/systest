@@ -33,10 +33,19 @@
 -export([read/2, read/3, require/2]).
 -export([replace_value/3, ensure_value/3]).
 -export([get_config/1, get_config/3, merge_config/2]).
+-export([get_env/1, set_env/2]).
+
+-export([start_link/0]).
+
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
 
 %%
 %% Public API
 %%
+
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 read(Key, Config, Default) ->
     case lists:keyfind(Key, 1, Config) of
@@ -54,6 +63,15 @@ require(Key, Config) ->
         {Key, Value} ->
             Value
     end.
+
+%% TODO: move these API calls into the gen_server mechanism, so that we can 
+%% easily switch between common_test and stand-alone runs if we wish...
+
+get_env(Key) ->
+    lookup(Key).
+
+set_env(Key, Value) ->
+    ok = gen_server:call(?MODULE, {set, Key, Value}).
 
 get_config(Key) ->
     ct:get_config(Key, [all], []).
@@ -79,6 +97,37 @@ replace_value(Key, Value, PList) ->
         true  -> lists:keyreplace(Key, 1, PList, {Key, Value});
         false -> [{Key, Value}|PList]
     end.
+
+%%
+%% OTP gen_server API
+%%
+
+init([]) ->
+    catch ets:delete(?MODULE),
+    %% TODO: we can make this protected instead...
+    ets:new(?MODULE, [ordered_set, named_table, protected, {keypos,1},
+                      {write_concurrency, false}, {read_concurrency, true}]),
+    ets:insert_new(?MODULE,
+                   lists:flatten([to_tuple(Var) || Var <- os:getenv()])),
+    {ok, []}.
+
+handle_call({set, Key, Value}, _From, State) ->
+    true = ets:insert([{Key, Value}]),
+    {reply, ok, State};
+handle_call(_Request, _From, State) ->
+    {reply, ok, State}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 %%
 %% Private API
@@ -130,8 +179,6 @@ extend({_, _}=New, Existing) ->
     merge(New, Existing);
 extend(Other, _Existing) ->
     Other.
-    %append_if_missing(fun({K, _}, Items) -> lists:keymember(K, 1, Items) end,
-    %                  New, Existing);
 
 append_if_missing(LookupFun, New, Existing) ->
     case LookupFun(New, Existing) of
@@ -146,4 +193,12 @@ rewrite_path_spec(scratch, {Acc, Dir}) ->
 rewrite_path_spec(Other, {Acc, Dir}) ->
     {Acc ++ [Other], Dir}.
 
+lookup(Key) ->
+    case ets:lookup(?MODULE, Key) of
+        []       -> not_found;
+        [Config] -> Config
+    end.
 
+to_tuple(Var) ->
+    [A, B] = re:split(Var, "=", [{return,list},{parts,2}]),
+    [{list_to_atom(string:to_lower(A)), B}, {A, B}].

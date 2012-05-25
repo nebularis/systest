@@ -32,12 +32,12 @@
 cli_flags_test_() ->
     [begin
         Node = #'systest.node_info'{id=cli},
-        Flags = ["priv/start",
-                 {node, id},
-                 {environment, "LOGDIR"}],
+        Flags = [{start, ["priv/start",
+                          {node, id},
+                          {environment, "LOGDIR"}]}],
         Config = [{"logdir", "/tmp/logs"}],
         ?_assertEqual({[{"LOGDIR", "/tmp/logs"}], ["priv/start", "cli"]},
-                      systest_cli:convert_flags(Node, Flags, Config))
+                      systest_cli:convert_flags(start, Node, Flags, Config))
      end].
 
 %% config handling

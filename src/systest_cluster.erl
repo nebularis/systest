@@ -117,10 +117,10 @@ build_nodes(Cluster, {Host, Nodes}, Config) ->
 
 start_host(Cluster, {localhost, Nodes}=HostConf, Config) ->
     {ok, Hostname} = inet:gethostname(),
-    start_host(Cluster, {Hostname, Nodes}=HostConf, Config);
+    start_host(Cluster, {list_to_atom(Hostname), Nodes}, Config);
 start_host(Cluster, {Host, Nodes}=HostConf, Config) when is_atom(Host) andalso
                                                          is_list(Nodes) ->
-    case ?CONFIG(verify_hosts, Config) of
+    case ?CONFIG(verify_hosts, Config, true) of
         true  -> verify_host(Host);
         false -> ok
     end,

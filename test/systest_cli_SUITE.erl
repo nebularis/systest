@@ -46,15 +46,16 @@ local_and_global_scope_configuration_handling(Config) ->
     ok.
 
 starting_and_stopping_nodes(Config) ->
-    Cluster = systest_cluster:start(systest_cli_config_example, Config),
+    process_flag(trap_exit, true),
+    Config2 = systest_cluster:start(systest_cli_config_example, Config),
+    Cluster = systest:active_cluster(Config2),
     systest_cluster:print_status(Cluster),
     [begin
          Node = N#'systest.node_info'.id,
          ?assertEqual(nodeup, systest_node:status(N)),
          ?assertEqual(pong, net_adm:ping(Node)),
-         
-         ok = systest_node:stop(N),
-         ct:pal("~p status: ~p~n", [Node, systest_node:status(N)]),
+
+         ok = systest_node:stop_and_wait(N),
          ?assertEqual(pang, net_adm:ping(Node))
      end || N <- systest:cluster_nodes(Cluster)],
     ok.

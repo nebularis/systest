@@ -4,3 +4,4 @@
 
 {alias, test, "{{ base_dir }}/test"}.
 {suites, test, systest_cli_SUITE}.
+

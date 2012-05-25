@@ -25,7 +25,7 @@
 -module(systest_cluster).
 
 -export([start/1, start/2, stop/2]).
--export([check_config/2, status/1, print_status/1]).
+-export([check_config/2, status/1, print_status/1, log_status/1]).
 
 -include("systest.hrl").
 
@@ -71,6 +71,9 @@ status(#'systest.cluster'{nodes=Nodes}) ->
 print_status(Cluster) ->
     ct:pal(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
 
+log_status(Cluster) ->
+    ct:log(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
+
 check_config(Cluster, Config) ->
     with_cluster(Cluster, fun build_nodes/3, Config).
 
@@ -82,14 +85,15 @@ with_cluster(ClusterId, NodeHandler, Config) ->
     case systest:cluster_config(ClusterId) of
         undefined -> noconfig;
         Hosts ->
-            ct:pal("Configured hosts: ~p~n", [Hosts]),
+            ct:log("Configured hosts: ~p~n", [Hosts]),
             Nodes = lists:flatten(
                      [NodeHandler(ClusterId, Host, Config) || Host <- Hosts]),
-            ct:pal("Configured nodes: ~p~n",
+            ct:log("Configured nodes: ~p~n",
                     [[N#'systest.node_info'.name || N <- Nodes]]),
             #'systest.cluster'{name=ClusterId, nodes=Nodes}
     end.
 
+%% TODO: make a Handler:status call to get detailed information back...
 print_status_info({#'systest.node_info'{host=Host,
                                         id=Name,
                                         handler=Type,
@@ -120,7 +124,7 @@ start_host(Cluster, {localhost, Nodes}=HostConf, Config) ->
     start_host(Cluster, {list_to_atom(Hostname), Nodes}, Config);
 start_host(Cluster, {Host, Nodes}=HostConf, Config) when is_atom(Host) andalso
                                                          is_list(Nodes) ->
-    case ?CONFIG(verify_hosts, Config, true) of
+    case ?CONFIG(verify_hosts, Config, false) of
         true  -> verify_host(Host);
         false -> ok
     end,

@@ -33,6 +33,7 @@
 -export([behaviour_info/1]).
 -export([make_node/3]).
 -export([start/1, stop/1, kill/1]).
+-export([stop_and_wait/1]).
 -export([status/1, interact/2]).
 
 -export([status_check/1]).
@@ -66,7 +67,6 @@ make_node(Cluster, Node, Config) ->
 -spec start(node_info()) -> node_info() | term().
 start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink}) ->
     Startup = case ShouldLink of true -> start_link; _ -> start end,
-    ct:pal("~p starting node: ~p~n", [Handler, NodeInfo]),
     case catch( apply(Handler, Startup, [NodeInfo]) ) of
         NI2 when is_record(NI2, 'systest.node_info') ->
             case NI2#'systest.node_info'.apps of
@@ -90,6 +90,25 @@ stop(NI=#'systest.node_info'{handler=Handler}) ->
 -spec kill(node_info()) -> ok.
 kill(NI=#'systest.node_info'{handler=Handler}) ->
     Handler:kill(NI).
+
+-spec stop_and_wait(node_info()) -> 'ok'.
+stop_and_wait(NI=#'systest.node_info'{link=true, id=Id,
+                                      owner=Owner}) when is_pid(Owner) ->
+    case (Owner == self()) orelse not(is_process_alive(Owner)) of
+        true  -> ok;
+        false -> %% DO NOT link in this instance ....
+                 link(Owner),
+                 ct:log("Stopping ~p ....~n"
+                        "Waiting for port owning process (~p) to exit...~n",
+                        [Id, Owner]),
+                 ok = stop(NI),
+                 receive
+                     {'EXIT', Owner, Reason} -> ok;
+                     Other                   -> ct:pal("Other ~p~n", Other)
+                 end
+    end;
+stop_and_wait(_) ->
+    throw(badarg).
 
 -spec status(node_info()) -> 'nodeup' | {'nodedown', term()}.
 status(NI=#'systest.node_info'{handler=Handler}) ->
@@ -119,7 +138,8 @@ make_node(Config) ->
     new_node_info([{host, ?REQUIRE(host, Config)},
                    {name, ?REQUIRE(name, Config)},
                    {handler, ?CONFIG(handler, Config, systest_cli)},
-                   {link, ?CONFIG(link, Config, false)},
+                   {link, ?CONFIG(link_to_parent,
+                                    ?CONFIG(startup, Config, []), false)},
                    {user, ?CONFIG(user, Config, os:getenv("USER"))},
                    {flags, ?CONFIG(flags, Config)},
                    {apps, ?CONFIG(applications, Config)},
@@ -127,17 +147,21 @@ make_node(Config) ->
                    {config, Config}]).
 
 node_config(Cluster, Node, Config) ->
+    %% TODO: this code does *NOT* work for all possible merge scenarios!
     Globals         = systest_config:get_config(global_node_config),
     NodeConfig      = systest_config:get_config({Cluster, Node}),
+    
     {Static, Runtime, Flags} = lists:foldl(fun extract_config/2,
                                            {[], [], []}, NodeConfig),
 
-    RuntimeConfig1  = systest_config:merge_config(Config, NodeConfig),
-    RuntimeConfig2  = systest_config:merge_config(RuntimeConfig1, Runtime),
-    Config2         = systest_config:merge_config(Static, RuntimeConfig2),
-    MergedGlobals1  = systest_config:merge_config(Globals, Config2),
-    MergedFlags     = systest_config:merge_config(MergedGlobals1, Flags),
-    MergedFlags.
+    GlobalFlags = ?CONFIG(flags, Globals),
+    FlagsConfig = systest_config:merge_config(Flags, GlobalFlags),
+    Config2 = systest_config:merge_config(Static, Runtime),
+    MergedFlags = 
+        systest_config:merge_config(Globals, [{flags, FlagsConfig}]),
+    MergedConfig = systest_config:merge_config(MergedFlags, Config2),
+    AllConfig = systest_config:merge_config(MergedConfig, Config),
+    AllConfig.
 
 extract_config({static, Static}, {SoFar, _, _}=Acc) ->
     setelement(1, Acc, Static ++ SoFar);

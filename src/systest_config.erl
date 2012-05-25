@@ -80,6 +80,10 @@ get_config(Scope, Node, Type) ->
     Nodes = ct:get_config({Scope, Node}, [all], []),
     read(Type, Nodes).
 
+merge_config([], C2) ->
+    C2;
+merge_config(C1, []) ->
+    C1;
 merge_config(Config1, Config2) ->
     lists:foldl(fun extend/2, Config1, Config2).
 
@@ -163,17 +167,23 @@ extend({Path, Spec}=New, Existing) when Path =:= dir orelse
             [{Path, Rewrite(Value)}|Existing]
     end;
 extend({extra, [{_, _, _}|_]=Stuff}, Existing) ->
-    Items = [{M,F,[hd(extend(A, Existing)) || A <- Args]} || {M,F,Args} <- Stuff],
+    Items = [{M,F,[hd(extend(A, Existing)) || A <- Args]} ||
+                                                        {M,F,Args} <- Stuff],
     [{extra, Items}|Existing];
 extend({K, NewVal}=New, Existing) when is_list(NewVal) ->
     case lists:keyfind(K, 1, Existing) of
         {K, OldVal} when is_list(OldVal) ->
-            NewEntry = {K, lists:foldl(fun extend/2, OldVal, NewVal)},
+            Extender = case K of
+                           Action when Action =:= start orelse
+                                       Action =:= stop  orelse
+                                       Action =:= kill  orelse
+                                       Action =:= status -> fun merge/2;
+                           _ -> fun extend/2
+                       end,
+            NewEntry = {K, lists:foldl(Extender, OldVal, NewVal)},
             lists:keyreplace(K, 1, Existing, NewEntry);
-        false ->
-            [New|Existing];
-        Other ->
-            ct:fail("Cannot merge incoming config ~p with ~p~n", [New, Other])
+        _ ->
+            lists:keyreplace(K, 1, Existing, New)
     end;
 extend({_, _}=New, Existing) ->
     merge(New, Existing);

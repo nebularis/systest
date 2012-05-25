@@ -1,1 +1,4 @@
 #!/usr/bin/env sh
+
+echo $@
+erl -noshell -sname $2

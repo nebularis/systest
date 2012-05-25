@@ -27,6 +27,7 @@
 -include("systest.hrl").
 
 -export([start/0]).
+-export([main/0]).
 -export([start_suite/2, stop_suite/2, start/2, stop/2]).
 -export([active_cluster/1, clusters/1, cluster_nodes/1]).
 -export([cluster_config/1]).
@@ -40,6 +41,11 @@
 
 start() ->
     application:start(?MODULE).
+
+%% escript main
+
+main(Argv) ->
+    systest_main:run(Argv).
 
 %% startup/shutdown
 

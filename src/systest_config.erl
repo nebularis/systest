@@ -5,7 +5,7 @@
 %% Copyright (c) 2005 - 2012 Nebularis.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
-%% of this software and associated documentation files (the "Software"), to deal
+%% of this software and associated documentation files (the "Software"), deal
 %% in the Software without restriction, including without limitation the rights
 %% to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 %% copies of the Software, and to permit persons to whom the Software is
@@ -18,14 +18,14 @@
 %% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 %% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 %% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-%% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-%% THE SOFTWARE.
-%% -----------------------------------------------------------------------------
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+%% IN THE SOFTWARE.
+%% ----------------------------------------------------------------------------
 -module(systest_config).
 -include_lib("eunit/include/eunit.hrl").
 
--type config_key() :: atom() | string() | binary(). 
+-type config_key() :: atom() | string() | binary().
 -type config()     :: [{config_key(), term()}].
 
 -export_type([config_key/0, config/0]).
@@ -64,7 +64,7 @@ require(Key, Config) ->
             Value
     end.
 
-%% TODO: move these API calls into the gen_server mechanism, so that we can 
+%% TODO: move these API calls into the gen_server mechanism, so that we can
 %% easily switch between common_test and stand-alone runs if we wish...
 
 get_env(Key) ->

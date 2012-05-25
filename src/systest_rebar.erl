@@ -5,7 +5,7 @@
 %% Copyright (c) 2005 - 2012 Nebularis.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
-%% of this software and associated documentation files (the "Software"), to deal
+%% of this software and associated documentation files (the "Software"), deal
 %% in the Software without restriction, including without limitation the rights
 %% to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 %% copies of the Software, and to permit persons to whom the Software is
@@ -18,10 +18,10 @@
 %% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 %% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 %% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-%% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-%% THE SOFTWARE.
-%% -----------------------------------------------------------------------------
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+%% IN THE SOFTWARE.
+%% ----------------------------------------------------------------------------
 -module(systest_rebar).
 
 -export([systest/2]).
@@ -40,7 +40,7 @@ systest(Config, _) ->
     rebar_file_utils:rm_rf(ScratchDir),
     filelib:ensure_dir(filename:join(ScratchDir, "foo")),
     rebar_config:set_global(scratch_dir, ScratchDir),
-    
+
     Profile = case os:getenv("SYSTEST_PROFILE") of
                   false -> os:getenv("USER");
                   Name -> Name
@@ -49,19 +49,21 @@ systest(Config, _) ->
                [SpecFile] -> SpecFile;
                _          -> filename:join("profiles", "default.spec")
            end,
-    
+
     case filelib:is_regular(Spec) of
-        false -> 
+        false ->
             rebar_core:process_commands([ct], Config);
         true ->
             Env = clean_config_dirs(Config) ++ rebar_env() ++ os_env(Config),
-            
+
             {ok, SpecOutput} = transform_file(Spec, temp_dir(), Env),
 
-            {ok, FinalSpec} = process_config_files(ScratchDir, SpecOutput, Env),
+            {ok, FinalSpec} = process_config_files(ScratchDir,
+                                                   SpecOutput, Env),
 
             FinalConfig = rebar_config:set(Config, ct_extra_params,
-                                           "-spec " ++ FinalSpec),
+                                           "-spec " ++ FinalSpec ++
+                                          " -userconfig systest start"),
             rebar_core:process_commands([ct], FinalConfig)
     end.
 
@@ -89,18 +91,18 @@ transform_file(File, ScratchDir, Env) ->
     Target = filename:absname(Output),
     Origin = filename:absname(File),
     rebar_log:log(info, "transform ~s into ~s~n", [Origin, Target]),
-    
+
     %% this looks *pointless* but avoids calling dict:to_list/1
     %% unless it is actually going to use the result
     case rebar_log:get_level() of
         debug -> rebar_log:log(debug, "template environment: ~p~n", [Env]);
         _     -> ok
     end,
-    
+
     Context = rebar_templater:resolve_variables(Env, dict:new()),
     {ok, Bin} = file:read_file(File),
     Rendered = rebar_templater:render(Bin, Context),
-    
+
     file:write_file(Output, Rendered),
     {ok, Target}.
 
@@ -133,9 +135,6 @@ get(Var, Default) ->
         false -> Default;
         Value -> Value
     end.
-
-is_base_dir(Cwd) ->
-    Cwd == rebar_config:get_global(base_dir, undefined).
 
 clean_config_dirs(Config) ->
     [{plugin_dir, rebar_config:get_local(Config, plugin_dir, "")}] ++

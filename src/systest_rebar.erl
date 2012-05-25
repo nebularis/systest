@@ -63,7 +63,7 @@ systest(Config, _) ->
 
             FinalConfig = rebar_config:set(Config, ct_extra_params,
                                            "-spec " ++ FinalSpec ++
-                                          " -userconfig systest start"),
+                                          " -s systest start"),
             rebar_core:process_commands([ct], FinalConfig)
     end.
 

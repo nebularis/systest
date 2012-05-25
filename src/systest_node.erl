@@ -96,8 +96,7 @@ stop_and_wait(NI=#'systest.node_info'{link=true, id=Id,
                                       owner=Owner}) when is_pid(Owner) ->
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
-        false -> %% DO NOT link in this instance ....
-                 link(Owner),
+        false -> link(Owner),
                  ct:log("Stopping ~p ....~n"
                         "Waiting for port owning process (~p) to exit...~n",
                         [Id, Owner]),
@@ -151,6 +150,7 @@ node_config(Cluster, Node, Config) ->
     Globals         = systest_config:get_config(global_node_config),
     NodeConfig      = systest_config:get_config({Cluster, Node}),
     
+    ct:pal("NodeConfig: ~p~n", [NodeConfig]),
     {Static, Runtime, Flags} = lists:foldl(fun extract_config/2,
                                            {[], [], []}, NodeConfig),
 

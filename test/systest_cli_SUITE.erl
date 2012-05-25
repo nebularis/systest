@@ -33,12 +33,6 @@ suite() -> [{timetrap, {seconds, 20}}].
 all() ->
     systest_suite:export_all(?MODULE).
 
-init_per_testcase(TestCase, Config) ->
-    systest:start(TestCase, Config).
-
-end_per_testcase(TestCase, Config) ->
-    systest:stop(TestCase, Config).
-
 local_and_global_scope_configuration_handling(Config) ->
     Scope = systest_cli_config_example,
     CheckConf = systest_cluster:check_config(Scope, Config),
@@ -56,6 +50,20 @@ starting_and_stopping_nodes(Config) ->
          ?assertEqual(pong, net_adm:ping(Node)),
 
          ok = systest_node:stop_and_wait(N),
+         ?assertEqual(pang, net_adm:ping(Node))
+     end || N <- systest:cluster_nodes(Cluster)],
+    ok.
+
+killing_nodes(Config) ->
+    process_flag(trap_exit, true),
+    Config2 = systest_cluster:start(systest_cli_config_example, Config),
+    Cluster = systest:active_cluster(Config2),
+    systest_cluster:print_status(Cluster),
+    [begin
+         ?assertEqual(nodeup, systest_node:status(N)),
+         ok = systest_node:kill(N),
+         
+         Node = N#'systest.node_info'.id,
          ?assertEqual(pang, net_adm:ping(Node))
      end || N <- systest:cluster_nodes(Cluster)],
     ok.

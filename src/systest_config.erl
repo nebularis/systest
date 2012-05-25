@@ -25,7 +25,7 @@
 -module(systest_config).
 -include_lib("eunit/include/eunit.hrl").
 
--type config_key() :: atom() | string() | binary(). 
+-type config_key() :: atom() | string() | binary().
 -type config()     :: [{config_key(), term()}].
 
 -export_type([config_key/0, config/0]).
@@ -64,7 +64,7 @@ require(Key, Config) ->
             Value
     end.
 
-%% TODO: move these API calls into the gen_server mechanism, so that we can 
+%% TODO: move these API calls into the gen_server mechanism, so that we can
 %% easily switch between common_test and stand-alone runs if we wish...
 
 get_env(Key) ->
@@ -202,3 +202,4 @@ lookup(Key) ->
 to_tuple(Var) ->
     [A, B] = re:split(Var, "=", [{return,list},{parts,2}]),
     [{list_to_atom(string:to_lower(A)), B}, {A, B}].
+

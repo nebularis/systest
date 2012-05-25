@@ -40,30 +40,30 @@ systest(Config, _) ->
     rebar_file_utils:rm_rf(ScratchDir),
     filelib:ensure_dir(filename:join(ScratchDir, "foo")),
     rebar_config:set_global(scratch_dir, ScratchDir),
-    
+
     Profile = case os:getenv("SYSTEST_PROFILE") of
                   false -> os:getenv("USER");
                   Name -> Name
               end,
-    Spec = case rebar_utils:find_files("profiles", Profile ++ "\\.spec") of
-               [SpecFile] -> SpecFile;
-               _          -> filename:join("profiles", "default.spec")
+    Specs = case rebar_utils:find_files("profiles", Profile ++ "\\.spec") of
+               []        -> filename:join("profiles", "default.spec");
+               SpecFiles -> SpecFiles
            end,
-    
-    case filelib:is_regular(Spec) of
-        false -> 
-            rebar_core:process_commands([ct], Config);
-        true ->
-            Env = clean_config_dirs(Config) ++ rebar_env() ++ os_env(Config),
-            
-            {ok, SpecOutput} = transform_file(Spec, temp_dir(), Env),
 
-            {ok, FinalSpec} = process_config_files(ScratchDir, SpecOutput, Env),
+    execute_specs(Config, Specs).
 
-            FinalConfig = rebar_config:set(Config, ct_extra_params,
-                                           "-spec " ++ FinalSpec),
-            rebar_core:process_commands([ct], FinalConfig)
-    end.
+execute_specs(Config, Profiles) ->
+    Specs = prepare_specs(Config, Specs),
+    Spec = {spec, Specs},
+    throw(we_are_not_finished_yet).
+
+prepare_specs(Config, Specs) ->
+    [begin
+         Env = clean_config_dirs(Config) ++ rebar_env() ++ os_env(Config),
+         {ok, SpecOutput} = transform_file(Spec, temp_dir(), Env),
+         {ok, FinalSpec} = process_config_files(ScratchDir, SpecOutput, Env),
+         FinalSpec
+     end || Spec <- Specs, filelib:is_regular(Spec)].
 
 process_config_files(ScratchDir, TempSpec, Env) ->
     {ok, Terms} = file:consult(TempSpec),
@@ -89,18 +89,18 @@ transform_file(File, ScratchDir, Env) ->
     Target = filename:absname(Output),
     Origin = filename:absname(File),
     rebar_log:log(info, "transform ~s into ~s~n", [Origin, Target]),
-    
+
     %% this looks *pointless* but avoids calling dict:to_list/1
     %% unless it is actually going to use the result
     case rebar_log:get_level() of
         debug -> rebar_log:log(debug, "template environment: ~p~n", [Env]);
         _     -> ok
     end,
-    
+
     Context = rebar_templater:resolve_variables(Env, dict:new()),
     {ok, Bin} = file:read_file(File),
     Rendered = rebar_templater:render(Bin, Context),
-    
+
     file:write_file(Output, Rendered),
     {ok, Target}.
 
@@ -113,25 +113,6 @@ write_terms(Terms, Fd) ->
          end || Item <- Terms]
     after
         file:close(Fd)
-    end.
-
-temp_dir() ->
-    %% TODO: move this into hyperthunk/rebar_plugin_manager?
-    case os:type() of
-        {win32, _} ->
-            %% mirrors the behaviour of the win32 GetTempPath function...
-            get("TMP", get("TEMP", element(2, file:get_cwd())));
-        _ ->
-            case os:getenv("TMPDIR") of
-                false -> "/tmp"; %% this is what the JVM does, but honestly...
-                Dir   -> Dir
-            end
-    end.
-
-get(Var, Default) ->
-    case os:getenv(Var) of
-        false -> Default;
-        Value -> Value
     end.
 
 is_base_dir(Cwd) ->

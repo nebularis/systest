@@ -40,11 +40,12 @@
 %% application startup
 
 start() ->
-    application:start(?MODULE).
+    appstart:start(systest).
 
 %% escript main
 
 main(Argv) ->
+    start(),
     systest_main:run(Argv).
 
 %% startup/shutdown

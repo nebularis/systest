@@ -1,11 +1,13 @@
 {application, systest,
  [
-  {description, ""},
-  {vsn, "1"},
+  {description, "System Testing Framework (for OTP Common Test)"},
+  {vsn, "0.0.1"},
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+                  crypto,
+                  rebar
                  ]},
   {mod, { systest_app, []}},
   {env, []}

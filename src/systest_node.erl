@@ -34,7 +34,7 @@
 -export([make_node/3]).
 -export([start/1, stop/1, kill/1]).
 -export([sigkill/1, stop_and_wait/1, kill_and_wait/1]).
--export([status/1, interact/2]).
+-export([shutdown_and_wait/2, status/1, interact/2]).
 
 -export([status_check/1]).
 
@@ -94,7 +94,8 @@ kill(NI=#'systest.node_info'{handler=Handler}) ->
 -spec sigkill(node_info()) -> string().
 sigkill(#'systest.node_info'{os_pid=Pid}) ->
     ct:log("executing kill -9 ~p~n", [Pid]),
-    _ = os:cmd("kill -9 " ++ Pid).
+    Result = os:cmd("kill -9 " ++ Pid),
+    ct:log(Result).
 
 -spec stop_and_wait(node_info()) -> 'ok'.
 stop_and_wait(NI) when is_record(NI, 'systest.node_info') ->
@@ -105,7 +106,7 @@ kill_and_wait(NI) when is_record(NI, 'systest.node_info') ->
     shutdown_and_wait(NI, fun kill/1).
 
 -spec status(node_info()) -> 'nodeup' | {'nodedown', term()}.
-status(NI=#'systest.node_info'{handler=Handler}) ->
+status(NI=#'systest.node_info'{handler=Handler, owner=Server}) ->
     Handler:status(NI).
 
 -spec interact(node_info(), term()) -> term().
@@ -113,19 +114,6 @@ interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}) ->
     rpc:call(Node, Mod, Func, Args);
 interact(NI=#'systest.node_info'{handler=Handler}, Inputs) ->
     Handler:interact(NI, Inputs).
-
-%%
-%% Handler facing API
-%%
-status_check(Node) when is_atom(Node) ->
-    case net_adm:ping(Node) of
-        pong  -> nodeup;
-        Other -> {nodedown, Other}
-    end.
-
-%%
-%% Private API
-%%
 
 shutdown_and_wait(NI=#'systest.node_info'{owner=Owner},
                   ShutdownOp) when is_pid(Owner) ->
@@ -141,6 +129,19 @@ shutdown_and_wait(NI=#'systest.node_info'{owner=Owner},
                      Other                    -> ct:pal("Other ~p~n", [Other])
                  end
     end.
+
+%%
+%% Handler facing API
+%%
+status_check(Node) when is_atom(Node) ->
+    case net_adm:ping(Node) of
+        pong  -> nodeup;
+        Other -> {nodedown, Other}
+    end.
+
+%%
+%% Private API
+%%
 
 make_node(Config) ->
     %% NB: new_node_info is an exprecs generated function

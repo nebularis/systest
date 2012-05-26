@@ -35,8 +35,7 @@ all() ->
 
 local_and_global_scope_configuration_handling(Config) ->
     Scope = systest_cli_config_example,
-    CheckConf = systest_cluster:check_config(Scope, Config),
-    ct:pal("~p~n", [CheckConf]),
+    systest_cluster:check_config(Scope, Config),
     ok.
 
 starting_and_stopping_nodes(Config) ->
@@ -65,5 +64,17 @@ killing_nodes(Config) ->
          
          Node = N#'systest.node_info'.id,
          ?assertEqual(pang, net_adm:ping(Node))
+     end || N <- systest:cluster_nodes(Cluster)],
+    ok.
+
+sigkill_on_nodes(Config) ->
+    process_flag(trap_exit, true),
+    Config2 = systest_cluster:start(systest_cli_config_example, Config),
+    Cluster = systest:active_cluster(Config2),
+    systest_cluster:print_status(Cluster),
+    [begin
+         ?assertEqual(nodeup, systest_node:status(N)),
+         ok = systest_node:shutdown_and_wait(N, fun systest_node:sigkill/1),
+         ?assertMatch({'nodedown', _}, systest_node:status(N))
      end || N <- systest:cluster_nodes(Cluster)],
     ok.

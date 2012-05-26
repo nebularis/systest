@@ -65,7 +65,9 @@ make_node(Cluster, Node, Config) ->
     make_node(node_config(Cluster, Node, Config)).
 
 -spec start(node_info()) -> node_info() | term().
-start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink}) ->
+start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
+                                    host=Host, name=Name}) ->
+    ct:pal("Starting ~p on ~p~n", [Name, Host]),
     Startup = case ShouldLink of true -> start_link; _ -> start end,
     case catch( apply(Handler, Startup, [NodeInfo]) ) of
         NI2 when is_record(NI2, 'systest.node_info') ->
@@ -106,7 +108,7 @@ kill_and_wait(NI) when is_record(NI, 'systest.node_info') ->
     shutdown_and_wait(NI, fun kill/1).
 
 -spec status(node_info()) -> 'nodeup' | {'nodedown', term()}.
-status(NI=#'systest.node_info'{handler=Handler, owner=Server}) ->
+status(NI=#'systest.node_info'{handler=Handler}) ->
     Handler:status(NI).
 
 -spec interact(node_info(), term()) -> term().
@@ -160,15 +162,14 @@ node_config(Cluster, Node, Config) ->
     %% TODO: this code does *NOT* work for all possible merge scenarios!
     Globals         = systest_config:get_config(global_node_config),
     NodeConfig      = systest_config:get_config({Cluster, Node}),
-    
-    ct:pal("NodeConfig: ~p~n", [NodeConfig]),
+
     {Static, Runtime, Flags} = lists:foldl(fun extract_config/2,
                                            {[], [], []}, NodeConfig),
 
     GlobalFlags = ?CONFIG(flags, Globals),
     FlagsConfig = systest_config:merge_config(Flags, GlobalFlags),
     Config2 = systest_config:merge_config(Static, Runtime),
-    MergedFlags = 
+    MergedFlags =
         systest_config:merge_config(Globals, [{flags, FlagsConfig}]),
     MergedConfig = systest_config:merge_config(MergedFlags, Config2),
     AllConfig = systest_config:merge_config(MergedConfig, Config),

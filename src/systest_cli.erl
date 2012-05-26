@@ -106,6 +106,8 @@ init([Node, Cmd, Args, Extra]) ->
             true = link(Port),
             %% we do the initial receive stuff up-front
             %% just to avoid any initial ordering problems...
+            ct:pal("Reading OS process id for ~p from port ~p~n",
+                   [Id, Port]),
             case read_pid(Id, Port, RpcEnabled) of
                 {error, {stopped, Rc}} ->
                     {stop, {launch_failure, Rc}};
@@ -121,9 +123,9 @@ init([Node, Cmd, Args, Extra]) ->
                              command=ExecutableCommand,
                              state=running,
                              node=Node#'systest.node_info'{os_pid=Pid}},
-                    ct:log(info,
-                           "External Process Handler Started at ~p:~n~p~n",
-                           [self(), Sh]),
+                    ct:pal(info,
+                           "External Process Handler Started at ~p~n",
+                           [self()]),
                     {ok, Sh}
             end;
         StopError ->
@@ -175,8 +177,8 @@ handle_cast(_Msg, Sh) ->
     {noreply, Sh}.
 
 handle_info({Port, {data, {_, Line}}},
-            Sh=#sh{port=Port, node=Node, log_enabled=true}) ->
-    ct:log("[~p] " ++ Line, [systest_node:get_node_info(id, Node)]),
+            Sh=#sh{port=Port, node=#'systest.node_info'{id=Id}}) ->
+    ct:log("[~p] " ++ Line, [Id]),
     {noreply, Sh};
 handle_info({Port, {exit_status, 0}},
             Sh=#sh{port=Port, log_enabled=Pal, command=Cmd}) ->
@@ -197,7 +199,7 @@ handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal}) ->
     LogFun = case Pal of true -> pal; _ -> log end,
     apply(ct, LogFun, ["Port ~p closed~n", [Port]]),
     {stop, {port_closed, Port}, Sh};
-handle_info(_Info, Sh) ->
+handle_info(Info, Sh=#sh{node=#'systest.node_info'{id=Id}}) ->
     {noreply, Sh}.
 
 terminate(_Reason, _State) ->

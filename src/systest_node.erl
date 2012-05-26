@@ -97,40 +97,12 @@ sigkill(#'systest.node_info'{os_pid=Pid}) ->
     _ = os:cmd("kill -9 " ++ Pid).
 
 -spec stop_and_wait(node_info()) -> 'ok'.
-stop_and_wait(NI=#'systest.node_info'{link=true, id=Id,
-                                      owner=Owner}) when is_pid(Owner) ->
-    case (Owner == self()) orelse not(is_process_alive(Owner)) of
-        true  -> ok;
-        false -> link(Owner),
-                 ct:log("Stopping ~p ....~n"
-                        "Waiting for port owning process (~p) to exit...~n",
-                        [Id, Owner]),
-                 ok = stop(NI),
-                 receive
-                     {'EXIT', Owner, Reason} -> ok;
-                     Other                   -> ct:pal("Other ~p~n", Other)
-                 end
-    end;
-stop_and_wait(_) ->
-    throw(badarg).
+stop_and_wait(NI) when is_record(NI, 'systest.node_info') ->
+    shutdown_and_wait(NI, fun stop/1).
 
 -spec kill_and_wait(node_info()) -> 'ok'.
-kill_and_wait(NI=#'systest.node_info'{link=true, id=Id,
-                                      owner=Owner}) when is_pid(Owner) ->
-    case (Owner == self()) orelse not(is_process_alive(Owner)) of
-        true  -> ok;
-        false -> link(Owner),
-                 ct:log("Stopping ~p ....~n"
-                        "Waiting for port owning process (~p) to exit...~n",
-                        [Id, Owner]),
-                 ok = kill(NI),
-                 receive
-                     {'EXIT', Owner, _Reason} -> ok;
-                     Other                    -> ct:pal("Other ~p~n", [Other])
-                 end
-    end;
-kill_and_wait(_) ->
-    throw(badarg).
+kill_and_wait(NI) when is_record(NI, 'systest.node_info') ->
+    shutdown_and_wait(NI, fun kill/1).
 
 -spec status(node_info()) -> 'nodeup' | {'nodedown', term()}.
 status(NI=#'systest.node_info'{handler=Handler}) ->
@@ -154,6 +126,21 @@ status_check(Node) when is_atom(Node) ->
 %%
 %% Private API
 %%
+
+shutdown_and_wait(NI=#'systest.node_info'{owner=Owner},
+                  ShutdownOp) when is_pid(Owner) ->
+    case (Owner == self()) orelse not(is_process_alive(Owner)) of
+        true  -> ok;
+        false -> link(Owner),
+                 ct:log("Stopping ~p ....~n"
+                        "Waiting for port owning process (~p) to exit...~n",
+                        [NI#'systest.node_info'.id, Owner]),
+                 ok = ShutdownOp(NI),
+                 receive
+                     {'EXIT', Owner, _Reason} -> ok;
+                     Other                    -> ct:pal("Other ~p~n", [Other])
+                 end
+    end.
 
 make_node(Config) ->
     %% NB: new_node_info is an exprecs generated function

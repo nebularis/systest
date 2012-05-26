@@ -102,8 +102,7 @@ print_status_info({#'systest.node_info'{host=Host,
                                         os_pid=Proc,
                                         extra=Xtra,
                                         owner=Port}, Status}) ->
-     io_lib:format("----------------------------------------------------~n"
-                   "Node Info~n"
+     io_lib:format("Node Info~n"
                    "         name:  ~p (status=~p)~n"
                    "         host:  ~p~n"
                    "         type:  ~p~n"

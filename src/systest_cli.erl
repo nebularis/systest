@@ -44,7 +44,7 @@
 
 %% private record for tracking...
 -record(sh, {command, node, state, log_enabled,
-             rpc_enabled, pid, port, shutdown}).
+             rpc_enabled, pid, port, shutdown, detached}).
 
 -include("systest.hrl").
 
@@ -90,6 +90,7 @@ init([Node, Cmd, Args, Extra]) ->
     Config = systest_node:get_node_info(config, Node),
     Startup = ?CONFIG(startup, Config, true),
     LogEnabled = ?CONFIG(log_enabled, Startup, true),
+    Detached = ?REQUIRE(detached, Startup),
     {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
                                          Startup, {true, default}),
     case check_command(Cmd, RpcEnabled) of
@@ -99,6 +100,7 @@ init([Node, Cmd, Args, Extra]) ->
             Port = open_port({spawn_executable, ExecutableCommand},
                              [{args, Args}, exit_status, hide,
                               stderr_to_stdout, use_stdio, {line, 16384}]),
+            true = link(Port),
             %% we do the initial receive stuff up-front
             %% just to avoid any initial ordering problems...
             case read_pid(Id, Port, RpcEnabled) of
@@ -109,6 +111,7 @@ init([Node, Cmd, Args, Extra]) ->
                 Pid ->
                     Sh = #sh{pid=Pid,
                              port=Port,
+                             detached=Detached,
                              log_enabled=LogEnabled,
                              rpc_enabled=RpcEnabled,
                              shutdown=ShutdownSpec,
@@ -133,20 +136,31 @@ handle_call(ping, _From, Sh=#sh{rpc_enabled=true, node=Node}) ->
     {reply, systest_node:status_check(Node#'systest.node_info'.id), Sh};
 handle_call(ping, _From, Sh=#sh{rpc_enabled=false, state=ProgramState}) ->
     case ProgramState of
-        running -> {reply, nodeup, Sh};
-        stopped -> {reply, {nodedown, stopped}, Sh}
+        running       -> {reply, nodeup, Sh};
+        stopped       -> {reply, {nodedown, stopped}, Sh};
+        wait_shutdown -> {reply, wait_shutdown, Sh}
     end;
 handle_call(_Msg, _From, Sh) ->
     {noreply, Sh}.
 
 handle_cast(kill, Sh=#sh{state=stopped}) ->
     {noreply, Sh};
-handle_cast(kill, Sh=#sh{pid=Pid, rpc_enabled=false, state=running}) ->
-    _ = os:cmd("kill -9 " ++ Pid),
-    {noreply, Sh#sh{state=stopped}};
-handle_cast(kill, Sh=#sh{port=Port, rpc_enabled=true, state=running}) ->
-    erlang:port_close(Port),
-    {stop, killed, Sh#sh{state=stopped}};
+%handle_cast(kill, Sh=#sh{node=Node, rpc_enabled=true, state=running}) ->
+    %% you'll have to explicitly 'sigkill' one of these to not run this code
+%    Id = Node#'systest.node_info'.id,
+%    ct:log("Forcing erts on ~p to shutdown "
+%           "with halt(255, [{flush, false}])~n", [Id]),
+%    rpc:call(Id, erlang, halt,
+%             [255, [{flush, false}]]),
+%    {noreply, Sh#sh{state=stopped}};
+handle_cast(kill, Sh=#sh{node=Node, detached=true, state=running}) ->
+    systest_node:sigkill(Node),
+    {noreply, Sh#sh{state=killed}};
+handle_cast(kill, Sh=#sh{port=Port, detached=false, state=running}) ->
+    ct:log("kill instruction received - terminating port ~p~n", [Port]),
+    % erlang:port_close(Port),
+    Port ! {self(), close},
+    {noreply, Sh#sh{state=killed}};
 handle_cast(stop, Sh=#sh{node=Node, shutdown=Shutdown, rpc_enabled=true}) ->
     Halt = case Shutdown of
                default -> {init, stop, []};
@@ -167,11 +181,19 @@ handle_info({Port, {exit_status, 0}},
     apply(ct, LogFun, ["Program ~s exited normally (status 0)~n", [Cmd]]),
     {stop, normal, Sh#sh{state=stopped}};
 handle_info({Port, {exit_status, Exit}=Rc},
-             Sh=#sh{port=Port, log_enabled=Pal, node=Node}) ->
-     LogFun = case Pal of true -> pal; _ -> log end,
-     apply(ct, LogFun, ["Node ~p shut down with error/status code ~p~n",
-                        [Node#'systest.node_info'.id, Exit]]),
-    {stop, Rc, Sh#sh{state=stopped}};
+             Sh=#sh{port=Port, state=State, log_enabled=Pal, node=Node}) ->
+    LogFun = case Pal of true -> pal; _ -> log end,
+    apply(ct, LogFun, ["Node ~p shut down with error/status code ~p~n",
+                      [Node#'systest.node_info'.id, Exit]]),
+    ShutdownType = case State of
+                       killed -> normal;
+                       _      -> Rc
+                   end,
+    {stop, ShutdownType, Sh#sh{state=stopped}};
+handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal}) ->
+    LogFun = case Pal of true -> pal; _ -> log end,
+    apply(ct, LogFun, ["Port ~p closed~n", [Port]]),
+    {stop, {port_closed, Port}, Sh};
 handle_info(_Info, Sh) ->
     {noreply, Sh}.
 

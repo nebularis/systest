@@ -33,7 +33,7 @@
 -export([behaviour_info/1]).
 -export([make_node/3]).
 -export([start/1, stop/1, kill/1]).
--export([stop_and_wait/1]).
+-export([sigkill/1, stop_and_wait/1, kill_and_wait/1]).
 -export([status/1, interact/2]).
 
 -export([status_check/1]).
@@ -91,6 +91,11 @@ stop(NI=#'systest.node_info'{handler=Handler}) ->
 kill(NI=#'systest.node_info'{handler=Handler}) ->
     Handler:kill(NI).
 
+-spec sigkill(node_info()) -> string().
+sigkill(#'systest.node_info'{os_pid=Pid}) ->
+    ct:log("executing kill -9 ~p~n", [Pid]),
+    _ = os:cmd("kill -9 " ++ Pid).
+
 -spec stop_and_wait(node_info()) -> 'ok'.
 stop_and_wait(NI=#'systest.node_info'{link=true, id=Id,
                                       owner=Owner}) when is_pid(Owner) ->
@@ -107,6 +112,24 @@ stop_and_wait(NI=#'systest.node_info'{link=true, id=Id,
                  end
     end;
 stop_and_wait(_) ->
+    throw(badarg).
+
+-spec kill_and_wait(node_info()) -> 'ok'.
+kill_and_wait(NI=#'systest.node_info'{link=true, id=Id,
+                                      owner=Owner}) when is_pid(Owner) ->
+    case (Owner == self()) orelse not(is_process_alive(Owner)) of
+        true  -> ok;
+        false -> link(Owner),
+                 ct:log("Stopping ~p ....~n"
+                        "Waiting for port owning process (~p) to exit...~n",
+                        [Id, Owner]),
+                 ok = kill(NI),
+                 receive
+                     {'EXIT', Owner, _Reason} -> ok;
+                     Other                    -> ct:pal("Other ~p~n", [Other])
+                 end
+    end;
+kill_and_wait(_) ->
     throw(badarg).
 
 -spec status(node_info()) -> 'nodeup' | {'nodedown', term()}.

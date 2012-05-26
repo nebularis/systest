@@ -28,7 +28,7 @@
 -include("../include/systest.hrl").
 -compile(export_all).
 
-suite() -> [{timetrap, {seconds, 20}}].
+suite() -> [{timetrap, {seconds, 60}}].
 
 all() ->
     systest_suite:export_all(?MODULE).
@@ -61,7 +61,7 @@ killing_nodes(Config) ->
     systest_cluster:print_status(Cluster),
     [begin
          ?assertEqual(nodeup, systest_node:status(N)),
-         ok = systest_node:kill(N),
+         ok = systest_node:kill_and_wait(N),
          
          Node = N#'systest.node_info'.id,
          ?assertEqual(pang, net_adm:ping(Node))

@@ -33,6 +33,12 @@ suite() -> [{timetrap, {seconds, 60}}].
 all() ->
     systest_suite:export_all(?MODULE).
 
+init_per_testcase(Tc, Config) ->
+    systest_cluster:start(Tc, Config).
+
+end_per_testcase(Tc, Config) ->
+    systest_cluster:stop(Tc, Config).
+
 local_and_global_scope_configuration_handling(Config) ->
     Scope = systest_cli_config_example,
     systest_cluster:check_config(Scope, Config),
@@ -78,3 +84,6 @@ sigkill_on_nodes(Config) ->
          ?assertMatch({'nodedown', _}, systest_node:status(N))
      end || N <- systest:cluster_nodes(Cluster)],
     ok.
+
+%handling_detached_processes(Config) ->
+%    process_flag(trap_exit, true),

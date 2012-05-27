@@ -4,6 +4,7 @@
 
 {alias, test, "{{ base_dir }}/test"}.
 {suites, test, systest_cli_SUITE}.
+% {cases, test, systest_cli_SUITE, killing_nodes}.
 
 {ct_hooks, [cth_log_redirect]}.
 {enable_builtin_hooks, true}.

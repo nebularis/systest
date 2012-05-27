@@ -97,11 +97,11 @@ init([Node, Cmd, Args, Extra]) ->
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
     LogEnabled = ?CONFIG(log_enabled, Startup, true),
-    
+
     {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
                                          Startup, {true, default}),
     Shutdown = case ?CONFIG(stop, Flags, undefined) of
-                   undefined -> 
+                   undefined ->
                        case RpcEnabled of
                            false -> throw(shutdown_spec_missing);
                            true  -> ShutdownSpec
@@ -111,17 +111,18 @@ init([Node, Cmd, Args, Extra]) ->
                    Spec when is_list(Spec) ->
                        script_stop
                end,
-    case check_command(Cmd, RpcEnabled) of
+    case check_command(Cmd, Detached, RpcEnabled) of
         ok ->
             Env = ?CONFIG(env, Extra, []),
-            ExecutableCommand = maybe_patch_command(Cmd, Env, RpcEnabled),
+            ExecutableCommand = maybe_patch_command(Cmd, Env,
+                                                    Detached, RpcEnabled),
             Port = open_port({spawn_executable, ExecutableCommand},
                              [{args, Args}, exit_status, hide,
                               stderr_to_stdout, use_stdio, {line, 16384}]),
             true = link(Port),
             %% we do the initial receive stuff up-front
             %% just to avoid any initial ordering problems...
-            ct:pal("Reading OS process id for ~p from port ~p~n",
+            ct:pal("Reading OS process id for ~p from ~p~n",
                    [Id, Port]),
             case read_pid(Id, Port, RpcEnabled) of
                 {error, {stopped, Rc}} ->
@@ -155,7 +156,7 @@ handle_call({command, Data}, _From, Sh=#sh{port=Port}) ->
 handle_call(ping, _From, Sh=#sh{rpc_enabled=true, node=Node}) ->
     {reply, systest_node:status_check(Node#'systest.node_info'.id), Sh};
 handle_call(ping, _From, Sh=#sh{rpc_enabled=false, state=ProgramState}) ->
-    %% TODO: this is wrong - we should spawn and use gen_server:reply 
+    %% TODO: this is wrong - we should spawn and use gen_server:reply
     %%       especially in light of the potential delay in running ./stop
     case ProgramState of
         running       -> {reply, nodeup, Sh};
@@ -167,25 +168,19 @@ handle_call(_Msg, _From, Sh) ->
 
 handle_cast(kill, Sh=#sh{state=stopped}) ->
     {noreply, Sh};
-%handle_cast(kill, Sh=#sh{node=Node, rpc_enabled=true, state=running}) ->
-    %% you'll have to explicitly 'sigkill' one of these to not run this code
-%    Id = Node#'systest.node_info'.id,
-%    ct:log("Forcing erts on ~p to shutdown "
-%           "with halt(255, [{flush, false}])~n", [Id]),
-%    rpc:call(Id, erlang, halt,
-%             [255, [{flush, false}]]),
-%    {noreply, Sh#sh{state=stopped}};
-handle_cast(kill, Sh=#sh{node=Node, detached=true, state=running}) ->
+handle_cast(kill, Sh=#sh{node=Node, detached=true,
+                         rpc_enabled=false, state=running}) ->
     systest_node:sigkill(Node),
     {noreply, Sh#sh{state=killed}};
 handle_cast(kill, Sh=#sh{port=Port, detached=false, state=running}) ->
-    ct:log("kill instruction received - terminating port ~p~n", [Port]),
-    % erlang:port_close(Port),
+    ct:pal("kill instruction received - terminating port ~p~n", [Port]),
     Port ! {self(), close},
     {noreply, Sh#sh{state=killed}};
 handle_cast(stop, Sh=#sh{shutdown=stopped}) ->
     {noreply, Sh};
 handle_cast(stop, Sh=#sh{node=Node, shutdown=script_stop}) ->
+    ct:pal("running shutdown hooks for ~p",
+           [systest_node:get_node_info(id, Node)]),
     Flags = systest_node:get_node_info(flags, Node),
     Config = systest_node:get_node_info(config, Node),
     {Env, Args, Prog} = convert_flags(stop, Node, Flags, Config),
@@ -197,6 +192,7 @@ handle_cast(stop, Sh=#sh{node=Node, shutdown=Shutdown, rpc_enabled=true}) ->
            end,
     apply(rpc, call, [Node#'systest.node_info'.id|tuple_to_list(Halt)]),
     {noreply, Sh#sh{state=stopped}};
+%% TODO: when rpc_enabled=false and shutdown is undefined???
 handle_cast(_Msg, Sh) ->
     {noreply, Sh}.
 
@@ -219,9 +215,26 @@ handle_info({Port, {exit_status, Exit}=Rc},
                        _      -> Rc
                    end,
     {stop, ShutdownType, Sh#sh{state=stopped}};
+handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal, node=Node,
+                                   state=killed, detached=false}) ->
+    LogFun = case Pal of true -> pal; _ -> log end,
+    apply(ct, LogFun, ["~p (attached) closed~n", [Port]]),
+    case Sh#sh.rpc_enabled of
+        true ->
+            %% to account for a potential timing issue when the calling test
+            %% execution process is sitting in `kill_and_wait` - we force a
+            %% call to net_adm:ping/1, which gives the net_kernel time to get
+            %% its knickers in order before proceeding....
+            Id = systest_node:get_node_info(id, Node),
+            systest_node:status_check(Id);
+        false ->
+            ok
+    end,
+    %% ct:pal("Node Status: ~p~n", [systest_node:status_check(Id)]),
+    {stop, normal, Sh};
 handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal}) ->
     LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Port ~p closed~n", [Port]]),
+    apply(ct, LogFun, ["~p closed~n", [Port]]),
     {stop, {port_closed, Port}, Sh};
 handle_info({Port, ok}, Sh=#sh{shutdown_port=Port, log_enabled=Pal}) ->
     LogFun = case Pal of true -> pal; _ -> log end,
@@ -235,7 +248,12 @@ handle_info({Port, {error, Rc}}, Sh=#sh{shutdown_port=Port, log_enabled=Pal}) ->
 handle_info(_Info, Sh) ->
     {noreply, Sh}.
 
-terminate(_Reason, _State) ->
+terminate({port_closed, _}, _) ->
+    ok;
+terminate(Reason, #sh{port=Port}) ->
+    ct:pal("Terminating due to ~p~n", [Reason]),
+    %% TODO: verify that we're not *leaking* ports if we fail to close them here
+    catch(port_close(Port)),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -304,17 +322,18 @@ read_pid(NodeId, Port, RpcEnabled) ->
 
 %% command processing
 
-check_command(_, true) ->
+check_command(_, false, true) ->
     ok;
-check_command(Cmd, _) ->
+check_command(Cmd, true, _) ->
     case re:run(Cmd, "(&&|;)") of
         nomatch -> ok;
         _       -> {stop, async_multicmds_disallowed}
     end.
 
-maybe_patch_command(Cmd, _, true) ->
+maybe_patch_command(Cmd, _, false, true) ->
     Cmd;
-maybe_patch_command(Cmd, Env, false) ->
+maybe_patch_command(Cmd, Env, Detached, RpcEnabled) when Detached orelse
+                                                         RpcEnabled ->
     case os:type() of
         {win32, _} ->
             "cmd /q /c " ++ lists:foldl(fun({Key, Value}, Acc) ->

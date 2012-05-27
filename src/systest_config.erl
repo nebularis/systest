@@ -74,7 +74,7 @@ set_env(Key, Value) ->
     ok = gen_server:call(?MODULE, {set, Key, Value}).
 
 get_config(Key) ->
-    ct:get_config(Key, [all], []).
+    ct:get_config(Key, [], [all]).
 
 get_config(Scope, Node, Type) ->
     Nodes = ct:get_config({Scope, Node}, [all], []),
@@ -116,7 +116,7 @@ init([]) ->
     {ok, []}.
 
 handle_call({set, Key, Value}, _From, State) ->
-    true = ets:insert([{Key, Value}]),
+    true = ets:insert(?MODULE, [{Key, Value}]),
     {reply, ok, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -172,7 +172,7 @@ extend({extra, [{_, _, _}|_]=Stuff}, Existing) ->
     [{extra, Items}|Existing];
 extend({K, NewVal}=New, Existing) when is_list(NewVal) ->
     case lists:keyfind(K, 1, Existing) of
-        {K, OldVal} when is_list(OldVal) ->
+        {K, [{_,_}|_]=OldVal} ->
             Extender = case K of
                            Action when Action =:= start orelse
                                        Action =:= stop  orelse

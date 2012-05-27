@@ -85,5 +85,15 @@ sigkill_on_nodes(Config) ->
      end || N <- systest:cluster_nodes(Cluster)],
     ok.
 
-%handling_detached_processes(Config) ->
-%    process_flag(trap_exit, true),
+handling_detached_processes(Config) ->
+    process_flag(trap_exit, true),
+    Cluster = systest:active_cluster(Config),
+    systest_cluster:print_status(Cluster),
+    [begin
+         ?assertEqual(nodeup, systest_node:status(N)),
+         ok = systest_node:kill_and_wait(N),
+         
+         Node = N#'systest.node_info'.id,
+         ?assertEqual(pang, net_adm:ping(Node))
+     end || N <- systest:cluster_nodes(Cluster)],
+    ok.

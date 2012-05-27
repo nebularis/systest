@@ -31,13 +31,28 @@
 
 cli_flags_test_() ->
     [begin
-        Node = #'systest.node_info'{id=cli},
-        Flags = [{start, ["priv/start",
-                          {node, id},
-                          {environment, "LOGDIR"}]}],
-        Config = [{"logdir", "/tmp/logs"}],
-        ?_assertEqual({[{"LOGDIR", "/tmp/logs"}], ["priv/start", "cli"]},
-                      systest_cli:convert_flags(start, Node, Flags, Config))
+         Node = #'systest.node_info'{id=cli},
+         Flags = [{start, [{program, "priv/start"},
+                           {node, id},
+                           {environment, "LOGDIR"}]}],
+         Config = [{"logdir", "/tmp/logs"}],
+         {setup, fun() ->
+                     systest:start(),
+                     systest_config:set_env("LOGDIR", "/tmp/logs")
+                 end,
+            ?_assertEqual({[{"LOGDIR", "/tmp/logs"}],["cli"],"priv/start"},
+                           systest_cli:convert_flags(start, Node,
+                                                     Flags, Config))}
+     end,
+     begin
+         GF = [{program,"resources/test/start"},
+               {node,id},
+               {environment,"LOGDIR"}],
+         NF = [{program,"resources/test/start-daemon"}],
+         ?_assertEqual([{program,"resources/test/start-daemon"},
+                        {node,id},
+                        {environment,"LOGDIR"}],
+                        systest_config:merge_config(GF, NF))
      end].
 
 %% config handling
@@ -48,12 +63,12 @@ overwrite_globals_with_local_value_test() ->
                                              [{b, 3}])).
 
 merge_locals_into_global_test() ->
-    Globals = [{flags, [{start, ["priv/start",
+    Globals = [{flags, [{start, [{program, "priv/start"},
                                  {node, id}, {environment, "LOGDIR"}]},
                         {stop,  ["priv/stop", {node, id}]}]}],
-    Locals = [{flags, [{start, [{"--dumpfile", "red.dump"}]}]}],
-    ?assertMatch([{flags, [{start, [{"--dumpfile", "red.dump"},
-                                    "priv/start",
+    Locals = [{flags, [{start, ["--dumpfile=red.dump"]}]}],
+    ?assertMatch([{flags, [{start, ["--dumpfile=red.dump",
+                                    {program, "priv/start"},
                                     {node, id}, {environment, "LOGDIR"}]}|_]}],
                  systest_config:merge_config(Globals, Locals)).
 

@@ -44,7 +44,8 @@
 
 %% private record for tracking...
 -record(sh, {command, node, state, log_enabled,
-             rpc_enabled, pid, port, shutdown, detached}).
+             rpc_enabled, pid, port, shutdown, detached,
+             shutdown_port}).
 
 -include("systest.hrl").
 
@@ -88,14 +89,28 @@ interact(#'systest.node_info'{owner=Server}, Data) ->
 %%
 
 init([Node, Cmd, Args, Extra]) ->
+    process_flag(trap_exit, true),
     Id = systest_node:get_node_info(id, Node),
-    Host = systest_node:get_node_info(host, Node),
+    % Host = systest_node:get_node_info(host, Node),
     Config = systest_node:get_node_info(config, Node),
-    Startup = ?CONFIG(startup, Config, true),
-    LogEnabled = ?CONFIG(log_enabled, Startup, true),
+    Flags = systest_node:get_node_info(flags, Node),
+    Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
+    LogEnabled = ?CONFIG(log_enabled, Startup, true),
+    
     {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
                                          Startup, {true, default}),
+    Shutdown = case ?CONFIG(stop, Flags, undefined) of
+                   undefined -> 
+                       case RpcEnabled of
+                           false -> throw(shutdown_spec_missing);
+                           true  -> ShutdownSpec
+                       end;
+                   {call, M, F, Argv} ->
+                       {M, F, Argv};
+                   Spec when is_list(Spec) ->
+                       script_stop
+               end,
     case check_command(Cmd, RpcEnabled) of
         ok ->
             Env = ?CONFIG(env, Extra, []),
@@ -111,7 +126,7 @@ init([Node, Cmd, Args, Extra]) ->
             case read_pid(Id, Port, RpcEnabled) of
                 {error, {stopped, Rc}} ->
                     {stop, {launch_failure, Rc}};
-                {error, Reason}=Err ->
+                {error, Reason} ->
                     {stop, {launch_failure, Reason}};
                 Pid ->
                     Sh = #sh{pid=Pid,
@@ -119,7 +134,7 @@ init([Node, Cmd, Args, Extra]) ->
                              detached=Detached,
                              log_enabled=LogEnabled,
                              rpc_enabled=RpcEnabled,
-                             shutdown=ShutdownSpec,
+                             shutdown=Shutdown,
                              command=ExecutableCommand,
                              state=running,
                              node=Node#'systest.node_info'{os_pid=Pid}},
@@ -140,6 +155,8 @@ handle_call({command, Data}, _From, Sh=#sh{port=Port}) ->
 handle_call(ping, _From, Sh=#sh{rpc_enabled=true, node=Node}) ->
     {reply, systest_node:status_check(Node#'systest.node_info'.id), Sh};
 handle_call(ping, _From, Sh=#sh{rpc_enabled=false, state=ProgramState}) ->
+    %% TODO: this is wrong - we should spawn and use gen_server:reply 
+    %%       especially in light of the potential delay in running ./stop
     case ProgramState of
         running       -> {reply, nodeup, Sh};
         stopped       -> {reply, {nodedown, stopped}, Sh};
@@ -166,6 +183,13 @@ handle_cast(kill, Sh=#sh{port=Port, detached=false, state=running}) ->
     % erlang:port_close(Port),
     Port ! {self(), close},
     {noreply, Sh#sh{state=killed}};
+handle_cast(stop, Sh=#sh{shutdown=stopped}) ->
+    {noreply, Sh};
+handle_cast(stop, Sh=#sh{node=Node, shutdown=script_stop}) ->
+    Flags = systest_node:get_node_info(flags, Node),
+    Config = systest_node:get_node_info(config, Node),
+    {Env, Args, Prog} = convert_flags(stop, Node, Flags, Config),
+    {noreply, run_shutdown_hook(Sh, Prog, Args, Env)};
 handle_cast(stop, Sh=#sh{node=Node, shutdown=Shutdown, rpc_enabled=true}) ->
     Halt = case Shutdown of
                default -> {init, stop, []};
@@ -199,7 +223,16 @@ handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal}) ->
     LogFun = case Pal of true -> pal; _ -> log end,
     apply(ct, LogFun, ["Port ~p closed~n", [Port]]),
     {stop, {port_closed, Port}, Sh};
-handle_info(Info, Sh=#sh{node=#'systest.node_info'{id=Id}}) ->
+handle_info({Port, ok}, Sh=#sh{shutdown_port=Port, log_enabled=Pal}) ->
+    LogFun = case Pal of true -> pal; _ -> log end,
+    apply(ct, LogFun, ["Termination Port ~p completed ok~n", [Port]]),
+    {noreply, Sh};
+handle_info({Port, {error, Rc}}, Sh=#sh{shutdown_port=Port, log_enabled=Pal}) ->
+    LogFun = case Pal of true -> pal; _ -> log end,
+    apply(ct, LogFun, ["Termination Port ~p stopped abnormally (status ~p)~n",
+                      [Port, Rc]]),
+    {stop, termination_port_error, Sh};
+handle_info(_Info, Sh) ->
     {noreply, Sh}.
 
 terminate(_Reason, _State) ->
@@ -225,12 +258,29 @@ start_it(NI=#'systest.node_info'{config=Config, flags=Flags,
         Error     -> Error
     end.
 
+run_shutdown_hook(Sh, Prog, Args, Env) ->
+    Port = open_port({spawn_executable, Prog},
+                     [{env, Env}, exit_status, {line, 16384},
+                      use_stdio, stderr_to_stdout, {args, Args}]),
+    spawn_link(fun() -> exit({Port, shutdown_loop(Port)}) end),
+    Sh#sh{shutdown_port=Port, state=stopped}.
+
 %% port handling
+
+shutdown_loop(Port) ->
+    receive
+        {Port, {data, {_, _}}} ->
+            shutdown_loop(Port);
+        {Port, {exit_status, 0}} ->
+            ok;
+        {Port, {exit_status, Rc}} ->
+            {error, Rc}
+    end.
 
 read_pid(NodeId, Port, RpcEnabled) ->
     case RpcEnabled of
         true  -> case rpc:call(NodeId, os, getpid, []) of
-                     {badrpc, Reason} ->
+                     {badrpc, _Reason} ->
                          receive
                              {Port, {exit_status, Rc}} ->
                                  {error, {stopped, Rc}};

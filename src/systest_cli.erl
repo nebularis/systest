@@ -274,7 +274,8 @@ handle_info({Port, ok}, Sh=#sh{shutdown_port=Port, state=killed,
         true  -> {stop, normal, Sh};
         false -> {noreply, Sh}
     end;
-handle_info({Port, {error, Rc}}, Sh=#sh{shutdown_port=Port, log_enabled=Pal}) ->
+handle_info({Port, {error, Rc}},
+            Sh=#sh{shutdown_port=Port, log_enabled=Pal}) ->
     LogFun = case Pal of true -> pal; _ -> log end,
     apply(ct, LogFun, ["Termination Port ~p stopped abnormally (status ~p)~n",
                       [Port, Rc]]),
@@ -286,7 +287,7 @@ terminate({port_closed, _}, _) ->
     ok;
 terminate(Reason, #sh{port=Port}) ->
     ct:pal("Terminating due to ~p~n", [Reason]),
-    %% TODO: verify that we're not *leaking* ports if we fail to close them here
+    %% TODO: verify that we're not *leaking* ports if we fail to close them
     case Port of
         detached -> ok;
         _Port    -> catch(port_close(Port)),

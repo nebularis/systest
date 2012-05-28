@@ -1,3 +1,6 @@
 #!/usr/bin/env sh
 
-erl_call -h nodectl -sname $1 -q
+LIB_DIR="`erl -noshell -noinput -eval 'io:format("~s", [code:lib_dir()])' -s init stop`"
+ERL_CALL="`find $LIB_DIR -name erl_call`"
+$ERL_CALL -h nodectl -sname $1 -q
+

@@ -1,3 +1,4 @@
 #!/usr/bin/env sh
 
-erl -sname $2
+erl -sname $1
+

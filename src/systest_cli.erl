@@ -104,6 +104,7 @@ init([Node, Cmd, Args, Extra]) ->
         ok ->
             Env = case ?CONFIG(env, Extra, undefined) of
                       undefined -> [];
+                      []        -> [];
                       Other     -> [{env, Other}]
                   end,
             ExecutableCommand = maybe_patch_command(Cmd, Env, Args,
@@ -126,9 +127,9 @@ init([Node, Cmd, Args, Extra]) ->
                        end,
 
             Port = case Detached of
-                       false -> ct:pal("Spawning executable:~n"
+                       false -> ct:pal("Spawning executable~n"
                                        "Command: ~s~n"
-                                       "Args: ~p~n", [ExecutableCommand, Args]),
+                                       "Args: ~p~n", [ExecutableCommand,Args]),
                                 P = open_port(
                                         {spawn_executable, ExecutableCommand},
                                         [{args, Args}|LaunchOpts]),
@@ -221,8 +222,13 @@ handle_cast(_Msg, Sh) ->
     {noreply, Sh}.
 
 handle_info({nodedown, NodeId},
-            Sh=#sh{state=killed, node=#'systest.node_info'{id=NodeId}}) ->
-    {stop, normal, Sh};
+            Sh=#sh{state=State, node=#'systest.node_info'{id=NodeId}}) ->
+    ShutdownType = case State of
+                       killed  -> normal;
+                       stopped -> normal;
+                       _       -> nodedown
+                   end,
+    {stop, ShutdownType, Sh};
 handle_info({nodedown, NodeId},
             Sh=#sh{state=_, node=#'systest.node_info'{id=NodeId}}) ->
     {stop, nodedown, Sh};
@@ -266,21 +272,22 @@ handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal}) ->
     LogFun = case Pal of true -> pal; _ -> log end,
     apply(ct, LogFun, ["~p closed~n", [Port]]),
     {stop, {port_closed, Port}, Sh};
-handle_info({Port, ok}, Sh=#sh{shutdown_port=Port, state=killed,
+handle_info({'EXIT', Pid, ok}, Sh=#sh{shutdown_port=Pid, state=killed,
                                detached=Detached, log_enabled=Pal}) ->
     LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Termination Port ~p completed ok~n", [Port]]),
+    apply(ct, LogFun, ["Termination Port completed ok~n"]),
     case Detached of
         true  -> {stop, normal, Sh};
         false -> {noreply, Sh}
     end;
-handle_info({Port, {error, Rc}},
-            Sh=#sh{shutdown_port=Port, log_enabled=Pal}) ->
+handle_info({'EXIT', Pid, {error, Rc}},
+            Sh=#sh{shutdown_port=Pid, log_enabled=Pal}) ->
     LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Termination Port ~p stopped abnormally (status ~p)~n",
-                      [Port, Rc]]),
+    apply(ct, LogFun, ["Termination Port stopped abnormally (status ~p)~n",
+                      [Rc]]),
     {stop, termination_port_error, Sh};
-handle_info(_Info, Sh) ->
+handle_info(Info, Sh) ->
+    ct:pal("Ignoring ~p~n", [Info]),
     {noreply, Sh}.
 
 terminate({port_closed, _}, _) ->
@@ -315,11 +322,16 @@ start_it(NI=#'systest.node_info'{config=Config, flags=Flags,
     end.
 
 run_shutdown_hook(Sh, Prog, Args, Env) ->
-    Port = open_port({spawn_executable, Prog},
-                     [{env, Env}, exit_status, {line, 16384},
-                      use_stdio, stderr_to_stdout, {args, Args}]),
-    spawn_link(fun() -> exit({Port, shutdown_loop(Port)}) end),
-    Sh#sh{shutdown_port=Port, state=stopped}.
+    ct:pal("Spawning executable~n"
+           "Command: ~s~nArgs: ~p~n", [Prog, Args]),
+    Pid= spawn_link(fun() ->
+                        Port = open_port({spawn_executable, Prog},
+                                         [{env, Env}, {line, 16384},
+                                         use_stdio, stderr_to_stdout,
+                                         exit_status, {args, Args}]),
+                        exit(shutdown_loop(Port))
+                    end),
+    Sh#sh{shutdown_port=Pid, state=stopped}.
 
 %% port handling
 
@@ -435,6 +447,7 @@ expand_env_variable(InStr, VarName, RawVarValue) ->
 
 convert_flags(Operation, Node, AllFlags, Config) ->
     Flags = ?REQUIRE(Operation, AllFlags),
+    ct:pal("flags: ~p~n", [Flags]),
     {_, _, Env, Acc, Prog} =
             lists:foldl(fun process/2,
                         {Node, Config, [], [], undefined}, Flags),

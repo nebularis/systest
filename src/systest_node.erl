@@ -95,7 +95,7 @@ kill(NI=#'systest.node_info'{handler=Handler}) ->
 
 -spec sigkill(node_info()) -> string().
 sigkill(#'systest.node_info'{os_pid=Pid}) ->
-    ct:log("executing kill -9 ~p~n", [Pid]),
+    ct:log("executing kill -9 ~s~n", [Pid]),
     Result = os:cmd("kill -9 " ++ Pid),
     ct:log(Result).
 

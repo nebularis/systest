@@ -332,28 +332,30 @@ shutdown_loop(Port) ->
 
 read_pid(NodeId, Port, Detached, RpcEnabled) ->
     case RpcEnabled of
-        true -> 
+        true ->
             case rpc:call(NodeId, os, getpid, []) of
                 {badrpc, _Reason} ->
                     receive
                         {Port, {exit_status, 0}} ->
                             case Detached of
+                                %% NB: with detached nodes, the 'launcher' will
+                                %% exit leaving the node up and running, so we
+                                %% now need to sit in a loop until we can rpc
                                 true  -> read_pid(NodeId, Port,
                                                   Detached, RpcEnabled);
                                 false -> {error, no_pid}
                             end;
                         {Port, {exit_status, Rc}} ->
                             {error, {stopped, Rc}};
-                        {Port, {data, {eol, Pid}}} ->
+                        {Port, {data, {eol, _Pid}}} ->
+                            %% NB: the 'launch' process has sent us a pid, but
+                            %% that's meaningless for detached nodes until we
+                            %% can successfully rpc to get the actual pid.
                             case Detached of
-                                %% once again we're at the whim of timing
-                                %% wherein the distribution mechanism needs
-                                %% time to 'catch up' with the process launch
-                                true  -> wait_for_nodeup(NodeId),
-                                         {detached, Pid};
-                                false -> read_pid(NodeId, Port,
-                                                  Detached, RpcEnabled)
-                            end;
+                                true  -> wait_for_nodeup(NodeId);
+                                false -> ok
+                            end,
+                            read_pid(NodeId, Port, Detached, RpcEnabled);
                         Other ->
                             ct:log("[~p] ~p", [NodeId, Other]),
                             read_pid(NodeId, Port, Detached, RpcEnabled)
@@ -367,7 +369,9 @@ read_pid(NodeId, Port, Detached, RpcEnabled) ->
                         true  -> {detached, Pid}
                     end
             end;
-        false -> 
+        false ->
+            %% NB: detached + rpc_disabled is currently disallowed, so we don't
+            %% cater for {detached, Pid} here at all.
             receive
                 {Port, {data, {eol, Pid}}} -> Pid;
                 {Port, {exit_status, Rc}}  -> {error, {stopped, Rc}}
@@ -376,9 +380,8 @@ read_pid(NodeId, Port, Detached, RpcEnabled) ->
 
 wait_for_nodeup(NodeId) ->
     case net_kernel:connect(NodeId) of
-        ignored -> wait_for_nodeup(NodeId);
         true    -> ok;
-        false   -> throw(connect_failure)
+        _       -> erlang:yield(), wait_for_nodeup(NodeId)
     end.
 
 %% command processing

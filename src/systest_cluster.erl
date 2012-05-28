@@ -28,6 +28,7 @@
 -export([check_config/2, status/1, print_status/1, log_status/1]).
 
 -include("systest.hrl").
+-include("log.hrl").
 
 %%
 %% Public API
@@ -37,7 +38,7 @@ start(Config) ->
     start(global, Config).
 
 start(ClusterId, Config) ->
-    ct:pal("Processing cluster info for ~p~n", [ClusterId]),
+    ?INFO("Processing cluster info for ~p~n", [ClusterId]),
     case with_cluster(ClusterId, fun start_host/3, Config) of
         noconfig ->
             Config;
@@ -69,10 +70,11 @@ status(#'systest.cluster'{nodes=Nodes}) ->
     [{N, systest_node:status(N)} || N <- Nodes].
 
 print_status(Cluster) ->
-    ct:pal(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
+    io:format(user,
+        lists:flatten([print_status_info(N) || N <- status(Cluster)]), []).
 
 log_status(Cluster) ->
-    ct:log(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
+    ?INFO(lists:flatten([print_status_info(N) || N <- status(Cluster)]), []).
 
 check_config(Cluster, Config) ->
     with_cluster(Cluster, fun build_nodes/3, Config).
@@ -85,10 +87,10 @@ with_cluster(ClusterId, NodeHandler, Config) ->
     case systest:cluster_config(ClusterId) of
         undefined -> noconfig;
         Hosts ->
-            ct:log("Configured hosts: ~p~n", [Hosts]),
+            ?DEBUG("Configured hosts: ~p~n", [Hosts]),
             Nodes = lists:flatten(
                      [NodeHandler(ClusterId, Host, Config) || Host <- Hosts]),
-            ct:log("Configured nodes: ~p~n",
+            ?DEBUG("Configured nodes: ~p~n",
                     [[N#'systest.node_info'.name || N <- Nodes]]),
             #'systest.cluster'{name=ClusterId, nodes=Nodes}
     end.
@@ -134,10 +136,10 @@ start_node(Node) ->
     NI.
 
 verify_host(Host) ->
-    case systest_net:is_epmd_contactable(Host, 5000) of
+    case systest_utils:is_epmd_contactable(Host, 5000) of
         true ->
             ok;
         {false, Reason} ->
-            ct:pal("Unable to contact ~p: ~p~n", [Host, Reason]),
+            ?ERROR("Unable to contact ~p: ~p~n", [Host, Reason]),
             ct:fail("Cluster configuration failed!~n", [])
     end.

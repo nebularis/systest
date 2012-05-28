@@ -30,7 +30,7 @@
 
 -export([behaviour_info/1]).
 
--export([start/1, start/2]).
+-export([start/0, start/1, start/2]).
 -export([log/2, log/3]).
 -export([write_log/2]).
 
@@ -52,6 +52,9 @@ behaviour_info(callbacks) ->
 behaviour_info(_) ->
     undefined.
 
+start() ->
+    start(?MODULE).
+
 start(CallbackMod, Output) ->
     {ok, IoDevice} = file:open(Output, [write]),
     gen_event:add_handler(systest_event_log, ?MODULE, [CallbackMod, IoDevice]).
@@ -63,8 +66,8 @@ start(CallbackMod) ->
 %% systest_log callback API!
 %%
 
-log(Level, Fmt, Args) ->
-    gen_event:notify(systest_event_log, {Level, Fmt, Args}).
+log(Scope, Fmt, Args) ->
+    gen_event:notify(systest_event_log, {Scope, Fmt, Args}).
 
 log(Fmt, Args) ->
     gen_event:notify(systest_event_log, {Fmt, Args}).
@@ -87,7 +90,7 @@ write_log(Fd, {port, Data}) ->
 %%
 
 init([CallbackMod, IoDevice]) ->
-    {ok #state={mod=CallbackMod, fd=IoDevice}};
+    {ok, #state{mod=CallbackMod, fd=IoDevice}};
 init([CallbackMod]) ->
     {ok, #state{mod=CallbackMod}}.
 

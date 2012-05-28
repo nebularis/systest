@@ -25,6 +25,7 @@
 -module(systest_node).
 
 -include("systest.hrl").
+-include("log.hrl").
 
 -type node_info() :: #'systest.node_info'{}.
 
@@ -67,7 +68,7 @@ make_node(Cluster, Node, Config) ->
 -spec start(node_info()) -> node_info() | term().
 start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
                                     host=Host, name=Name}) ->
-    ct:pal("Starting ~p on ~p~n", [Name, Host]),
+    ?INFO("Starting ~p on ~p~n", [Name, Host]),
     Startup = case ShouldLink of true -> start_link; _ -> start end,
     case catch( apply(Handler, Startup, [NodeInfo]) ) of
         NI2 when is_record(NI2, 'systest.node_info') ->
@@ -78,7 +79,7 @@ start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
             %% TODO: should we validate that these succeed?
             case NI2#'systest.node_info'.extra of
                 []   -> ok;
-                Xtra -> [ct:pal("~p", [interact(NI2, In)]) || In <- Xtra]
+                Xtra -> [?INFO("~p", [interact(NI2, In)]) || In <- Xtra]
             end,
             {ok, NI2};
         Error ->
@@ -95,9 +96,9 @@ kill(NI=#'systest.node_info'{handler=Handler}) ->
 
 -spec sigkill(node_info()) -> string().
 sigkill(#'systest.node_info'{os_pid=Pid}) ->
-    ct:log("executing kill -9 ~s~n", [Pid]),
+    ?INFO("executing kill -9 ~s~n", [Pid]),
     Result = os:cmd("kill -9 " ++ Pid),
-    ct:log(Result).
+    ?DEBUG(Result, []).
 
 -spec stop_and_wait(node_info()) -> 'ok'.
 stop_and_wait(NI) when is_record(NI, 'systest.node_info') ->
@@ -122,8 +123,8 @@ shutdown_and_wait(NI=#'systest.node_info'{owner=Owner},
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
         false -> link(Owner),
-                 ct:log("Stopping ~p ....~n"
-                        "Waiting for port owning process (~p) to exit...~n",
+                 ?INFO("Stopping ~p ....~n"
+                       "Waiting for port owning process (~p) to exit...~n",
                         [NI#'systest.node_info'.id, Owner]),
                  ok = ShutdownOp(NI),
                  receive
@@ -161,20 +162,13 @@ make_node(Config) ->
 node_config(Cluster, Node, Config) ->
     %% TODO: this code does *NOT* work for all possible merge scenarios!
     [AllGlobals]    = systest_config:get_config(global_node_config),
-    ct:pal("Globals: ~p~n", [AllGlobals]),
     [ClusterConfig] = systest_config:get_config(Cluster),
-    ct:pal("ClusterConfig: ~p~n", [ClusterConfig]),
-
+    
     Globals         = systest_config:merge_config(AllGlobals, ClusterConfig),
     [NodeConfig]    = systest_config:get_config({Cluster, Node}),
 
-    ct:pal("Globals: ~p~n", [Globals]),
-    ct:pal("NodeConfig: ~p~n", [NodeConfig]),
-    
     {Static, Runtime, Flags} = lists:foldl(fun extract_config/2,
                                            {[], [], []}, NodeConfig),
-
-    ct:pal("Flags: ~p~n", [Flags]),
 
     GlobalFlags = ?CONFIG(flags, Globals),
     FlagsConfig = [begin
@@ -182,15 +176,13 @@ node_config(Cluster, Node, Config) ->
                        {Key, systest_config:merge_config(GF, NF)}
                    end || {Key, NF} <- Flags],
 
-    ct:pal("FlagsConfig: ~p~n", [FlagsConfig]),
-
     %% FlagsConfig = systest_config:merge_config(Flags, GlobalFlags),
     Config2 = systest_config:merge_config(Static, Runtime),
     MergedConfig = systest_config:merge_config(Globals, Config2),
     Config3 = systest_config:merge_config(MergedConfig, Config),
     
     Config4 = lists:keyreplace(flags, 1, Config3, {flags, FlagsConfig}),
-    ct:pal("Config4: ~p~n", [Config4]),
+    ?DEBUG("Final node config (~p): ~p~n", [Node, Config4]),
     Config4.
 
 extract_config({static, Static}, {SoFar, _, _}=Acc) ->

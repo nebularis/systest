@@ -42,5 +42,5 @@ init([]) ->
              permanent, 5000, worker, [gen_server]},
         {dxdb_event_handler, 
             {gen_event, start_link, [{local, systest_event_log}]},
-             permanent, 5000, worker, dynamic},
+             permanent, 5000, worker, dynamic}
         ]}}.

@@ -32,10 +32,10 @@
 
 write_log(systest_log, {Str, Args}) ->
     %% TODO: do we REALLY want to do this!?
-    log(systest_log, {info, Str, Args});
+    write_log(systest_log, {info, Str, Args});
 write_log(systest_log, {Level, Str, Args}) ->
-    %% NB: because rebar does *NOT* log to 'user' which means this gets
-    %% lost in the ct group_leader take over 
+    %% NB: we're here because rebar does *NOT* log to 'user' which
+    %% causes log messages to get lost in the ct group_leader take over
     {ok, LogLevel} = application:get_env(rebar, log_level),
     case should_log(LogLevel, Level) of
         true ->
@@ -55,7 +55,8 @@ systest(Config, _) ->
     %% TODO: consider adding a time stamp to the scratch
     %%       dir like common test does
     ScratchDir = case os:getenv("SYSTEST_SCRATCH_DIR") of
-                     false -> filename:join(temp_dir(), "systest");
+                     false -> filename:join(systest_utils:temp_dir(),
+                                            "systest");
                      Dir   -> Dir
                  end,
     rebar_file_utils:rm_rf(ScratchDir),
@@ -77,7 +78,8 @@ systest(Config, _) ->
         true ->
             Env = clean_config_dirs(Config) ++ rebar_env() ++ os_env(Config),
 
-            {ok, SpecOutput} = transform_file(Spec, temp_dir(), Env),
+            {ok, SpecOutput} = transform_file(Spec,
+                                              systest_utils:temp_dir(), Env),
 
             {ok, FinalSpec} = process_config_files(ScratchDir,
                                                    SpecOutput, Env),
@@ -136,25 +138,6 @@ write_terms(Terms, Fd) ->
          end || Item <- Terms]
     after
         file:close(Fd)
-    end.
-
-temp_dir() ->
-    %% TODO: move this into hyperthunk/rebar_plugin_manager?
-    case os:type() of
-        {win32, _} ->
-            %% mirrors the behaviour of the win32 GetTempPath function...
-            get("TMP", get("TEMP", element(2, file:get_cwd())));
-        _ ->
-            case os:getenv("TMPDIR") of
-                false -> "/tmp"; %% this is what the JVM does, but honestly...
-                Dir   -> Dir
-            end
-    end.
-
-get(Var, Default) ->
-    case os:getenv(Var) of
-        false -> Default;
-        Value -> Value
     end.
 
 clean_config_dirs(Config) ->

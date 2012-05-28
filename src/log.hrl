@@ -24,4 +24,5 @@
 -define(INFO(S, A),  ?LOG(info, S, A)).
 -define(WARN(S, A),  ?LOG(warn, S, A)).
 -define(ERROR(S, A), ?LOG(error, S, A)).
--define(PORTIO(S, A),  ?LOG(info, S, A)).
+-define(PORTIO(Scope, S, A), ?LOG(Scope, S, A)).
+-define(LOG(Scope, S, A), systest_log:log(Scope, S, A)).

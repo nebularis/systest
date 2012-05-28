@@ -22,11 +22,11 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
--module(systest_net).
+-module(systest_utils).
 
 -include_lib("kernel/include/inet.hrl").
 
--export([is_epmd_contactable/2]).
+-export([is_epmd_contactable/2, temp_dir/0]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
 
@@ -49,6 +49,25 @@ is_epmd_contactable(Host, Timeout) ->
             end;
         {error, Reason} ->
             {false, {dns, Reason}}
+    end.
+
+temp_dir() ->
+    %% TODO: move this into hyperthunk/rebar_plugin_manager?
+    case os:type() of
+        {win32, _} ->
+            %% mirrors the behaviour of the win32 GetTempPath function...
+            get("TMP", get("TEMP", element(2, file:get_cwd())));
+        _ ->
+            case os:getenv("TMPDIR") of
+                false -> "/tmp"; %% this is what the JVM does, but honestly...
+                Dir   -> Dir
+            end
+    end.
+
+get(Var, Default) ->
+    case os:getenv(Var) of
+        false -> Default;
+        Value -> Value
     end.
 
 epmd_port() ->

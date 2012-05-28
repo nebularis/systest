@@ -43,11 +43,12 @@
          handle_info/2, terminate/2, code_change/3]).
 
 %% private record for tracking...
--record(sh, {command, node, state, log_enabled,
-             rpc_enabled, pid, port, shutdown, detached,
-             shutdown_port}).
+-record(sh, {command, node, state, log,
+             rpc_enabled, pid, port, shutdown,
+             detached, shutdown_port}).
 
 -include("systest.hrl").
+-include("log.hrl").
 
 -ifdef(TEST).
 -export([convert_flags/4]).
@@ -73,7 +74,7 @@ kill(#'systest.node_info'{owner=Server}) ->
 -spec status(systest_node:node_info()) -> 'nodeup' | {'nodedown', term()}.
 status(#'systest.node_info'{owner=Server}) ->
     case is_process_alive(Server) of
-        false -> ct:pal("Server process down!~n"), {'nodedown', unknown};
+        false -> ?ERROR("Server process down!~n", []), {'nodedown', unknown};
         true  -> gen_server:call(Server, ping)
     end.
 
@@ -127,14 +128,14 @@ init([Node, Cmd, Args, Extra]) ->
                        end,
 
             Port = case Detached of
-                       false -> ct:pal("Spawning executable~n"
+                       false -> ?DEBUG("Spawning executable~n"
                                        "Command: ~s~n"
                                        "Args: ~p~n", [ExecutableCommand,Args]),
                                 P = open_port(
                                         {spawn_executable, ExecutableCommand},
                                         [{args, Args}|LaunchOpts]),
                                 true = link(P), P;
-                       true  -> ct:pal("Spawning command~n"
+                       true  -> ?DEBUG("Spawning command~n"
                                        "Command: ~s~n", [ExecutableCommand]),
                                 open_port({spawn, ExecutableCommand},
                                           LaunchOpts)
@@ -142,7 +143,7 @@ init([Node, Cmd, Args, Extra]) ->
 
             %% we do the initial receive stuff up-front
             %% just to avoid any initial ordering problems...
-            ct:pal("Reading OS process id for ~p from ~p~n",
+            ?INFO("Reading OS process id for ~p from ~p~n",
                    [Id, Port]),
             case read_pid(Id, Port, Detached, RpcEnabled) of
                 {error, {stopped, Rc}} ->
@@ -151,10 +152,21 @@ init([Node, Cmd, Args, Extra]) ->
                     {stop, {launch_failure, Reason}};
                 {Port2, Pid} ->
                     net_kernel:monitor_nodes(true),
+                    LogFd = case LogEnabled of
+                                true ->
+                                    LogDir = ?CONFIG(log_dir, Env,
+                                                     default_log_dir()),
+                                    LogFile = filename:join(LogDir,
+                                                            logfile(Id)),
+                                    {ok, Fd} = file:open(LogFile, [write]),
+                                    Fd;
+                                false ->
+                                    user
+                            end,
                     Sh = #sh{pid=Pid,
                              port=Port2,
                              detached=Detached,
-                             log_enabled=LogEnabled,
+                             log=LogFd,
                              rpc_enabled=RpcEnabled,
                              shutdown=Shutdown,
                              command=ExecutableCommand,
@@ -233,28 +245,25 @@ handle_info({nodedown, NodeId},
             Sh=#sh{state=_, node=#'systest.node_info'{id=NodeId}}) ->
     {stop, nodedown, Sh};
 handle_info({Port, {data, {_, Line}}},
-            Sh=#sh{port=Port, node=#'systest.node_info'{id=Id}}) ->
-    ct:log("[~p] " ++ Line, [Id]),
+            Sh=#sh{port=Port, log=LogFd, node=#'systest.node_info'{id=Id}}) ->
+    ?PORTIO(LogFd, Line, [Id]),
     {noreply, Sh};
 handle_info({Port, {exit_status, 0}},
-            Sh=#sh{port=Port, log_enabled=Pal, command=Cmd}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Program ~s exited normally (status 0)~n", [Cmd]]),
+            Sh=#sh{port=Port, command=Cmd}) ->
+    ?INFO("Program ~s exited normally (status 0)~n", [Cmd]),
     {stop, normal, Sh#sh{state=stopped}};
 handle_info({Port, {exit_status, Exit}=Rc},
-             Sh=#sh{port=Port, state=State, log_enabled=Pal, node=Node}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Node ~p shut down with error/status code ~p~n",
-                      [Node#'systest.node_info'.id, Exit]]),
+             Sh=#sh{port=Port, state=State, node=Node}) ->
+    ?WARN("Node ~p shut down with error/status code ~p~n",
+                      [Node#'systest.node_info'.id, Exit]),
     ShutdownType = case State of
                        killed -> normal;
                        _      -> Rc
                    end,
     {stop, ShutdownType, Sh#sh{state=stopped}};
-handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal, node=Node,
+handle_info({Port, closed}, Sh=#sh{port=Port, node=Node,
                                    state=killed, detached=false}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["~p (attached) closed~n", [Port]]),
+    ?DEBUG("~p (attached) closed~n", [Port]),
     case Sh#sh.rpc_enabled of
         true ->
             %% to account for a potential timing issue when the calling test
@@ -266,40 +275,37 @@ handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal, node=Node,
         false ->
             ok
     end,
-    %% ct:pal("Node Status: ~p~n", [systest_node:status_check(Id)]),
     {stop, normal, Sh};
-handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["~p closed~n", [Port]]),
+handle_info({Port, closed}, Sh=#sh{port=Port}) ->
+    ?WARN("~p closed~n", [Port]),
     {stop, {port_closed, Port}, Sh};
 handle_info({'EXIT', Pid, ok}, Sh=#sh{shutdown_port=Pid, state=killed,
-                               detached=Detached, log_enabled=Pal}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Termination Port completed ok~n"]),
+                               detached=Detached}) ->
+    ?INFO("Termination Port completed ok~n", []),
     case Detached of
         true  -> {stop, normal, Sh};
         false -> {noreply, Sh}
     end;
 handle_info({'EXIT', Pid, {error, Rc}},
-            Sh=#sh{shutdown_port=Pid, log_enabled=Pal}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Termination Port stopped abnormally (status ~p)~n",
-                      [Rc]]),
+            Sh=#sh{shutdown_port=Pid}) ->
+    ?WARN("Termination Port stopped abnormally (status ~p)~n", [Rc]),
     {stop, termination_port_error, Sh};
 handle_info(Info, Sh) ->
-    ct:pal("Ignoring ~p~n", [Info]),
+    ?DEBUG("Ignoring ~p~n", [Info]),
     {noreply, Sh}.
 
 terminate({port_closed, _}, _) ->
     ok;
-terminate(Reason, #sh{port=Port}) ->
-    ct:pal("Terminating due to ~p~n", [Reason]),
+terminate(Reason, #sh{port=Port, log=LogFd}) ->
+    ?INFO("Terminating due to ~p~n", [Reason]),
     %% TODO: verify that we're not *leaking* ports if we fail to close them
     case Port of
         detached -> ok;
         _Port    -> catch(port_close(Port)),
                     ok
-    end.
+    end,
+    file:close(LogFd),
+    ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -322,7 +328,7 @@ start_it(NI=#'systest.node_info'{config=Config, flags=Flags,
     end.
 
 run_shutdown_hook(Sh, Prog, Args, Env) ->
-    ct:pal("Spawning executable~n"
+    ?DEBUG("Spawning executable~n"
            "Command: ~s~nArgs: ~p~n", [Prog, Args]),
     Pid= spawn_link(fun() ->
                         Port = open_port({spawn_executable, Prog},
@@ -369,10 +375,10 @@ read_pid(NodeId, Port, Detached, RpcEnabled) ->
                             end,
                             read_pid(NodeId, Port, Detached, RpcEnabled);
                         Other ->
-                            ct:log("[~p] ~p", [NodeId, Other]),
+                            ?DEBUG("[~p] ~p", [NodeId, Other]),
                             read_pid(NodeId, Port, Detached, RpcEnabled)
                     after 5000 ->
-                        ct:log("timeout waiting for os pid... re-trying~n"),
+                        ?DEBUG("timeout waiting for os pid... re-trying~n", []),
                         read_pid(NodeId, Port, Detached, RpcEnabled)
                     end;
                 Pid ->
@@ -447,7 +453,7 @@ expand_env_variable(InStr, VarName, RawVarValue) ->
 
 convert_flags(Operation, Node, AllFlags, Config) ->
     Flags = ?REQUIRE(Operation, AllFlags),
-    ct:pal("flags: ~p~n", [Flags]),
+    ?DEBUG("flags: ~p~n", [Flags]),
     {_, _, Env, Acc, Prog} =
             lists:foldl(fun process/2,
                         {Node, Config, [], [], undefined}, Flags),
@@ -477,3 +483,8 @@ convert_node_attribute(Attr, Node) ->
         false -> systest_node:get_node_info(Attr, Node)
     end.
 
+default_log_dir() ->
+    rebar_config:get_global(scratch_dir, systest_utils:temp_dir()).
+
+logfile(Id) ->
+    atom_to_list(Id) ++ ".log".

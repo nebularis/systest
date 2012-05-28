@@ -33,7 +33,7 @@
 -export([read/2, read/3, require/2]).
 -export([replace_value/3, ensure_value/3]).
 -export([get_config/1, get_config/3, merge_config/2]).
--export([get_env/1, set_env/2]).
+-export([get_env/0, get_env/1, set_env/2]).
 
 -export([start_link/0]).
 
@@ -66,6 +66,9 @@ require(Key, Config) ->
 
 %% TODO: move these API calls into the gen_server mechanism, so that we can
 %% easily switch between common_test and stand-alone runs if we wish...
+
+get_env() ->
+    gen_server:call(?MODULE, list).
 
 get_env(Key) ->
     lookup(Key).
@@ -118,6 +121,8 @@ init([]) ->
 handle_call({set, Key, Value}, _From, State) ->
     true = ets:insert(?MODULE, [{Key, Value}]),
     {reply, ok, State};
+handle_call(list, _From, State) ->
+    {reply, ets:tab2list(?MODULE), State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -185,6 +190,10 @@ extend({K, NewVal}=New, Existing) when is_list(NewVal) ->
         _ ->
             lists:keyreplace(K, 1, Existing, New)
     end;
+extend({environment, _}=New, Existing) ->
+    [New|Existing];
+extend({environment, _, _}=New, Existing) ->
+    [New|Existing];
 extend({_, _}=New, Existing) ->
     merge(New, Existing);
 extend(Other, _Existing) ->

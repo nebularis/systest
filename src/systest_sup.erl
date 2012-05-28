@@ -39,4 +39,8 @@ init([]) ->
     {ok, { {one_for_one, 5, 10}, [
         {systest_config_server,
             {systest_config, start_link, []},
-             permanent, 5000, worker, [gen_server]}]}}.
+             permanent, 5000, worker, [gen_server]},
+        {dxdb_event_handler, 
+            {gen_event, start_link, [{local, systest_event_log}]},
+             permanent, 5000, worker, dynamic},
+        ]}}.

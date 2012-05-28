@@ -161,27 +161,37 @@ make_node(Config) ->
 node_config(Cluster, Node, Config) ->
     %% TODO: this code does *NOT* work for all possible merge scenarios!
     [AllGlobals]    = systest_config:get_config(global_node_config),
+    ct:pal("Globals: ~p~n", [AllGlobals]),
     [ClusterConfig] = systest_config:get_config(Cluster),
+    ct:pal("ClusterConfig: ~p~n", [ClusterConfig]),
+
     Globals         = systest_config:merge_config(AllGlobals, ClusterConfig),
-    % ct:pal("Globals: ~p~n", [Globals]),
     [NodeConfig]    = systest_config:get_config({Cluster, Node}),
 
+    ct:pal("Globals: ~p~n", [Globals]),
+    ct:pal("NodeConfig: ~p~n", [NodeConfig]),
+    
     {Static, Runtime, Flags} = lists:foldl(fun extract_config/2,
                                            {[], [], []}, NodeConfig),
+
+    ct:pal("Flags: ~p~n", [Flags]),
 
     GlobalFlags = ?CONFIG(flags, Globals),
     FlagsConfig = [begin
                        GF = ?CONFIG(Key, GlobalFlags),
                        {Key, systest_config:merge_config(GF, NF)}
                    end || {Key, NF} <- Flags],
+
+    ct:pal("FlagsConfig: ~p~n", [FlagsConfig]),
+
     %% FlagsConfig = systest_config:merge_config(Flags, GlobalFlags),
     Config2 = systest_config:merge_config(Static, Runtime),
-    MergedFlags =
-        systest_config:merge_config(Globals, [{flags, FlagsConfig}]),
-    MergedConfig = systest_config:merge_config(MergedFlags, Config2),
-    AllConfig = systest_config:merge_config(MergedConfig, Config),
-    % ct:pal("AllConfig: ~p~n", [AllConfig]),
-    AllConfig.
+    MergedConfig = systest_config:merge_config(Globals, Config2),
+    Config3 = systest_config:merge_config(MergedConfig, Config),
+    
+    Config4 = lists:keyreplace(flags, 1, Config3, {flags, FlagsConfig}),
+    ct:pal("Config4: ~p~n", [Config4]),
+    Config4.
 
 extract_config({static, Static}, {SoFar, _, _}=Acc) ->
     setelement(1, Acc, Static ++ SoFar);

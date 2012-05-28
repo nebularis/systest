@@ -24,13 +24,34 @@
 %% ----------------------------------------------------------------------------
 -module(systest_rebar).
 
--export([systest/2]).
+-export([systest/2, write_log/2]).
+
+%%
+%% Systest Logging API
+%%
+
+write_log(systest_log, {Str, Args}) ->
+    %% TODO: do we REALLY want to do this!?
+    log(systest_log, {info, Str, Args});
+write_log(systest_log, {Level, Str, Args}) ->
+    %% NB: because rebar does *NOT* log to 'user' which means this gets
+    %% lost in the ct group_leader take over 
+    {ok, LogLevel} = application:get_env(rebar, log_level),
+    case should_log(LogLevel, Level) of
+        true ->
+            io:format(user, log_prefix(Level) ++ Str, Args);
+        false ->
+            ok
+    end.
 
 %%
 %% Public (Callable) Rebar API
 %%
 
 systest(Config, _) ->
+    systest:start(),
+    systest_log:start(?MODULE),
+    
     %% TODO: consider adding a time stamp to the scratch
     %%       dir like common test does
     ScratchDir = case os:getenv("SYSTEST_SCRATCH_DIR") of
@@ -147,9 +168,23 @@ rebar_env() ->
     [{base_dir, rebar_config:get_global(base_dir, rebar_utils:get_cwd())}] ++
     clean_env(application:get_all_env(rebar_global)).
 
-os_env(Config) ->
-    rebar_config:get_env(Config, rebar_port_compiler).
+os_env(_Config) ->
+    systest_config:get_env().
 
 clean_env(Env) ->
    [ E || {_, [H|_]}=E <- Env, is_integer(H) ].
 
+should_log(debug, _)     -> true;
+should_log(info, debug)  -> false;
+should_log(info, _)      -> true;
+should_log(warn, debug)  -> false;
+should_log(warn, info)   -> false;
+should_log(warn, _)      -> true;
+should_log(error, error) -> true;
+should_log(error, _)     -> false;
+should_log(_, _)         -> false.
+
+log_prefix(debug) -> "DEBUG: ";
+log_prefix(info)  -> "INFO:  ";
+log_prefix(warn)  -> "WARN:  ";
+log_prefix(error) -> "ERROR: ".

@@ -173,7 +173,7 @@ handle_call(os_pid, _From, Sh=#sh{pid={detached, Pid}}) ->
     {reply, Pid, Sh};
 handle_call(os_pid, _From, Sh=#sh{pid=Pid}) ->
     {reply, Pid, Sh};
-handle_call({command, Data}, _From, Sh=#sh{port=detached}) ->
+handle_call({command, _Data}, _From, Sh=#sh{port=detached}) ->
     {stop, {error, detached}, Sh};
 handle_call({command, Data}, _From, Sh=#sh{port=Port}) ->
     port_command(Port, Data, [nosuspend]),
@@ -463,8 +463,17 @@ process({environment, Attr}, {_, _, Output, _, _}=Acc) ->
         {Attr, _Value}=Env -> setelement(3, Acc, [Env|Output]);
         _                  -> Acc
     end;
+process({environment, Key, {node, Attr}}, {Node, _, Output, _, _}=Acc) ->
+    Value = convert_node_attribute(Attr, Node),
+    setelement(3, Acc, [{Key, Value}|Output]);
 process({environment, Attr, Value}, {_, _, Output, _, _}=Acc) ->
     setelement(3, Acc, [{Attr, Value}|Output]);
 process(Data, {_, _, _, Output, _}=Acc) ->
     setelement(4, Acc, Output ++ [Data]).
+
+convert_node_attribute(Attr, Node) ->
+    case lists:member(Attr, [name, host, id]) of
+        true  -> atom_to_list(systest_node:get_node_info(Attr, Node));
+        false -> systest_node:get_node_info(Attr, Node)
+    end.
 

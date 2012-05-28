@@ -118,7 +118,7 @@ build_nodes(Cluster, {Host, Nodes}, Config) ->
     [systest_node:make_node(Cluster, N, [{host, Host},
                                          {name, N}|Config]) || N <- Nodes].
 
-start_host(Cluster, {localhost, Nodes}=HostConf, Config) ->
+start_host(Cluster, {localhost, Nodes}, Config) ->
     {ok, Hostname} = inet:gethostname(),
     start_host(Cluster, {list_to_atom(Hostname), Nodes}, Config);
 start_host(Cluster, {Host, Nodes}=HostConf, Config) when is_atom(Host) andalso

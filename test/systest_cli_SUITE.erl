@@ -3,9 +3,14 @@
 %% ----------------------------------------------------------------------------
 %%
 %% Copyright (c) 2005 - 2012 Nebularis.
+%% Copyright (c) 2010 Dave Smith (dizzyd@dizzyd.com).
+%%
+%% Some portions of the code taken from sh (c) 2005 - 2012 Nebularis
+%% Some portions of the code taken from rebar (c) 2010 Dave Smith
+%% Some portions of the code taken from retest (c) 2010 Dave Smith
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
-%% of this software and associated documentation files (the "Software"), to deal
+%% of this software and associated documentation files (the "Software"), deal
 %% in the Software without restriction, including without limitation the rights
 %% to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 %% copies of the Software, and to permit persons to whom the Software is
@@ -18,10 +23,10 @@
 %% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 %% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 %% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-%% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-%% THE SOFTWARE.
-%% -----------------------------------------------------------------------------
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+%% IN THE SOFTWARE.
+%% ----------------------------------------------------------------------------
 -module(systest_cli_SUITE).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -67,7 +72,7 @@ killing_nodes(Config) ->
     [begin
          ?assertEqual(nodeup, systest_node:status(N)),
          ok = systest_node:kill_and_wait(N),
-         
+
          Node = N#'systest.node_info'.id,
          ?assertEqual(pang, net_adm:ping(Node))
      end || N <- systest:cluster_nodes(Cluster)],
@@ -92,7 +97,7 @@ handling_detached_processes(Config) ->
     [begin
          ?assertEqual(nodeup, systest_node:status(N)),
          ok = systest_node:kill_and_wait(N),
-         
+
          Node = N#'systest.node_info'.id,
          ?assertEqual(pang, net_adm:ping(Node))
      end || N <- systest:cluster_nodes(Cluster)],

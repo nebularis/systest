@@ -93,7 +93,7 @@ init([Node, Cmd, Args, Extra]) ->
     Scope = systest_node:get_node_info(scope, Node),
     Id = systest_node:get_node_info(id, Node),
     Config = systest_node:get_node_info(config, Node),
-    ScratchDir = ?CONFIG(scratch_dir, Config, term),
+    % ScratchDir = ?CONFIG(scratch_dir, Config, term),
     Flags = systest_node:get_node_info(flags, Node),
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
@@ -114,86 +114,102 @@ init([Node, Cmd, Args, Extra]) ->
             LaunchOpts = [exit_status, hide, stderr_to_stdout,
                           use_stdio, {line, 16384}] ++ Env,
 
-            Shutdown = case ?CONFIG(stop, Flags, undefined) of
-                           undefined ->
-                               case RpcEnabled of
-                                   %% eh!? this needs to be a {stop, ReturnVal}
-                                   false -> throw(shutdown_spec_missing);
-                                   true  -> ShutdownSpec
-                               end;
-                           {call, M, F, Argv} ->
-                               {M, F, Argv};
-                           Spec when is_list(Spec) ->
-                               script_stop
-                       end,
+            Shutdown = stop_flags(Flags, ShutdownSpec, RpcEnabled),
+            Port = open_port(ExecutableCommand, Detached, Args, LaunchOpts),
+            if Detached =:= true -> link(Port);
+                            true -> ok
+            end,
 
-            Port = case Detached of
-                       false -> ct:pal("Spawning executable~n"
-                                       "Command: ~s~n"
-                                       "Args: ~p~n"
-                                       "Launch: ~p~n",
-                                       [ExecutableCommand,Args,LaunchOpts]),
-                                P = open_port(
-                                        {spawn_executable, ExecutableCommand},
-                                        [{args, Args}|LaunchOpts]),
-                                true = link(P), P;
-                       true  -> ct:pal("Spawning command~n"
-                                       "Command: ~s~n", [ExecutableCommand]),
-                                open_port({spawn, ExecutableCommand},
-                                          LaunchOpts)
-                   end,
+            on_startup(Scope, Id, Port, Detached, RpcEnabled, Config,
+                fun(Port2, Pid) ->
+                    net_kernel:monitor_nodes(true),
+                    LogFd = 
+                    case LogEnabled of
+                        true ->
+                            LogFile = log_file("-stdio.log", Scope,
+                                               Id, Env, Config),
+                            ct:pal("~p logging stdio to ~s~n", [Id, LogFile]),
 
-            StartupLog = filename:join(default_log_dir(Config),
-                                       logfile(Scope, Id) ++
-                                       "-port.startup.log"),
-            %% we do the initial receive stuff up-front
-            %% just to avoid any initial ordering problems...
-            ct:pal("Reading OS process id for ~p from ~p~n"
-                   "Startup Log: ~s~n",
-                   [Id, Port, StartupLog]),
-            {ok, Fd} = file:open(StartupLog, [write]),
-            try
-                case read_pid(Id, Port, Detached, RpcEnabled, Fd) of
-                    {error, {stopped, Rc}} ->
-                        {stop, {launch_failure, Rc}};
-                    {error, Reason} ->
-                        {stop, {launch_failure, Reason}};
-                    {Port2, Pid} ->
-                        net_kernel:monitor_nodes(true),
-                        LogFd = 
-                        case LogEnabled of
-                            true ->
-                                LogDir = ?CONFIG(log_dir, Env,
-                                                 default_log_dir(Config)),
-                                LogFile = filename:join(LogDir,
-                                            logfile(Scope, Id) ++
-                                            "-stdio.log"),
-                                ct:pal("~p logging stdio to ~s~n",
-                                       [Id, LogFile]),
-                                {ok, Fd2} = file:open(LogFile, [write]),
-                                Fd2;
-                            false ->
-                                user
-                        end,
-                        Sh = #sh{pid=Pid,
-                                 port=Port2,
-                                 detached=Detached,
-                                 log=LogFd,
-                                 rpc_enabled=RpcEnabled,
-                                 shutdown=Shutdown,
-                                 command=ExecutableCommand,
-                                 state=running,
-                                 node=Node#'systest.node_info'{os_pid=Pid}},
-                        ct:pal(info,
-                               "External Process Handler ~p::~p"
-                               " Started at ~p~n", [Scope, Id, self()]),
-                        {ok, Sh}
-                end
-            after
-                file:close(Fd)
-            end;
+                            {ok, Fd2} = file:open(LogFile, [write]),
+                            Fd2;
+                        false ->
+                            user
+                    end,
+                    Sh = #sh{pid=Pid,
+                             port=Port2,
+                             detached=Detached,
+                             log=LogFd,
+                             rpc_enabled=RpcEnabled,
+                             shutdown=Shutdown,
+                             command=ExecutableCommand,
+                             state=running,
+                             node=Node#'systest.node_info'{os_pid=Pid}},
+                    ct:pal(info,
+                           "External Process Handler ~p::~p"
+                           " Started at ~p~n", [Scope, Id, self()]),
+                    {ok, Sh}
+                end);
         StopError ->
             StopError
+    end.
+
+on_startup(Scope, Id, Port, Detached, RpcEnabled, Config, StartFun) ->
+    %% we do the initial receive stuff up-front
+    %% just to avoid any initial ordering problems...
+
+    StartupLog = log_to("-port.startup.log",
+                        Scope, Id, default_log_dir(Config)),
+    
+    ct:pal("Reading OS process id for ~p from ~p~n"
+           "Startup Log: ~s~n",
+           [Id, Port, StartupLog]),
+    {ok, Fd} = file:open(StartupLog, [write]),
+
+    try
+        case read_pid(Id, Port, Detached, RpcEnabled, Fd) of
+            {error, {stopped, Rc}} ->
+                {stop, {launch_failure, Rc}};
+            {error, Reason} ->
+                {stop, {launch_failure, Reason}};
+            {Port2, Pid} ->
+                StartFun(Port2, Pid)
+        end
+    after
+        file:close(Fd)
+    end.
+
+log_file(Suffix, Scope, Id, Env, Config) ->
+    log_to(Suffix, Scope, Id,
+           ?CONFIG(log_dir, Env, default_log_dir(Config))).
+
+log_to(Suffix, Scope, Id, Dir) ->
+    filename:join(Dir, logfile(Scope, Id) ++ Suffix).
+
+open_port(ExecutableCommand, Detached, Args, LaunchOpts) ->
+    ct:pal("Spawning executable~n"
+           "Command:         ~s~n"
+           "Detached:        ~p~n"
+           "Args:            ~p~n"
+           "Launch:          ~p~n",
+           [ExecutableCommand, Detached, Args, LaunchOpts]),
+    case Detached of
+        false -> open_port({spawn_executable, ExecutableCommand},
+                           [{args, Args}|LaunchOpts]);
+        true  -> open_port({spawn, ExecutableCommand}, LaunchOpts)
+    end.
+
+stop_flags(Flags, ShutdownSpec, RpcEnabled) ->
+    case ?CONFIG(stop, Flags, undefined) of
+        undefined ->
+            case RpcEnabled of
+                %% eh!? this needs to be a {stop, ReturnVal}
+                false -> throw(shutdown_spec_missing);
+                true  -> ShutdownSpec
+            end;
+        {call, M, F, Argv} ->
+            {M, F, Argv};
+        Spec when is_list(Spec) ->
+            script_stop
     end.
 
 handle_call(os_pid, _From, Sh=#sh{pid={detached, Pid}}) ->

@@ -1,7 +1,7 @@
 {application, systest,
  [
   {description, ""},
-  {vsn, "1"},
+  {vsn, {cmd, "git describe --abbrev=0 | sed 's/v//g'"}},
   {registered, []},
   {applications, [
                   kernel,

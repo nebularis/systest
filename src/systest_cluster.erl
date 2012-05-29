@@ -134,7 +134,7 @@ start_node(Node) ->
     NI.
 
 verify_host(Host) ->
-    case systest_net:is_epmd_contactable(Host, 5000) of
+    case systest_utils:is_epmd_contactable(Host, 5000) of
         true ->
             ok;
         {false, Reason} ->

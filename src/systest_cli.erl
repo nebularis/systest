@@ -43,9 +43,8 @@
          handle_info/2, terminate/2, code_change/3]).
 
 %% private record for tracking...
--record(sh, {command, node, state, log_enabled,
-             rpc_enabled, pid, port, shutdown, detached,
-             shutdown_port}).
+-record(sh, {command, node, state, log, rpc_enabled, pid,
+             port, shutdown, detached, shutdown_port}).
 
 -include("systest.hrl").
 
@@ -91,6 +90,7 @@ interact(#'systest.node_info'{owner=Server}, Data) ->
 init([Node, Cmd, Args, Extra]) ->
     process_flag(trap_exit, true),
 
+    Scope = systest_node:get_node_info(scope, Node),
     Id = systest_node:get_node_info(id, Node),
     Config = systest_node:get_node_info(config, Node),
     Flags = systest_node:get_node_info(flags, Node),
@@ -151,18 +151,31 @@ init([Node, Cmd, Args, Extra]) ->
                     {stop, {launch_failure, Reason}};
                 {Port2, Pid} ->
                     net_kernel:monitor_nodes(true),
+                    LogFd = case LogEnabled of
+                                true ->
+                                    LogDir = ?CONFIG(log_dir, Env,
+                                                     default_log_dir(Config)),
+                                    LogFile = filename:join(LogDir,
+                                                        logfile(Scope, Id)),
+                                    ct:pal("~p logging stdio to ~s~n",
+                                           [Id, LogFile]),
+                                    {ok, Fd} = file:open(LogFile, [write]),
+                                    Fd;
+                                false ->
+                                    user
+                            end,
                     Sh = #sh{pid=Pid,
                              port=Port2,
                              detached=Detached,
-                             log_enabled=LogEnabled,
+                             log=LogFd,
                              rpc_enabled=RpcEnabled,
                              shutdown=Shutdown,
                              command=ExecutableCommand,
                              state=running,
                              node=Node#'systest.node_info'{os_pid=Pid}},
                     ct:pal(info,
-                           "External Process Handler Started at ~p~n",
-                           [self()]),
+                           "External Process Handler ~p::~p Started at ~p~n",
+                           [Scope, Id, self()]),
                     {ok, Sh}
             end;
         StopError ->
@@ -233,28 +246,25 @@ handle_info({nodedown, NodeId},
             Sh=#sh{state=_, node=#'systest.node_info'{id=NodeId}}) ->
     {stop, nodedown, Sh};
 handle_info({Port, {data, {_, Line}}},
-            Sh=#sh{port=Port, node=#'systest.node_info'{id=Id}}) ->
-    ct:log("[~p] " ++ Line, [Id]),
+            Sh=#sh{port=Port, log=LogFd}) ->
+    io:format(LogFd, Line, []),
     {noreply, Sh};
 handle_info({Port, {exit_status, 0}},
-            Sh=#sh{port=Port, log_enabled=Pal, command=Cmd}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Program ~s exited normally (status 0)~n", [Cmd]]),
+            Sh=#sh{port=Port, command=Cmd}) ->
+    ct:pal("Program ~s exited normally (status 0)~n", [Cmd]),
     {stop, normal, Sh#sh{state=stopped}};
 handle_info({Port, {exit_status, Exit}=Rc},
-             Sh=#sh{port=Port, state=State, log_enabled=Pal, node=Node}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Node ~p shut down with error/status code ~p~n",
-                      [Node#'systest.node_info'.id, Exit]]),
+             Sh=#sh{port=Port, state=State, node=Node}) ->
+    ct:pal("Node ~p shut down with error/status code ~p~n",
+                      [Node#'systest.node_info'.id, Exit]),
     ShutdownType = case State of
                        killed -> normal;
                        _      -> Rc
                    end,
     {stop, ShutdownType, Sh#sh{state=stopped}};
-handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal, node=Node,
+handle_info({Port, closed}, Sh=#sh{port=Port, node=Node,
                                    state=killed, detached=false}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["~p (attached) closed~n", [Port]]),
+    ct:pal("~p (attached) closed~n", [Port]),
     case Sh#sh.rpc_enabled of
         true ->
             %% to account for a potential timing issue when the calling test
@@ -268,23 +278,18 @@ handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal, node=Node,
     end,
     %% ct:pal("Node Status: ~p~n", [systest_node:status_check(Id)]),
     {stop, normal, Sh};
-handle_info({Port, closed}, Sh=#sh{port=Port, log_enabled=Pal}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["~p closed~n", [Port]]),
+handle_info({Port, closed}, Sh=#sh{port=Port}) ->
+    ct:pal("~p closed~n", [Port]),
     {stop, {port_closed, Port}, Sh};
 handle_info({'EXIT', Pid, ok}, Sh=#sh{shutdown_port=Pid, state=killed,
-                               detached=Detached, log_enabled=Pal}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Termination Port completed ok~n"]),
+                                      detached=Detached}) ->
+    ct:pal("Termination Port completed ok~n"),
     case Detached of
         true  -> {stop, normal, Sh};
         false -> {noreply, Sh}
     end;
-handle_info({'EXIT', Pid, {error, Rc}},
-            Sh=#sh{shutdown_port=Pid, log_enabled=Pal}) ->
-    LogFun = case Pal of true -> pal; _ -> log end,
-    apply(ct, LogFun, ["Termination Port stopped abnormally (status ~p)~n",
-                      [Rc]]),
+handle_info({'EXIT', Pid, {error, Rc}}, Sh=#sh{shutdown_port=Pid}) ->
+    ct:pal("Termination Port stopped abnormally (status ~p)~n", [Rc]),
     {stop, termination_port_error, Sh};
 handle_info(Info, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
     ct:log("Ignoring Info Message:  ~p~n"
@@ -481,3 +486,8 @@ convert_node_attribute(Attr, Node) ->
         false -> systest_node:get_node_info(Attr, Node)
     end.
 
+default_log_dir(Config) ->
+    ?CONFIG(scratch_dir, Config, systest_utils:temp_dir()).
+
+logfile(Scope, Id) ->
+    atom_to_list(Scope) ++ "-" ++ atom_to_list(Id) ++ "-stdio.log".

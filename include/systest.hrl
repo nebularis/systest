@@ -42,6 +42,7 @@
 %% TODO: deprecate the 'apps' field (merge into flags?)
 
 -record('systest.node_info', {
+    scope   :: atom(),                      %% usually the cluster id...
     host    :: atom(),                      %% configured when we 'make' this
     name    :: atom(),                      %% configured when we 'make' this
     handler :: module(),                    %% backing module

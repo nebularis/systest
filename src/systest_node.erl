@@ -147,7 +147,8 @@ status_check(Node) when is_atom(Node) ->
 
 make_node(Config) ->
     %% NB: new_node_info is an exprecs generated function
-    new_node_info([{host, ?REQUIRE(host, Config)},
+    new_node_info([{scope, ?REQUIRE(scope, Config)},
+                   {host, ?REQUIRE(host, Config)},
                    {name, ?REQUIRE(name, Config)},
                    {handler, ?CONFIG(handler, Config, systest_cli)},
                    {link, ?CONFIG(link_to_parent,
@@ -181,7 +182,7 @@ node_config(Cluster, Node, Config) ->
     MergedConfig = systest_config:merge_config(MergedFlags, Config2),
     AllConfig = systest_config:merge_config(MergedConfig, Config),
     % ct:pal("AllConfig: ~p~n", [AllConfig]),
-    AllConfig.
+    [{scope, Cluster}|AllConfig].
 
 extract_config({static, Static}, {SoFar, _, _}=Acc) ->
     setelement(1, Acc, Static ++ SoFar);

@@ -47,10 +47,10 @@ systest(Config, _) ->
                   false -> os:getenv("USER");
                   Name -> Name
               end,
-    Spec = case rebar_utils:find_files("profiles", Profile ++ "\\.spec") of
-               [SpecFile] -> SpecFile;
-               _          -> filename:join("profiles", "default.spec")
-           end,
+    Spec    = case rebar_utils:find_files("profiles", Profile ++ "\\.spec") of
+                  [SpecFile] -> SpecFile;
+                  _          -> filename:join("profiles", "default.spec")
+              end,
 
     case filelib:is_regular(Spec) of
         false ->
@@ -58,12 +58,9 @@ systest(Config, _) ->
         true ->
             Env = [{scratch_dir, ScratchDir}|clean_config_dirs(Config)] ++
                     rebar_env() ++ os_env(),
-
             {ok, SpecOutput} = transform_file(Spec, temp_dir(), Env),
-
             {ok, FinalSpec} = process_config_files(ScratchDir,
                                                    SpecOutput, Env),
-
             FinalConfig = rebar_config:set(Config, ct_extra_params,
                                            "-spec " ++ FinalSpec ++
                                           " -s systest start"),

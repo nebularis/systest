@@ -30,7 +30,6 @@
 
 -type command()          :: atom().
 -type name()             :: string().
--type account()          :: string().
 -type value()            :: string() | binary().
 -type attribute()        :: atom().
 -type setenv_flags()     :: {'environment', name(), value()}   |   %% explicit
@@ -47,7 +46,7 @@
     name    :: atom(),                      %% configured when we 'make' this
     handler :: module(),                    %% backing module
     link    :: boolean(),                   %% use start_link, or just start?
-    user    :: account(),                   %% optional - used by ssh client
+    user    :: term(),                      %% user-defined data
 
     %% TODO: this spec is *clearly* inadequate for the types we consume!
     flags   :: vmflags() | script_flags(),  %% used for 'all kinds of things',

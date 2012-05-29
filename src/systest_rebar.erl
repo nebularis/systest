@@ -54,7 +54,7 @@ systest(Config, _) ->
 
     case filelib:is_regular(Spec) of
         false ->
-            rebar_core:process_commands([ct], Config);
+            rebar_utils:abort("No Test Specification Available~n", []);
         true ->
             Env = [{scratch_dir, ScratchDir}|clean_config_dirs(Config)] ++
                     rebar_env() ++ os_env(),

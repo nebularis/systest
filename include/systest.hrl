@@ -25,6 +25,8 @@
 -define(CONFIG(Key, Conf), systest_config:read(Key, Conf)).
 -define(CONFIG(Key, Conf, Default), systest_config:read(Key, Conf, Default)).
 -define(REQUIRE(Key, Conf), systest_config:require(Key, Conf)).
+-define(WRITE(Key, Value, Conf),
+        lists:keyreplace(Key, 1, Conf, Value)).
 
 -type application_info() :: {atom(), [{atom(), term()}]}.
 

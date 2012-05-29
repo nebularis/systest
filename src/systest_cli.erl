@@ -286,8 +286,12 @@ handle_info({'EXIT', Pid, {error, Rc}},
     apply(ct, LogFun, ["Termination Port stopped abnormally (status ~p)~n",
                       [Rc]]),
     {stop, termination_port_error, Sh};
-handle_info(Info, Sh) ->
-    ct:pal("Ignoring ~p~n", [Info]),
+handle_info(Info, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
+    ct:log("Ignoring Info Message:  ~p~n"
+           "State:                  ~p~n"
+           "Port:                   ~p~n"
+           "Termination Port:       ~p~n",
+           [Info, St, P, SP]),
     {noreply, Sh}.
 
 terminate({port_closed, _}, _) ->

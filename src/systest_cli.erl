@@ -158,7 +158,9 @@ init([Node, Cmd, Args, Extra]) ->
                                                      default_log_dir()),
                                     LogFile = filename:join(LogDir,
                                                             logfile(Id)),
+                                    ?DEBUG("Logging to ~s~n", [LogFile]),
                                     {ok, Fd} = file:open(LogFile, [write]),
+                                    systest_log:start_file(Fd),
                                     Fd;
                                 false ->
                                     user

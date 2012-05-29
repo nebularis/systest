@@ -30,7 +30,7 @@
 
 -export([behaviour_info/1]).
 
--export([start/0, start/1, start/2]).
+-export([start/0, start/1, start/2, start_file/1]).
 -export([log/2, log/3]).
 -export([write_log/2]).
 
@@ -55,11 +55,14 @@ behaviour_info(_) ->
 start() ->
     start(?MODULE).
 
+start_file(Fd) ->
+    start(?MODULE, Fd).
+
 start(CallbackMod, Output) ->
     {ok, IoDevice} = file:open(Output, [write]),
     gen_event:add_handler(systest_event_log, ?MODULE, [CallbackMod, IoDevice]).
 
-start(CallbackMod) ->
+start(CallbackMod) when is_atom(CallbackMod) ->
     gen_event:add_handler(systest_event_log, ?MODULE, [CallbackMod]).
 
 %%
@@ -95,10 +98,10 @@ init([CallbackMod]) ->
     {ok, #state{mod=CallbackMod}}.
 
 handle_event(Event, State=#state{mod=CallbackMod, fd=undefined}) ->
-    CallbackMod:log(?MODULE, Event),
+    CallbackMod:write_log(?MODULE, Event),
     {ok, State};
 handle_event(Event, State=#state{mod=CallbackMod, fd=Fd}) ->
-    CallbackMod:log(Fd, Event),
+    CallbackMod:write_log(Fd, Event),
     {ok, State};
 handle_event(_Message, State) ->
     {ok, State}.

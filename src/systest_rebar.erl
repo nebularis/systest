@@ -26,6 +26,8 @@
 
 -export([systest/2, write_log/2]).
 
+-include("log.hrl").
+
 %%
 %% Systest Logging API
 %%
@@ -84,11 +86,40 @@ systest(Config, _) ->
             {ok, FinalSpec} = process_config_files(ScratchDir,
                                                    SpecOutput, Env),
 
-            FinalConfig = rebar_config:set(Config, ct_extra_params,
-                                           "-spec " ++ FinalSpec ++
-                                          " -s systest start"),
-            rebar_core:process_commands([ct], FinalConfig)
+            %FinalConfig = rebar_config:set(Config, ct_extra_params,
+            %                               "-spec " ++ FinalSpec ++
+            %                              " -s systest start"),
+            % rebar_core:process_commands([ct], FinalConfig)
+            Opts = ct_options(ScratchDir, Profile, FinalSpec, Config),
+            ct:install(Opts),
+            case ct:run_test(Opts) of
+                {error, Reason} ->
+                    rebar_utils:abort("Test run failed: ~p~n", [Reason]);
+                TestResults ->
+                    ?DEBUG("Results: ~p~n", [TestResults]),
+                    ok
+            end
     end.
+
+%%
+%% Private API
+%%
+
+ct_options(ScratchDir, Profile, FinalSpec, Config) ->
+    UserConfig = rebar_config:get_local(Config, systest, []),
+    LogDir = filename:join(ScratchDir, "logs"),
+    filelib:ensure_dir(filename:join(LogDir, "systest")),
+    io:format(user,
+           "----------------------------------------------------------------~n"
+           "SysTest Parameters~n"
+           "Profile Name:               ~s~n"
+           "Scratch Directory:          ~s~n"
+           "Log Directory:              ~s~n"
+           "Common Test Spec:           ~s~n"
+           "----------------------------------------------------------------",
+           [ScratchDir, LogDir, Profile, FinalSpec]),
+    [{spec, [FinalSpec]},
+     {logdir, LogDir}] ++ UserConfig.
 
 process_config_files(ScratchDir, TempSpec, Env) ->
     {ok, Terms} = file:consult(TempSpec),
@@ -114,13 +145,7 @@ transform_file(File, ScratchDir, Env) ->
     Target = filename:absname(Output),
     Origin = filename:absname(File),
     rebar_log:log(info, "transform ~s into ~s~n", [Origin, Target]),
-
-    %% this looks *pointless* but avoids calling dict:to_list/1
-    %% unless it is actually going to use the result
-    case rebar_log:get_level() of
-        debug -> rebar_log:log(debug, "template environment: ~p~n", [Env]);
-        _     -> ok
-    end,
+    rebar_log:log(debug, "template environment: ~p~n", [Env]),
 
     Context = rebar_templater:resolve_variables(Env, dict:new()),
     {ok, Bin} = file:read_file(File),

@@ -112,7 +112,7 @@ print_status_info({#'systest.node_info'{host=Host,
                    "         xtra:  ~p~n"
                    "         port:  ~p~n"
                    "----------------------------------------------------~n",
-                   [Host, Status, Name, Type, Flags, Apps, Proc, Xtra, Port]).
+                   [Name, Status, Host, Type, Flags, Apps, Proc, Xtra, Port]).
 
 build_nodes(Cluster, {Host, Nodes}, Config) ->
     [systest_node:make_node(Cluster, N, [{host, Host},

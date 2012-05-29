@@ -31,6 +31,8 @@
 %%
 
 systest(Config, _) ->
+    systest_config:start_link(),
+    
     %% TODO: consider adding a time stamp to the scratch
     %%       dir like common test does
     ScratchDir = case os:getenv("SYSTEST_SCRATCH_DIR") of
@@ -54,7 +56,8 @@ systest(Config, _) ->
         false ->
             rebar_core:process_commands([ct], Config);
         true ->
-            Env = clean_config_dirs(Config) ++ rebar_env() ++ os_env(Config),
+            Env = [{scratch_dir, ScratchDir}|clean_config_dirs(Config)] ++
+                    rebar_env() ++ os_env(),
 
             {ok, SpecOutput} = transform_file(Spec, temp_dir(), Env),
 
@@ -147,8 +150,8 @@ rebar_env() ->
     [{base_dir, rebar_config:get_global(base_dir, rebar_utils:get_cwd())}] ++
     clean_env(application:get_all_env(rebar_global)).
 
-os_env(Config) ->
-    rebar_config:get_env(Config, rebar_port_compiler).
+os_env() ->
+    systest_config:get_env().
 
 clean_env(Env) ->
    [ E || {_, [H|_]}=E <- Env, is_integer(H) ].

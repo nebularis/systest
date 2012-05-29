@@ -93,6 +93,7 @@ init([Node, Cmd, Args, Extra]) ->
     Scope = systest_node:get_node_info(scope, Node),
     Id = systest_node:get_node_info(id, Node),
     Config = systest_node:get_node_info(config, Node),
+    ScratchDir = ?CONFIG(scratch_dir, Config, term),
     Flags = systest_node:get_node_info(flags, Node),
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
@@ -129,7 +130,9 @@ init([Node, Cmd, Args, Extra]) ->
             Port = case Detached of
                        false -> ct:pal("Spawning executable~n"
                                        "Command: ~s~n"
-                                       "Args: ~p~n", [ExecutableCommand,Args]),
+                                       "Args: ~p~n"
+                                       "Launch: ~p~n",
+                                       [ExecutableCommand,Args,LaunchOpts]),
                                 P = open_port(
                                         {spawn_executable, ExecutableCommand},
                                         [{args, Args}|LaunchOpts]),
@@ -140,43 +143,54 @@ init([Node, Cmd, Args, Extra]) ->
                                           LaunchOpts)
                    end,
 
+            StartupLog = filename:join(default_log_dir(Config),
+                                       logfile(Scope, Id) ++
+                                       "-port.startup.log"),
             %% we do the initial receive stuff up-front
             %% just to avoid any initial ordering problems...
-            ct:pal("Reading OS process id for ~p from ~p~n",
-                   [Id, Port]),
-            case read_pid(Id, Port, Detached, RpcEnabled) of
-                {error, {stopped, Rc}} ->
-                    {stop, {launch_failure, Rc}};
-                {error, Reason} ->
-                    {stop, {launch_failure, Reason}};
-                {Port2, Pid} ->
-                    net_kernel:monitor_nodes(true),
-                    LogFd = case LogEnabled of
-                                true ->
-                                    LogDir = ?CONFIG(log_dir, Env,
-                                                     default_log_dir(Config)),
-                                    LogFile = filename:join(LogDir,
-                                                        logfile(Scope, Id)),
-                                    ct:pal("~p logging stdio to ~s~n",
-                                           [Id, LogFile]),
-                                    {ok, Fd} = file:open(LogFile, [write]),
-                                    Fd;
-                                false ->
-                                    user
-                            end,
-                    Sh = #sh{pid=Pid,
-                             port=Port2,
-                             detached=Detached,
-                             log=LogFd,
-                             rpc_enabled=RpcEnabled,
-                             shutdown=Shutdown,
-                             command=ExecutableCommand,
-                             state=running,
-                             node=Node#'systest.node_info'{os_pid=Pid}},
-                    ct:pal(info,
-                           "External Process Handler ~p::~p Started at ~p~n",
-                           [Scope, Id, self()]),
-                    {ok, Sh}
+            ct:pal("Reading OS process id for ~p from ~p~n"
+                   "Startup Log: ~s~n",
+                   [Id, Port, StartupLog]),
+            {ok, Fd} = file:open(StartupLog, [write]),
+            try
+                case read_pid(Id, Port, Detached, RpcEnabled, Fd) of
+                    {error, {stopped, Rc}} ->
+                        {stop, {launch_failure, Rc}};
+                    {error, Reason} ->
+                        {stop, {launch_failure, Reason}};
+                    {Port2, Pid} ->
+                        net_kernel:monitor_nodes(true),
+                        LogFd = 
+                        case LogEnabled of
+                            true ->
+                                LogDir = ?CONFIG(log_dir, Env,
+                                                 default_log_dir(Config)),
+                                LogFile = filename:join(LogDir,
+                                            logfile(Scope, Id) ++
+                                            "-stdio.log"),
+                                ct:pal("~p logging stdio to ~s~n",
+                                       [Id, LogFile]),
+                                {ok, Fd2} = file:open(LogFile, [write]),
+                                Fd2;
+                            false ->
+                                user
+                        end,
+                        Sh = #sh{pid=Pid,
+                                 port=Port2,
+                                 detached=Detached,
+                                 log=LogFd,
+                                 rpc_enabled=RpcEnabled,
+                                 shutdown=Shutdown,
+                                 command=ExecutableCommand,
+                                 state=running,
+                                 node=Node#'systest.node_info'{os_pid=Pid}},
+                        ct:pal(info,
+                               "External Process Handler ~p::~p"
+                               " Started at ~p~n", [Scope, Id, self()]),
+                        {ok, Sh}
+                end
+            after
+                file:close(Fd)
             end;
         StopError ->
             StopError
@@ -247,7 +261,7 @@ handle_info({nodedown, NodeId},
     {stop, nodedown, Sh};
 handle_info({Port, {data, {_, Line}}},
             Sh=#sh{port=Port, log=LogFd}) ->
-    io:format(LogFd, Line, []),
+    io:format(LogFd, "~s~n", [Line]),
     {noreply, Sh};
 handle_info({Port, {exit_status, 0}},
             Sh=#sh{port=Port, command=Cmd}) ->
@@ -299,11 +313,13 @@ handle_info(Info, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
            [Info, St, P, SP]),
     {noreply, Sh}.
 
-terminate({port_closed, _}, _) ->
-    ok;
-terminate(Reason, #sh{port=Port}) ->
+terminate(Reason, #sh{port=Port, log=Fd}) ->
     ct:pal("Terminating due to ~p~n", [Reason]),
     %% TODO: verify that we're not *leaking* ports if we fail to close them
+    case Fd of
+        user -> ok;
+        _    -> catch(file:close(Fd))
+    end,
     case Port of
         detached -> ok;
         _Port    -> catch(port_close(Port)),
@@ -351,7 +367,7 @@ shutdown_loop(Port) ->
         {Port, {data, {_, _}}}    -> shutdown_loop(Port)
     end.
 
-read_pid(NodeId, Port, Detached, RpcEnabled) ->
+read_pid(NodeId, Port, Detached, RpcEnabled, Fd) ->
     case RpcEnabled of
         true ->
             case rpc:call(NodeId, os, getpid, []) of
@@ -363,12 +379,13 @@ read_pid(NodeId, Port, Detached, RpcEnabled) ->
                                 %% exit leaving the node up and running, so we
                                 %% now need to sit in a loop until we can rpc
                                 true  -> read_pid(NodeId, Port,
-                                                  Detached, RpcEnabled);
+                                                  Detached, RpcEnabled, Fd);
                                 false -> {error, no_pid}
                             end;
                         {Port, {exit_status, Rc}} ->
                             {error, {stopped, Rc}};
-                        {Port, {data, {eol, _Pid}}} ->
+                        {Port, {data, {_, Line}}} ->
+                            io:format(Fd, "[~p] ~s~n", [NodeId, Line]),
                             %% NB: the 'launch' process has sent us a pid, but
                             %% that's meaningless for detached nodes until we
                             %% can successfully rpc to get the actual pid.
@@ -376,13 +393,13 @@ read_pid(NodeId, Port, Detached, RpcEnabled) ->
                                 true  -> wait_for_nodeup(NodeId);
                                 false -> ok
                             end,
-                            read_pid(NodeId, Port, Detached, RpcEnabled);
+                            read_pid(NodeId, Port, Detached, RpcEnabled, Fd);
                         Other ->
-                            ct:log("[~p] ~p", [NodeId, Other]),
-                            read_pid(NodeId, Port, Detached, RpcEnabled)
+                            io:format(Fd, "[~p] ~p~n", [NodeId, Other]),
+                            read_pid(NodeId, Port, Detached, RpcEnabled, Fd)
                     after 5000 ->
                         ct:log("timeout waiting for os pid... re-trying~n"),
-                        read_pid(NodeId, Port, Detached, RpcEnabled)
+                        read_pid(NodeId, Port, Detached, RpcEnabled, Fd)
                     end;
                 Pid ->
                     case Detached of
@@ -490,4 +507,4 @@ default_log_dir(Config) ->
     ?CONFIG(scratch_dir, Config, systest_utils:temp_dir()).
 
 logfile(Scope, Id) ->
-    atom_to_list(Scope) ++ "-" ++ atom_to_list(Id) ++ "-stdio.log".
+    atom_to_list(Scope) ++ "-" ++ atom_to_list(Id).

@@ -112,6 +112,8 @@ status(NI=#'systest.node_info'{handler=Handler}) ->
     Handler:status(NI).
 
 -spec interact(node_info(), term()) -> term().
+interact(Node, {local, Mod, Func, Args}) ->
+    apply(Mod, Func, [Node|Args]);
 interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}) ->
     rpc:call(Node, Mod, Func, Args);
 interact(NI=#'systest.node_info'{handler=Handler}, Inputs) ->
@@ -169,20 +171,23 @@ node_config(Cluster, Node, Config) ->
 
     {Static, Runtime, Flags} = lists:foldl(fun extract_config/2,
                                            {[], [], []}, NodeConfig),
-
     GlobalFlags = ?CONFIG(flags, Globals),
-    FlagsConfig = [begin
-                       GF = ?CONFIG(Key, GlobalFlags),
-                       {Key, systest_config:merge_config(GF, NF)}
-                   end || {Key, NF} <- Flags],
-    %% FlagsConfig = systest_config:merge_config(Flags, GlobalFlags),
+    FlagsConfig = case Flags of
+                      [] -> GlobalFlags;
+                      _  -> [begin
+                                 GF = ?CONFIG(Key, GlobalFlags),
+                                 {Key, systest_config:merge_config(GF, NF)}
+                             end || {Key, NF} <- Flags]
+                  end,
+    % ct:pal("FlagsConfig: ~p~n", [FlagsConfig]),
     Config2 = systest_config:merge_config(Static, Runtime),
-    MergedFlags =
-        systest_config:merge_config(Globals, [{flags, FlagsConfig}]),
-    MergedConfig = systest_config:merge_config(MergedFlags, Config2),
-    AllConfig = systest_config:merge_config(MergedConfig, Config),
+    MergedConfig = systest_config:merge_config(Globals, Config2),
+    Config3 = systest_config:merge_config(MergedConfig, Config),
+    ct:pal("Config: ~p~n", [Config]),
+    Config4 = lists:keyreplace(flags, 1, Config3, {flags, FlagsConfig}),
+    AllConfig = [{scope, Cluster}|Config4],
     % ct:pal("AllConfig: ~p~n", [AllConfig]),
-    [{scope, Cluster}|AllConfig].
+    AllConfig.
 
 extract_config({static, Static}, {SoFar, _, _}=Acc) ->
     setelement(1, Acc, Static ++ SoFar);

@@ -186,10 +186,13 @@ set_env(Key, Value) ->
     ok = gen_server:call(?MODULE, {set, Key, Value}).
 
 get_config(Key) ->
-    ct:get_config(Key, [], [all]).
+    case ct:get_config(Key, [], [all]) of
+        [Cfg] when is_list(Cfg) -> Cfg;
+        Other                   -> Other
+    end.
 
 get_config(Scope, Node, Type) ->
-    Nodes = ct:get_config({Scope, Node}, [all], []),
+    Nodes = get_config({Scope, Node}),
     read(Type, Nodes).
 
 merge_config([], C2) ->

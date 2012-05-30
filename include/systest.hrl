@@ -25,6 +25,11 @@
 -define(CONFIG(Key, Conf), systest_config:read(Key, Conf)).
 -define(CONFIG(Key, Conf, Default), systest_config:read(Key, Conf, Default)).
 -define(REQUIRE(Key, Conf), systest_config:require(Key, Conf)).
+-define(ECONFIG(Key, Conf), systest_config:eval(Key, Conf)).
+-define(ENCONFIG(Key, Conf),
+                systest_config:eval(Key, Conf,
+                                    [{callback, {node,
+                                     fun systest_node:get_node_info/2}}])).
 -define(WRITE(Key, Value, Conf),
         lists:keyreplace(Key, 1, Conf, Value)).
 
@@ -53,7 +58,7 @@
     handler     :: module(),                %% backing module
     link        :: boolean(),               %% use start_link, or just start?
     user        :: term(),                  %% user-defined data
-
+    private     :: term(),                  %% handler data...
     %% TODO: this spec is *clearly* inadequate for the types we consume!
     flags       :: vmflags() | script_flags(),  %% used for 'all sorts',
                                                 %% depending on the handler...

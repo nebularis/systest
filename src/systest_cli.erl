@@ -95,6 +95,8 @@ init([Node, Cmd, Args, Extra]) ->
     Config = systest_node:get_node_info(config, Node),
     % ScratchDir = ?CONFIG(scratch_dir, Config, term),
     Flags = systest_node:get_node_info(flags, Node),
+
+    %% TODO: merge these attributes into node_info itself...
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
     LogEnabled = ?CONFIG(log_enabled, Startup, true),
@@ -123,7 +125,7 @@ init([Node, Cmd, Args, Extra]) ->
             on_startup(Scope, Id, Port, Detached, RpcEnabled, Config,
                 fun(Port2, Pid) ->
                     net_kernel:monitor_nodes(true),
-                    LogFd = 
+                    LogFd =
                     case LogEnabled of
                         true ->
                             LogFile = log_file("-stdio.log", Scope,
@@ -159,10 +161,11 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Config, StartFun) ->
 
     StartupLog = log_to("-port.startup.log",
                         Scope, Id, default_log_dir(Config)),
-    
+
     ct:pal("Reading OS process id for ~p from ~p~n"
+           "RPC Enabled: ~p~n"
            "Startup Log: ~s~n",
-           [Id, Port, StartupLog]),
+           [Id, Port, RpcEnabled, StartupLog]),
     {ok, Fd} = file:open(StartupLog, [write]),
 
     try
@@ -349,12 +352,26 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private API
 %%
 
-start_it(NI=#'systest.node_info'{config=Config, flags=Flags,
-                                 host=Host, name=Name}, StartType) ->
+start_it(NI=#'systest.node_info'{config=BaseConfig, host=Host,
+                                 name=Name}, StartType) ->
     Id = list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)),
     NI2 = systest_node:set_node_info([{id, Id}], NI),
-    {Env, Args, Prog} = convert_flags(start, NI2, Flags, Config),
-    Extra = [{env, Env}|?CONFIG(extra, Config, [])],
+
+    Config = [{node, NI2}|BaseConfig],
+
+    %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
+    Prog = systest_config:eval("flags.start.program", Config,
+                    [{callback, {node, fun systest_node:get_node_info/2}},
+                     {return, value}]),
+    Env = systest_config:eval("flags.start.environment", Config,
+                    [{callback, {node, fun systest_node:get_node_info/2}},
+                     {return, value}]),
+    Args = case ?ENCONFIG("flags.start.args", Config) of
+               not_found -> [];
+               Argv      -> Argv
+           end,
+    Extra = [{env, Env}|?CONFIG(on_start, Config, [])],
+
     case apply(gen_server, StartType,
               [?MODULE, [NI2, Prog, Args, Extra], []]) of
         {ok, Pid} -> OsPid = gen_server:call(Pid, os_pid),

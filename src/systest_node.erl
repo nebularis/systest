@@ -31,7 +31,7 @@
 -export_type([node_info/0]).
 
 -export([behaviour_info/1]).
--export([make_node/2]).
+-export([make_node/3]).
 -export([start/1, stop/1, kill/1]).
 -export([sigkill/1, stop_and_wait/1, kill_and_wait/1]).
 -export([shutdown_and_wait/2, status/1, interact/2]).
@@ -60,9 +60,9 @@ behaviour_info(callbacks) ->
 behaviour_info(_) ->
     undefined.
 
--spec make_node(atom(), atom()) -> node_info().
-make_node(Cluster, Node) ->
-    make_node(node_config(Cluster, Node)).
+-spec make_node(atom(), atom(), systest_config:config()) -> node_info().
+make_node(Cluster, Node, Config) ->
+    make_node([{ct, Config}] ++ Config ++ node_config(Cluster, Node)).
 
 -spec start(node_info()) -> node_info() | term().
 start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
@@ -152,30 +152,44 @@ make_node(Config) ->
     new_node_info([{scope,      ?REQUIRE(scope, Config)},
                    {host,       ?REQUIRE(host, Config)},
                    {name,       ?REQUIRE(name, Config)},
-                   {handler,    ?CONFIG(handler, Config, systest_cli)},
-                   {link,       ?CONFIG(link_to_parent,
-                                    ?CONFIG(startup, Config, []), false)},
-                   {user,       ?CONFIG(user, Config, os:getenv("USER"))},
+                   {handler,    lookup("startup.handler",
+                                       Config, systest_cli)},
+                   {link,       lookup("startup.link_to_parent",
+                                       Config, false)},
+                   {user,       ?CONFIG(user, Config, [])},
                    {flags,      ?CONFIG(flags, Config)},
                    {apps,       ?CONFIG(applications, Config)},
                    {on_start,   ?CONFIG(on_start, Config)},
                    {on_stop,    ?CONFIG(on_stop, Config)},
                    {config,     Config}]).
 
+lookup(Key, Config, Default) ->
+    case ?ECONFIG(Key, Config) of
+        not_found -> Default;
+        Value     -> Value
+    end.
+
 node_config(Cluster, Node) ->
     Nodes = systest_config:get_config({Cluster, nodes}),
-    case ?CONFIG(Node, Nodes, undefined) of
-        undefined    -> [];
-        {Node, Refs} -> load_config(Refs)
-    end.
+    UserData = systest_config:get_config({Cluster, user_data}),
+    ct:pal("Checking for ~p in ~p of ~p~n", [Node, Cluster, Nodes]),
+    NodeConf = case ?CONFIG(Node, Nodes, undefined) of
+                   undefined               -> [];
+                   Refs when is_list(Refs) -> load_config(Refs)
+               end,
+    [{user, ?CONFIG(Node, UserData, [])}|NodeConf].
 
 load_config(Refs) ->
     lists:foldl(fun merge_refs/2, [], Refs).
 
 merge_refs(Ref, []) ->
-    systest_config:get_config(Ref);
+    Config =
+    systest_config:get_config(Ref),
+    ct:pal("Config for ~p: ~p~n", [Ref, Config]),
+    Config;
 merge_refs(Ref, Acc) ->
     RefConfig = systest_config:get_config(Ref),
+    ct:pal("Config for ~p: ~p~n", [Ref, RefConfig]),
     lists:foldl(fun(Key, AccIn) ->
                     merge_subconfig(Key, AccIn, RefConfig)
                 end, Acc, [startup, on_start, on_stop]).
@@ -183,6 +197,7 @@ merge_refs(Ref, Acc) ->
 merge_subconfig(_Key, Globals, []) ->
     Globals;
 merge_subconfig(Key, Globals, Locals) ->
+    ct:pal("Merging subconfig for ~p~n", [Key]),
     GlobalSubconfig = ?CONFIG(Key, Globals),
     [begin
         GF = ?CONFIG(SubKey, GlobalSubconfig),

@@ -32,7 +32,7 @@
 
 systest(Config, _) ->
     systest_config:start_link(),
-    
+
     %% TODO: consider adding a time stamp to the scratch
     %%       dir like common test does
     ScratchDir = case os:getenv("SYSTEST_SCRATCH_DIR") of
@@ -47,14 +47,17 @@ systest(Config, _) ->
                   false -> os:getenv("USER");
                   Name -> Name
               end,
-    Spec    = case rebar_utils:find_files("profiles", Profile ++ "\\.spec") of
+    Spec    = case rebar_utils:find_files("profiles", Profile ++ "\\.spec$") of
                   [SpecFile] -> SpecFile;
                   _          -> filename:join("profiles", "default.spec")
               end,
 
     case filelib:is_regular(Spec) of
         false ->
-            rebar_utils:abort("No Test Specification Available~n", []);
+            rebar_utils:abort("No Test Specification Available~n"
+                              "Suggested Profile: ~s~n"
+                              "Discovered Test Specification: ~s~n",
+                              [Profile, Spec]);
         true ->
             Env = [{scratch_dir, ScratchDir}|clean_config_dirs(Config)] ++
                     rebar_env() ++ os_env(),

@@ -117,7 +117,7 @@ print_status_info({#'systest.node_info'{host=Host,
                     Proc, [{on_start, OnStart}, {on_stop, OnStop}], Port]).
 
 build_nodes(Cluster, {Host, Nodes}, Config) ->
-    [systest_node:make_node(Cluster, N, [{host, Host},
+    [systest_node:make_node(Cluster, N, [{host, Host}, {scope, Cluster},
                                          {name, N}|Config]) || N <- Nodes].
 
 start_host(Cluster, {localhost, Nodes}, Config) ->

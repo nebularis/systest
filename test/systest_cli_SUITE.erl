@@ -46,12 +46,13 @@ end_per_testcase(Tc, Config) ->
 
 local_and_global_scope_configuration_handling(Config) ->
     Scope = systest_cli_config_example,
-    systest_cluster:check_config(Scope, Config),
+    Cfg = systest_cluster:check_config(Scope, Config),
+    ct:pal("Cfg: ~p~n", [Cfg]),
     ok.
 
 starting_and_stopping_nodes(Config) ->
     process_flag(trap_exit, true),
-    Config2 = systest_cluster:start(systest_cli_config_example, Config),
+    Config2 = systest_cluster:start(systest_cli, Config),
     Cluster = systest:active_cluster(Config2),
     systest_cluster:print_status(Cluster),
     [begin
@@ -66,7 +67,7 @@ starting_and_stopping_nodes(Config) ->
 
 killing_nodes(Config) ->
     process_flag(trap_exit, true),
-    Config2 = systest_cluster:start(systest_cli_config_example, Config),
+    Config2 = systest_cluster:start(systest_cli, Config),
     Cluster = systest:active_cluster(Config2),
     systest_cluster:print_status(Cluster),
     [begin
@@ -80,7 +81,7 @@ killing_nodes(Config) ->
 
 sigkill_on_nodes(Config) ->
     process_flag(trap_exit, true),
-    Config2 = systest_cluster:start(systest_cli_config_example, Config),
+    Config2 = systest_cluster:start(systest_cli, Config),
     Cluster = systest:active_cluster(Config2),
     systest_cluster:print_status(Cluster),
     [begin

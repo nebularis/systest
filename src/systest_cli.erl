@@ -106,7 +106,7 @@ init([Node, Cmd, Args, Extra]) ->
     case check_command(Cmd, Detached, RpcEnabled) of
         ok ->
             Env = case ?CONFIG(env, Extra, undefined) of
-                      undefined -> [];
+                      not_found -> [];
                       []        -> [];
                       Other     -> [{env, Other}]
                   end,

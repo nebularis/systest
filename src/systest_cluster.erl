@@ -100,7 +100,8 @@ print_status_info({#'systest.node_info'{host=Host,
                                         flags=Flags,
                                         apps=Apps,
                                         os_pid=Proc,
-                                        extra=Xtra,
+                                        on_start=OnStart,
+                                        on_stop=OnStop,
                                         owner=Port}, Status}) ->
      io_lib:format("Node Info~n"
                    "         name:  ~p (status=~p)~n"
@@ -112,7 +113,8 @@ print_status_info({#'systest.node_info'{host=Host,
                    "         xtra:  ~p~n"
                    "         port:  ~p~n"
                    "----------------------------------------------------~n",
-                   [Name, Status, Host, Type, Flags, Apps, Proc, Xtra, Port]).
+                   [Name, Status, Host, Type, Flags, Apps,
+                    Proc, [{on_start, OnStart}, {on_stop, OnStop}], Port]).
 
 build_nodes(Cluster, {Host, Nodes}, Config) ->
     [systest_node:make_node(Cluster, N, [{host, Host},

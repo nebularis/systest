@@ -31,7 +31,7 @@
 -export_type([node_info/0]).
 
 -export([behaviour_info/1]).
--export([make_node/3]).
+-export([make_node/2]).
 -export([start/1, stop/1, kill/1]).
 -export([sigkill/1, stop_and_wait/1, kill_and_wait/1]).
 -export([shutdown_and_wait/2, status/1, interact/2]).
@@ -60,9 +60,9 @@ behaviour_info(callbacks) ->
 behaviour_info(_) ->
     undefined.
 
--spec make_node(atom(), atom(), systest_config:config()) -> node_info().
-make_node(Cluster, Node, Config) ->
-    make_node(node_config(Cluster, Node, Config)).
+-spec make_node(atom(), atom()) -> node_info().
+make_node(Cluster, Node) ->
+    make_node(node_config(Cluster, Node)).
 
 -spec start(node_info()) -> node_info() | term().
 start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
@@ -76,7 +76,7 @@ start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
                 Apps -> [setup(NI2, App) || App <- Apps]
             end,
             %% TODO: should we validate that these succeed?
-            case NI2#'systest.node_info'.extra of
+            case NI2#'systest.node_info'.on_start of
                 []   -> ok;
                 Xtra -> [ct:pal("~p", [interact(NI2, In)]) || In <- Xtra]
             end,
@@ -149,19 +149,48 @@ status_check(Node) when is_atom(Node) ->
 
 make_node(Config) ->
     %% NB: new_node_info is an exprecs generated function
-    new_node_info([{scope, ?REQUIRE(scope, Config)},
-                   {host, ?REQUIRE(host, Config)},
-                   {name, ?REQUIRE(name, Config)},
-                   {handler, ?CONFIG(handler, Config, systest_cli)},
-                   {link, ?CONFIG(link_to_parent,
+    new_node_info([{scope,      ?REQUIRE(scope, Config)},
+                   {host,       ?REQUIRE(host, Config)},
+                   {name,       ?REQUIRE(name, Config)},
+                   {handler,    ?CONFIG(handler, Config, systest_cli)},
+                   {link,       ?CONFIG(link_to_parent,
                                     ?CONFIG(startup, Config, []), false)},
-                   {user, ?CONFIG(user, Config, os:getenv("USER"))},
-                   {flags, ?CONFIG(flags, Config)},
-                   {apps, ?CONFIG(applications, Config)},
-                   {extra, ?CONFIG(extra, Config)},
-                   {config, Config}]).
+                   {user,       ?CONFIG(user, Config, os:getenv("USER"))},
+                   {flags,      ?CONFIG(flags, Config)},
+                   {apps,       ?CONFIG(applications, Config)},
+                   {on_start,   ?CONFIG(on_start, Config)},
+                   {on_stop,    ?CONFIG(on_stop, Config)},
+                   {config,     Config}]).
 
-node_config(Cluster, Node, Config) ->
+node_config(Cluster, Node) ->
+    Nodes = systest_config:get_config({Cluster, nodes}),
+    case ?CONFIG(Node, Nodes, undefined) of
+        undefined    -> [];
+        {Node, Refs} -> load_config(Refs)
+    end.
+
+load_config(Refs) ->
+    lists:foldl(fun merge_refs/2, [], Refs).
+
+merge_refs(Ref, []) ->
+    systest_config:get_config(Ref);
+merge_refs(Ref, Acc) ->
+    RefConfig = systest_config:get_config(Ref),
+    lists:foldl(fun(Key, AccIn) ->
+                    merge_subconfig(Key, AccIn, RefConfig)
+                end, Acc, [startup, on_start, on_stop]).
+
+merge_subconfig(_Key, Globals, []) ->
+    Globals;
+merge_subconfig(Key, Globals, Locals) ->
+    GlobalSubconfig = ?CONFIG(Key, Globals),
+    [begin
+        GF = ?CONFIG(SubKey, GlobalSubconfig),
+        {SubKey, systest_config:merge_config(GF, NF)}
+     end || {SubKey, NF} <- Locals].
+
+%% TODO: deprecate this *old* model
+xnode_config(Cluster, Node, Config) ->
     %% TODO: this code does *NOT* work for all possible merge scenarios!
     [AllGlobals]    = systest_config:get_config(global_node_config),
     [ClusterConfig] = systest_config:get_config(Cluster),

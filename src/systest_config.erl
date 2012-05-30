@@ -25,12 +25,15 @@
 -module(systest_config).
 -include_lib("eunit/include/eunit.hrl").
 
+-include("systest.hrl").
+
 -type config_key() :: atom() | string() | binary().
 -type config()     :: [{config_key(), term()}].
 
 -export_type([config_key/0, config/0]).
 
 -export([read/2, read/3, require/2]).
+-export([eval/2, eval/3]).
 -export([replace_value/3, ensure_value/3]).
 -export([get_config/1, get_config/3, merge_config/2]).
 -export([get_env/0, get_env/1, set_env/2]).
@@ -40,12 +43,112 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-type key_type()    :: 'atom' | 'binary' | 'string'.
+-type return_spec() :: 'value' | 'key' | 'path'.
+
+-record(search, {
+    key_type   :: key_type(),
+    key_index  :: integer(),
+    key_func   :: fun((term()) -> term()),
+    return     :: return_spec(),
+    callbacks  :: [{atom(), fun((term(), term()) -> term())}], %% too loose!
+    source     :: [{term(), term()}]
+}).
+
 %%
 %% Public API
 %%
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+eval(Key, Config) ->
+    eval(Key, Config, []).
+
+eval(Path, Config, Opts) when is_list(Opts) ->
+    eval(Path, Config, search_options(Opts));
+eval(Path, Config, Search=#search{return=Spec, key_func=KF}) ->
+    % io:format(user, "eval ~s~n", [Path]),
+    try
+        Parts = string:tokens(Path, "."),
+        Result = search_eval(Parts, Config, Search),
+        case param_eval(Result, Config, Search) of
+            not_found -> not_found;
+            Result2   -> case Spec of
+                             key   -> Key = hd(lists:reverse(Parts)),
+                                      {KF(Key), Result2};
+                             path  -> {Path, Result2};
+                             value -> Result2
+                         end
+        end
+    catch
+        _:not_found -> not_found
+    end.
+
+param_eval({Tag, Value}, Config, Opts) ->
+    {Tag, param_eval(Value, Config, Opts)};
+param_eval([H|_]=String, Config, Opts) when is_integer(H) ->
+    Groups = re:split(String, "(\\$|%)\\{([^\\}]*)(?:\\}|%)",
+                      [{return, list}, group, trim]),
+    string:join([string_eval(P, Config, Opts) || P <- Groups], "");
+param_eval(Values, Config, Opts) when is_list(Values) ->
+    [param_eval(V, Config, Opts) || V <- Values];
+param_eval(Other, _, _) ->
+    Other.
+
+string_eval(Parts, Config, Opts) ->
+    lists:flatten(lists:reverse(
+        lists:foldl(
+            fun(E, ["$"|Acc]) -> [as_string(eval(E, Config, Opts))|Acc];
+               (E, ["%"|Acc]) -> [require_env(E)|Acc];
+               (E, Acc)       -> [E|Acc]
+            end, [], Parts))).
+
+as_string(X) when is_atom(X)    -> atom_to_list(X);
+as_string(X) when is_integer(X) -> integer_to_list(X);
+as_string(X)                    -> X.
+
+search_eval(_, not_found, _) ->
+    not_found;
+search_eval([], Result, #search{return=value}) ->
+    Result;
+search_eval([], Result, _) ->
+    Result;
+search_eval([Current|Remaining], {callback, Config, Fun},
+                                 Opts=#search{key_func=KF}) ->
+    search_eval(Remaining, Fun(KF(Current), Config), Opts);
+search_eval([Current|Remaining], {callback, Config, Fun}, Opts) ->
+    search_eval(Remaining, Fun(Current, Config), Opts);
+search_eval([Current|Remaining], Config, Opts=#search{key_func='id'}) ->
+    search_eval(Remaining, search(Current, Config, Opts), Opts);
+search_eval([Current|Remaining], Config, Opts=#search{key_func=KF}) ->
+    search_eval(Remaining, search(KF(Current), Config, Opts), Opts).
+
+search(Key, Config, Search=#search{callbacks=CB}) ->
+    % io:format(user, "searching ~p for ~p~n", [Config, Key]),
+    % io:format(user, "do we have a callback for ~p in ~p?~n", [Key, CB]),
+    case lists:keyfind(Key, 1, CB) of
+        {Key, Fun} -> % io:format(user, "matched ~p~n", [{Key, Fun}]),
+                      {callback, key_search(Key, Config, Search), Fun};
+        false      -> key_search(Key, Config, Search)
+    end.
+
+key_search(Key, Config, #search{key_index=Kidx}) ->
+    %% io:format(user, "searching for ~p in ~p~n", [Key, Config]),
+    case lists:keyfind(Key, Kidx, Config) of
+        false                    -> not_found;
+        {Key, Value}             -> Value;
+        Value
+            when is_tuple(Value) -> Value
+    end.
+
+search_options(Opts) ->
+    #search{key_type  = ?CONFIG(key_type,  Opts, 'atom'),
+            key_index = ?CONFIG(key_index, Opts, 1),
+            key_func  = ?CONFIG(key_func,  Opts, fun erlang:list_to_atom/1),
+            return    = ?CONFIG(return,    Opts, 'value'),
+            callbacks = proplists:get_all_values(callback, Opts),
+            source    = Opts}.
 
 read(Key, Config, Default) ->
     case lists:keyfind(Key, 1, Config) of
@@ -72,6 +175,12 @@ get_env() ->
 
 get_env(Key) ->
     lookup(Key).
+
+require_env(Key) ->
+    case lookup(Key) of
+        {Key, Value} -> Value;
+        _            -> throw(not_found)
+    end.
 
 set_env(Key, Value) ->
     ok = gen_server:call(?MODULE, {set, Key, Value}).

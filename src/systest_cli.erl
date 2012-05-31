@@ -96,7 +96,6 @@ init([Node, Cmd, Args, Extra]) ->
     % ScratchDir = ?CONFIG(scratch_dir, Config, term),
     Flags = systest_node:get_node_info(flags, Node),
 
-    %% TODO: merge these attributes into node_info itself...
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
     LogEnabled = ?CONFIG(log_enabled, Startup, true),
@@ -137,6 +136,15 @@ init([Node, Cmd, Args, Extra]) ->
                         false ->
                             user
                     end,
+                    %% TODO: it would probably be better to store all the cli
+                    %% related stuff in the 'private' field if at all...
+                    N2 = Node#'systest.node_info'{
+                                    os_pid=Pid,
+                                    private=[
+                                        {command, ExecutableCommand},
+                                        {env,     Env},
+                                        {args,    Args}
+                                    ]},
                     Sh = #sh{pid=Pid,
                              port=Port2,
                              detached=Detached,
@@ -145,7 +153,7 @@ init([Node, Cmd, Args, Extra]) ->
                              shutdown=Shutdown,
                              command=ExecutableCommand,
                              state=running,
-                             node=Node#'systest.node_info'{os_pid=Pid}},
+                             node=N2},
                     ct:pal(info,
                            "External Process Handler ~p::~p"
                            " Started at ~p~n", [Scope, Id, self()]),
@@ -215,10 +223,8 @@ stop_flags(Flags, ShutdownSpec, RpcEnabled) ->
             script_stop
     end.
 
-handle_call(os_pid, _From, Sh=#sh{pid={detached, Pid}}) ->
-    {reply, Pid, Sh};
-handle_call(os_pid, _From, Sh=#sh{pid=Pid}) ->
-    {reply, Pid, Sh};
+handle_call(inspect, _From, Sh=#sh{node=Node}) ->
+    {reply, Node, Sh};
 handle_call({command, _Data}, _From, Sh=#sh{port=detached}) ->
     {stop, {error, detached}, Sh};
 handle_call({command, Data}, _From, Sh=#sh{port=Port}) ->
@@ -374,8 +380,7 @@ start_it(NI=#'systest.node_info'{config=BaseConfig, host=Host,
 
     case apply(gen_server, StartType,
               [?MODULE, [NI2, Prog, Args, Extra], []]) of
-        {ok, Pid} -> OsPid = gen_server:call(Pid, os_pid),
-                             NI2#'systest.node_info'{os_pid=OsPid, owner=Pid};
+        {ok, Pid} -> gen_server:call(Pid, inspect);
         Error     -> Error
     end.
 

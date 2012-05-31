@@ -143,9 +143,7 @@ init([Node, Cmd, Args, Extra]) ->
                                     owner=self(),
                                     private=[
                                         {command, ExecutableCommand},
-                                        {env,     Env},
-                                        {args,    Args}
-                                    ]},
+                                        {args, Args}|Env]},
                     Sh = #sh{pid=Pid,
                              port=Port2,
                              detached=Detached,

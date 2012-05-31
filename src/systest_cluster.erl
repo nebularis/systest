@@ -94,27 +94,10 @@ with_cluster(ClusterId, NodeHandler, Config) ->
     end.
 
 %% TODO: make a Handler:status call to get detailed information back...
-print_status_info({#'systest.node_info'{host=Host,
-                                        id=Name,
-                                        handler=Type,
-                                        flags=Flags,
-                                        apps=Apps,
-                                        os_pid=Proc,
-                                        on_start=OnStart,
-                                        on_stop=OnStop,
-                                        owner=Port}, Status}) ->
-     io_lib:format("Node Info~n"
-                   "         name:  ~p (status=~p)~n"
-                   "         host:  ~p~n"
-                   "         type:  ~p~n"
-                   "         args:  ~p~n"
-                   "         apps:  ~p~n"
-                   "         proc:  ~p~n"
-                   "         xtra:  ~p~n"
-                   "         port:  ~p~n"
-                   "----------------------------------------------------~n",
-                   [Name, Status, Host, Type, Flags, Apps,
-                    Proc, [{on_start, OnStart}, {on_stop, OnStop}], Port]).
+print_status_info({Node, Status}) ->
+    Lines = [{status, Status}|systest_utils:node_to_plist(Node)],
+    lists:flatten("Node Info~n" ++ systest_utils:proplist_format(Lines) ++
+                  "~n----------------------------------------------------").
 
 build_nodes(Cluster, {Host, Nodes}, Config) ->
     [systest_node:make_node(Cluster, N, [{host, Host}, {scope, Cluster},

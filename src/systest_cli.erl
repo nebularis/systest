@@ -140,6 +140,7 @@ init([Node, Cmd, Args, Extra]) ->
                     %% related stuff in the 'private' field if at all...
                     N2 = Node#'systest.node_info'{
                                     os_pid=Pid,
+                                    owner=self(),
                                     private=[
                                         {command, ExecutableCommand},
                                         {env,     Env},

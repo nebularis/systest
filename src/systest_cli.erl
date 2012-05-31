@@ -71,9 +71,9 @@ kill(#'systest.node_info'{owner=Server}) ->
 
 -spec status(systest_node:node_info()) -> 'nodeup' | {'nodedown', term()}.
 status(#'systest.node_info'{owner=Server}) ->
-    case is_process_alive(Server) of
-        false -> ct:pal("Server process down!~n"), {'nodedown', unknown};
-        true  -> gen_server:call(Server, ping)
+    case catch(is_process_alive(Server)) of
+        true  -> gen_server:call(Server, ping);
+        _     -> {'nodedown', no_server}
     end.
 
 -spec interact(systest_node:node_info(),

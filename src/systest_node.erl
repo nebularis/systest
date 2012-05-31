@@ -78,7 +78,7 @@ start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
             %% TODO: should we validate that these succeed?
             case NI2#'systest.node_info'.on_start of
                 []   -> ok;
-                Xtra -> [ct:pal("~p", [interact(NI2, In)]) || In <- Xtra]
+                Xtra -> [ct:pal("~p~n", [interact(NI2, In)]) || In <- Xtra]
             end,
             {ok, NI2};
         Error ->
@@ -86,7 +86,11 @@ start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
     end.
 
 -spec stop(node_info()) -> ok.
-stop(NI=#'systest.node_info'{handler=Handler}) ->
+stop(NI=#'systest.node_info'{handler=Handler, on_stop=Shutdown}) ->
+    case Shutdown of
+        [] -> ok;
+        _  -> [ct:pal("~p~n", [interact(NI, In)]) || In <- Shutdown]
+    end,
     Handler:stop(NI).
 
 -spec kill(node_info()) -> ok.
@@ -183,66 +187,25 @@ load_config(Refs) ->
     lists:foldl(fun merge_refs/2, [], Refs).
 
 merge_refs(Ref, []) ->
-    Config =
-    systest_config:get_config(Ref),
-    ct:pal("Config for ~p: ~p~n", [Ref, Config]),
-    Config;
+    systest_config:get_config(Ref);
 merge_refs(Ref, Acc) ->
     RefConfig = systest_config:get_config(Ref),
-    ct:pal("Config for ~p: ~p~n", [Ref, RefConfig]),
-    lists:foldl(fun(Key, AccIn) ->
-                    merge_subconfig(Key, AccIn, RefConfig)
-                end, Acc, [startup, on_start, on_stop]).
+    Startup = systest_config:merge_config(
+                    ?CONFIG(startup, Acc, []),
+                    ?CONFIG(startup, RefConfig, [])),
+    OnStart = ?CONFIG(on_start, Acc, []) ++
+              ?CONFIG(on_start, RefConfig, []),
+    OnStop  = ?CONFIG(on_stop, Acc, []) ++
+              ?CONFIG(on_stop, RefConfig, []),
 
-merge_subconfig(_Key, Globals, []) ->
-    Globals;
-merge_subconfig(Key, Globals, Locals) ->
-    ct:pal("Merging subconfig for ~p~n", [Key]),
-    GlobalSubconfig = ?CONFIG(Key, Globals),
-    [begin
-        GF = ?CONFIG(SubKey, GlobalSubconfig),
-        {SubKey, systest_config:merge_config(GF, NF)}
-     end || {SubKey, NF} <- Locals].
-
-%% TODO: deprecate this *old* model
-xnode_config(Cluster, Node, Config) ->
-    %% TODO: this code does *NOT* work for all possible merge scenarios!
-    [AllGlobals]    = systest_config:get_config(global_node_config),
-    [ClusterConfig] = systest_config:get_config(Cluster),
-    Globals         = systest_config:merge_config(AllGlobals, ClusterConfig),
-    % ct:pal("Globals: ~p~n", [Globals]),
-    [NodeConfig]    = systest_config:get_config({Cluster, Node}),
-
-    {Static, Runtime, Flags} = lists:foldl(fun extract_config/2,
-                                           {[], [], []}, NodeConfig),
-    GlobalFlags = ?CONFIG(flags, Globals),
-    FlagsConfig = case Flags of
-                      [] -> GlobalFlags;
-                      _  -> [begin
-                                 GF = ?CONFIG(Key, GlobalFlags),
-                                 {Key, systest_config:merge_config(GF, NF)}
-                             end || {Key, NF} <- Flags]
-                  end,
-    % ct:pal("FlagsConfig: ~p~n", [FlagsConfig]),
-    Config2 = systest_config:merge_config(Static, Runtime),
-    MergedConfig = systest_config:merge_config(Globals, Config2),
-    Config3 = systest_config:merge_config(MergedConfig, Config),
-    ct:pal("Config: ~p~n", [Config]),
-    Config4 = lists:keyreplace(flags, 1, Config3, {flags, FlagsConfig}),
-    AllConfig = [{scope, Cluster}|Config4],
-    % ct:pal("AllConfig: ~p~n", [AllConfig]),
-    AllConfig.
-
-extract_config({static, Static}, {SoFar, _, _}=Acc) ->
-    setelement(1, Acc, Static ++ SoFar);
-extract_config({startup, Startup}, {SoFar, _, _}=Acc) ->
-    setelement(1, Acc, Startup ++ SoFar);
-extract_config({runtime, Runtime}, {_, SoFar, _}=Acc) ->
-    setelement(2, Acc, Runtime ++ SoFar);
-extract_config({flags, Flags}, {_, _, SoFar}=Acc) ->
-    setelement(3, Acc, Flags ++ SoFar).
+    Base = [ I || I={K, _} <- Acc,
+                  lists:member(K, [flags, apps, user]) ],
+    [{startup, Startup},
+     {on_start, OnStart},
+     {on_stop, OnStop}|Base].
 
 setup(NI, {App, Vars}) ->
     interact(NI, {applicaiton, load, [App]}),
     [interact(NI, {application, set_env, [App, Env, Var]}) ||
                                             {Env, Var} <- Vars].
+

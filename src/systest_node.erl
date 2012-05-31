@@ -32,11 +32,17 @@
 
 -export([behaviour_info/1]).
 -export([make_node/3]).
+-export([node_id/2]).
 -export([start/1, stop/1, kill/1]).
 -export([sigkill/1, stop_and_wait/1, kill_and_wait/1]).
 -export([shutdown_and_wait/2, status/1, interact/2]).
 
 -export([status_check/1]).
+
+%% OTP gen_server Exports
+
+-export([init/1, handle_call/3, handle_cast/2,
+         handle_info/2, terminate/2, code_change/3]).
 
 -exprecs_prefix([operation, "_"]).
 -exprecs_fname([prefix, "node_info"]).
@@ -51,39 +57,35 @@
 
 -spec behaviour_info(term()) -> any().
 behaviour_info(callbacks) ->
-    [{start,        1},
-     {start_link,   1},
-     {stop,         1},
-     {kill,         1},
-     {status,       1},
-     {interact,     2}];
+    [{start,     1},
+     {stop,      1},
+     {kill,      1},
+     {status,    1},
+     {interact,  2},
+     {handle_msg 2}];
 behaviour_info(_) ->
     undefined.
 
+-spec node_id(Host::atom(), Name::atom()) -> atom().
+node_id(Host, Name) ->
+    list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
+
 -spec make_node(atom(), atom(), systest_config:config()) -> node_info().
-make_node(Cluster, Node, Config) ->
-    make_node([{ct, Config}] ++ Config ++ node_config(Cluster, Node)).
+make_node(Scope, Node, Config) ->
+    make_node([{ct, Config}] ++ Config ++ node_config(Scope, Node)).
 
 -spec start(node_info()) -> node_info() | term().
 start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
-                                    host=Host, name=Name}) ->
+                                    host=Host, name=Name, config=BaseConf}) ->
     ct:pal("Starting ~p on ~p~n", [Name, Host]),
-    Startup = case ShouldLink of true -> start_link; _ -> start end,
-    case catch( apply(Handler, Startup, [NodeInfo]) ) of
-        NI2 when is_record(NI2, 'systest.node_info') ->
-            case NI2#'systest.node_info'.apps of
-                []   -> ok;
-                Apps -> [setup(NI2, App) || App <- Apps]
-            end,
-            %% TODO: should we validate that these succeed?
-            case NI2#'systest.node_info'.on_start of
-                []   -> ok;
-                Xtra -> [ct:pal("~p~n", [interact(NI2, In)]) || In <- Xtra]
-            end,
-            {ok, NI2};
-        Error ->
-            throw(Error)
-    end.
+    code:ensure_loaded(Handler),
+    Id = case erlang:function_exported(Handler, id, 1) of
+             true  -> Handler:id(NodeInfo);
+             false -> node_id(Host, Name)
+         end,
+    NI = set_node_info([{id, Id},
+                        {config,[{node, NodeInfo}|BaseConf]], NodeInfo),
+    gen_server:start_link(?MODULE, [NI], []).
 
 -spec stop(node_info()) -> ok.
 stop(NI=#'systest.node_info'{handler=Handler, on_stop=Shutdown}) ->
@@ -123,6 +125,7 @@ interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}) ->
 interact(NI=#'systest.node_info'{handler=Handler}, Inputs) ->
     Handler:interact(NI, Inputs).
 
+%% NB: this *MUST* run on the client
 shutdown_and_wait(NI=#'systest.node_info'{owner=Owner},
                   ShutdownOp) when is_pid(Owner) ->
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
@@ -137,6 +140,49 @@ shutdown_and_wait(NI=#'systest.node_info'{owner=Owner},
                      Other                    -> ct:pal("Other ~p~n", [Other])
                  end
     end.
+
+%%
+%% OTP gen_server API
+%%
+
+-record(state, {node, handler, hander_state}).
+
+init([Node#'systest.node_info'{handler=Handler]) ->
+    process_flag(trap_exit, true),
+
+    case catch( apply(Handler, start, [NodeInfo]) ) of
+        {ok, NI2, HState} when is_record(NI2, 'systest.node_info') ->
+            case NI2#'systest.node_info'.apps of
+                []   -> ok;
+                Apps -> [setup(NI2, App) || App <- Apps]
+            end,
+            %% TODO: we should really validate that these succeed!
+            case NI2#'systest.node_info'.on_start of
+                []   -> ok;
+                Xtra -> [ct:pal("~p~n", [interact(NI2, In)]) || In <- Xtra]
+            end,
+            {ok, #state{node=NI2, handler=Handler, hander_state=HState}};
+        Error ->
+            %% TODO: do NOT rely on callbacks returning a proper gen_server
+            %% init compatible response tuple - construct this for them....
+            Error
+    end.
+
+handle_call(Msg, From, State) ->
+    handle_msg(Msg, State, From).
+
+handle_cast(Msg, St) ->
+    handle_msg(Msg, State).
+
+handle_info(Info, St#state{node=Node, handler=Mod, hander_state=Hs}) ->
+    handle_msg(Info, State).
+
+terminate(Reason, #state{handler=Mod}) ->
+    ok = Mod:terminate(Reason, Node, State),
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 %%
 %% Handler facing API

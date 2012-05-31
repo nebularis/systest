@@ -96,7 +96,7 @@ check_config(Cluster, Config) ->
 
 init([Scope, Id, Config]) ->
     process_flag(trap_exit, true),
-    %% TODO: now that we're using locally registered 
+    %% TODO: now that we're using locally registered
     %% names, perhaps this logic can go away?
     case systest_watchdog:cluster_started(Id, self()) of
         ok ->
@@ -173,7 +173,7 @@ with_cluster({Scope, Identity}, NodeHandler, Config) ->
         {_, noconfig} ->
             noconfig;
         {Alias, ClusterConfig} ->
-            {Hosts, Hooks} = lists:splitwith(fun(E) -> 
+            {Hosts, Hooks} = lists:splitwith(fun(E) ->
                                                  element(1, E) =/= on_start
                                              end, ClusterConfig),
             ct:log("Configured hosts: ~p~n", [Hosts]),

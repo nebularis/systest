@@ -1,10 +1,3 @@
-%% -*- tab-width: 4;erlang-indent-level: 4;indent-tabs-mode: nil -*-
-%% ex: ts=4 sw=4 et
-%% ----------------------------------------------------------------------------
-%%
-%% Copyright (c) 2005 - 2012 Nebularis.
-%%
-%% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), deal
 %% in the Software without restriction, including without limitation the rights
 %% to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
@@ -22,21 +15,17 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
--module(systest_sup).
+-module(systest_cleaner_tests).
+-include_lib("eunit/include/eunit.hrl").
 
--behaviour(supervisor).
+kill_many_test() ->
+    systest_cleaner:start(),
+    Pids = [ spawn(fun loop/0) || _ <- lists:seq(1, 100) ],
+    systest_cleaner:kill(Pids),
+    [?assertEqual(false, erlang:is_process_alive(P)) || P <- Pids],
+    true.
 
-%% API
--export([start_link/0]).
+loop() ->
+    loop().
 
-%% Supervisor callbacks
--export([init/1]).
 
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-
-init([]) ->
-    {ok, { {rest_for_one, 5, 10}, [
-        {systest_config_server,
-            {systest_config, start_link, []},
-             permanent, 5000, worker, [gen_server]}]}}.

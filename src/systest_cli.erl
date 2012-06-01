@@ -37,7 +37,7 @@
 %% API Exports
 
 -export([init/1, handle_stop/2, handle_kill/2]).
--export([handle_status/1, handle_interaction/2,
+-export([handle_status/2, handle_interaction/3,
          handle_msg/3, terminate/3]).
 
 %% private record for tracking...
@@ -55,7 +55,7 @@
 %% systest_node API
 %%
 
-init(Node=#'systest.node_info'{config=Config, host=Host, name=Name}) ->
+init(Node=#'systest.node_info'{config=Config}) ->
     %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
     Cmd = systest_config:eval("flags.start.program", Config,
                     [{callback, {node, fun systest_node:get_node_info/2}},
@@ -76,7 +76,6 @@ init(Node=#'systest.node_info'{config=Config, host=Host, name=Name}) ->
 
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
-    LogEnabled = ?CONFIG(log_enabled, Startup, true),
     {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
                                          Startup, {true, default}),
 
@@ -99,11 +98,11 @@ init(Node=#'systest.node_info'{config=Config, host=Host, name=Name}) ->
                             true -> ok
             end,
 
-            on_startup(Scope, Id, Port, Detached, RpcEnabled, Config,
+            on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config,
                 fun(Port2, Pid, LogFd) ->
                     %% NB: as not all kinds of nodes can be contacted
                     %% via rpc, we have to do this manually here....
-                    if RpcEnabled =:= true -> monitor_node({Id, true});
+                    if RpcEnabled =:= true -> erlang:monitor_node({Id, true});
                                       true -> ok
                     end,
 
@@ -116,7 +115,7 @@ init(Node=#'systest.node_info'{config=Config, host=Host, name=Name}) ->
                              shutdown=Shutdown,
                              command=ExecutableCommand,
                              args=Args,
-                             env=Env
+                             env=Env,
                              state=running},
                     ct:pal(info,
                            "External Process Handler ~p::~p"
@@ -187,7 +186,7 @@ handle_stop(Node, Sh=#sh{shutdown=script_stop}) ->
     {Env, Args, Prog} = convert_flags(stop, Node, Flags, Config),
     run_shutdown_hook(Sh, Prog, Args, Env);
 %% TODO: could this be core node behaviour?
-handle_stop(Node, Sh=#sh{shutdown=Shutdown, rpc_enabled=true}) ->
+handle_stop(_Node, Sh=#sh{shutdown=Shutdown, rpc_enabled=true}) ->
     %% TODO: this rpc/call logic should move into systest_node
     Halt = case Shutdown of
                default -> {init, stop, []};
@@ -195,8 +194,6 @@ handle_stop(Node, Sh=#sh{shutdown=Shutdown, rpc_enabled=true}) ->
            end,
     % apply(rpc, call, [Node#'systest.node_info'.id|tuple_to_list(Halt)]),
     {rpc_stop, Halt, Sh#sh{state=stopped}}.
-handle_stop(_Node, Sh=#sh{shutdown=stopped}) ->
-    Sh.
 %% TODO: when rpc_enabled=false and shutdown is undefined???
 
 %% @doc handles generic messages from the server.
@@ -206,7 +203,8 @@ handle_stop(_Node, Sh=#sh{shutdown=stopped}) ->
 %%                                 {stop, Reason, NewState} |
 %%                                 {NewNode, NewState} |
 %%                                 NewState.
-handle_msg(sigkill, #'systest.node_info'{os_pid=OsPid}, Sh#{state=running}) ->
+handle_msg(sigkill, #'systest.node_info'{os_pid=OsPid},
+           Sh=#sh{state=running}) ->
     systest:sigkill(OsPid),
     Sh#sh{state=killed};
 handle_msg({Port, {data, {_, Line}}}, Node,
@@ -253,10 +251,10 @@ handle_msg({'EXIT', Pid, ok}, _Node, Sh=#sh{shutdown_port=Pid,
         true  -> {stop, normal, Sh};
         false -> Sh
     end;
-handle_msg({'EXIT', Pid, {error, Rc}}, Sh=#sh{shutdown_port=Pid}) ->
+handle_msg({'EXIT', Pid, {error, Rc}}, _Node, Sh=#sh{shutdown_port=Pid}) ->
     ct:pal("Termination Port stopped abnormally (status ~p)~n", [Rc]),
     {stop, termination_port_error, Sh};
-handle_msg(Info, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
+handle_msg(Info, _Node, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
     ct:log("Ignoring Info Message:  ~p~n"
            "State:                  ~p~n"
            "Port:                   ~p~n"
@@ -282,10 +280,11 @@ terminate(Reason, _Node, #sh{port=Port, log=Fd}) ->
 %% Private API
 %%
 
-on_startup(Scope, Id, Port, Detached, RpcEnabled, Config, StartFun) ->
+on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
     %% we do the initial receive stuff up-front
     %% just to avoid any initial ordering problems...
 
+    Startup = ?CONFIG(startup, Config, []),
     LogEnabled = ?CONFIG(log_enabled, Startup, true),
     {LogName, LogFd} = case LogEnabled of
                            true ->

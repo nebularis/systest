@@ -58,7 +58,7 @@
 -record(state, {
     node            :: node_info(),
     handler         :: module(),
-    hander_state    :: term(),
+    handler_state    :: term(),
     activity_state  :: activity_state()
 }).
 
@@ -72,7 +72,7 @@ behaviour_info(callbacks) ->
      {handle_stop,        2},
      {handle_kill,        2},
      {handle_status,      2},
-     {handle_interaction, 2},
+     {handle_interaction, 3},
      {handle_msg,         3},
      {terminate,          3}];
 behaviour_info(_) ->
@@ -110,11 +110,11 @@ kill(NodeRef) ->
 
 -spec stop_and_wait(node_ref()) -> 'ok'.
 stop_and_wait(NodeRef) ->
-    shutdown_and_wait(NI, fun stop/1).
+    shutdown_and_wait(NodeRef, fun stop/1).
 
 -spec kill_and_wait(node_ref()) -> 'ok'.
 kill_and_wait(NodeRef) ->
-    shutdown_and_wait(NI, fun kill/1).
+    shutdown_and_wait(NodeRef, fun kill/1).
 
 -spec status(node_ref()) -> 'nodeup' | {'nodedown', term()}.
 status(NodeRef) ->
@@ -127,10 +127,11 @@ shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
         false -> link(Owner),
-                 ct:log("Stopping ~p ....~n"
-                        "Waiting for port owning process (~p) to exit...~n",
-                        [NI#'systest.node_info'.id, Owner]),
-                 ok = ShutdownOp(NI),
+                 ct:pal("Waiting for ~p to exit~n", [Owner]),
+                 %ct:log("Stopping ~p ....~n"
+                 %       "Waiting for port owning process (~p) to exit...~n",
+                 %       [NI#'systest.node_info'.id, Owner]),
+                 ok = ShutdownOp(Owner),
                  receive
                      {'EXIT', Owner, _Reason} -> ok;
                      Other                    -> ct:pal("Other ~p~n", [Other])
@@ -159,10 +160,10 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.apps of
                 []   -> ok;
-                Apps -> [setup(NI2, App) || App <- Apps]
+                Apps -> [setup(NI2, App, HState) || App <- Apps]
             end,
 
-            State = #state{node=NI2, handler=Callback, hander_state=HState},
+            State = #state{node=NI2, handler=Callback, handler_state=HState},
 
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.on_start of
@@ -180,14 +181,16 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
 handle_call(Msg, From, State) ->
     handle_msg(Msg, State, From).
 
-handle_cast(Msg, St) ->
+handle_cast(Msg, State) ->
     handle_msg(Msg, State).
 
 handle_info(Info, State) ->
     handle_msg(Info, State).
 
-terminate(Reason, #state{handler=Mod}) ->
-    ok = Mod:terminate(Reason, Node, State),
+terminate(Reason, #state{node=Node,
+                         handler=Mod,
+                         handler_state=ModState}) ->
+    ok = Mod:terminate(Reason, Node, ModState),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -197,8 +200,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private API
 %%
 
-start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
-                                    host=Host, name=Name, config=BaseConf}) ->
+start(NodeInfo=#'systest.node_info'{handler=Handler, host=Host,
+                                    name=Name, config=BaseConf}) ->
     ct:pal("Starting ~p on ~p~n", [Name, Host]),
 
     %% are there hidden traps here, when (for example) we're running
@@ -251,13 +254,14 @@ handle_msg(stop, State=#state{activity_state=killed}, _) ->
 % handle_msg(kill, State=#state{activity_state=stopped}, _) ->
 %    {noreply, State};
 handle_msg(stop, State=#state{node=Node, handler=Mod,
-                        on_stop=Shutdown, handler_state=ModState}, ReplyTo) ->
-    case Shutdown of
+                              handler_state=ModState}, ReplyTo) ->
+    case Node#'systest.node_info'.on_stop of
         [] -> ok;
         %% TODO: consider whether this is structured correctly - it *feels*
         %% a little hackish - and perhaps having a supervising process deal
         %% with these 'interactions' a little better
-        _  -> [ct:pal("~p~n", [interact(NI, In, ModState)]) || In <- Shutdown]
+        Shutdown  -> [ct:pal("~p~n",
+                        [interact(Node, In, ModState)]) || In <- Shutdown]
     end,
     handle_callback(stopping_callback(Mod:handle_stop(Node, ModState)),
                     State#state{activity_state=stopped}, ReplyTo);
@@ -285,7 +289,8 @@ handle_msg({interaction, InputData},
 %% our catch-all, which defers to Mod:handler_state/3 to see if the
 %% callback module knows what to do with Msg or not - this also allows the
 %% handler an opportunity to decide how to deal with unexpected messages
-handle_msg(Msg, State#state{node=Node, handler_state=ModState}, ReplyTo) ->
+handle_msg(Msg, State=#state{node=Node, handler=Mod,
+                             handler_state=ModState}, ReplyTo) ->
     handle_callback(Mod:handle_msg(Msg, Node, ModState), State, ReplyTo).
 
 stopping_callback(Result) ->
@@ -296,10 +301,12 @@ stopping_callback(Result) ->
             Other
     end.
 
-handle_callback(CallbackResult, State, ReplyTo) ->
+handle_callback(CallbackResult,
+                State=#state{node=Node,
+                             handler=Mod}, ReplyTo) ->
     try
         case CallbackResult of
-            {rpc_stop, {Mod, Func, Args}, NewState} ->
+            {rpc_stop, Halt, NewState} ->
                 apply(rpc, call,
                       [Node#'systest.node_info'.id|tuple_to_list(Halt)]),
                 {noreply, State#state{handler_state=NewState}};

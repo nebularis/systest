@@ -27,7 +27,7 @@
 -include("systest.hrl").
 
 -define(ETS_OPTS,
-        [ordered_set, private, named_table,
+        [private, named_table,
          {read_concurrency, true},
          {write_concurrency, false}]).
 
@@ -36,6 +36,8 @@
 -behaviour(gen_server).
 
 %% API Exports
+
+-export([start/0, watch_cluster/2, watch_node/2]).
 
 %% OTP gen_server Exports
 
@@ -46,19 +48,45 @@
 %% Public API
 %%
 
+start() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+watch_cluster(Id, Pid) ->
+    gen_server:call(?MODULE, {watch_cluster, Id, Pid}).
+
+watch_node(Cid, Pid) ->
+    gen_server:call(?MODULE, {watch_node, Cid, Pid}).
+
 %%
 %% OTP gen_server API
 %%
 
 init([]) ->
-    CT = ets:new(cluster_table, ?ETS_OPTS),
-    NT = ets:new(node_table,    ?ETS_OPTS),
+    process_flag(trap_exit, true),
+    CT = ets:new(cluster_table, [ordered_set|?ETS_OPTS]),
+    NT = ets:new(node_table,    [duplicate_bag|?ETS_OPTS]),
     {ok, #state{cluster_table=CT, node_table=NT}}.
 
-handle_call({add_cluster, Cluster}, _From, State=#state{cluster_table=CT}) ->
-    case ets:insert_new(CT, Cluster) of
-        true  -> {reply, ok, State};
+handle_call({watch_cluster, ClusterId, ClusterPid},
+            _From, State=#state{cluster_table=CT}) ->
+    case ets:insert_new(CT, {ClusterId, ClusterPid}) of
+        true  -> link(ClusterPid),
+                 {reply, ok, State};
         false -> {reply, {error, clash}, State}
+    end;
+handle_call({watch_node, ClusterId, NodePid}, _From,
+            State=#state{cluster_table=CT,
+                         node_table=NT}) ->
+    case ets:lookup(CT, ClusterId) of
+        [] ->
+            {reply, {error, unknown_cluster}, State};
+        [ClusterId] ->
+            case ets:insert_new(NT, {{ClusterId, NodePid}}) of
+                false -> {reply, {error, duplicate_node}, State};
+                true  -> {reply, ok, State}
+            end;
+        Other ->
+            {stop, {error, cluster_table, Other}, State}
     end;
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
@@ -66,10 +94,27 @@ handle_call(_Msg, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(Info, State) ->
+handle_info({'EXIT', Pid, normal},
+            State=#state{cluster_table=CT, node_table=NT}) ->
+    case ets:match(CT, {'_', Pid}) of
+        [Cluster] ->
+            %% the cluster has exited normally - any nodes left
+            %% alive are not supposed to be (they're orphans) and
+            %% therefore required shutting down before anything
+            %% else happens....
+            handle_down(Cluster, NT);
+        [] ->
+            ok %% TODO: ........
+    end,
     {noreply, State}.
 
-terminate(Reason, _State) ->
+handle_down({ClusterId, Pid}, NodeTable) ->
+    kill_wait(ets:match(NodeTable, {{ClusterId, '_'}})).
+
+kill_wait(Nodes) ->
+    [systest_node:kill(N) || N <- Nodes].
+
+terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

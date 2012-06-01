@@ -33,9 +33,9 @@
 -export([behaviour_info/1]).
 -export([make_node/3]).
 -export([node_id/2]).
--export([start/1, stop/1, kill/1]).
--export([sigkill/1, stop_and_wait/1, kill_and_wait/1]).
--export([shutdown_and_wait/2, status/1, interact/2]).
+-export([start/3, stop/1, kill/1]).
+-export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
+-export([shutdown_and_wait/2, status/1]).
 
 -export([status_check/1]).
 
@@ -51,18 +51,30 @@
 -compile({parse_transform, exprecs}).
 -export_records(['systest.node_info']).
 
+-type node_ref() :: pid().
+-type activity_state() :: 'running' | 'stopped' | 'killed' | 'nodedown'.
+
+%% our own internal state is separate from that of any handler...
+-record(state, {
+    node            :: node_info(),
+    handler         :: module(),
+    hander_state    :: term(),
+    activity_state  :: activity_state()
+}).
+
 %%
 %% Public API
 %%
 
--spec behaviour_info(term()) -> any().
+-spec behaviour_info(term()) -> list({atom(), integer()}) | 'undefined'.
 behaviour_info(callbacks) ->
-    [{start,     1},
-     {stop,      1},
-     {kill,      1},
-     {status,    1},
-     {interact,  2},
-     {handle_msg 2}];
+    [{init,               1},
+     {handle_stop,        2},
+     {handle_kill,        2},
+     {handle_status,      2},
+     {handle_interaction, 2},
+     {handle_msg,         3},
+     {terminate,          3}];
 behaviour_info(_) ->
     undefined.
 
@@ -74,60 +86,44 @@ node_id(Host, Name) ->
 make_node(Scope, Node, Config) ->
     make_node([{ct, Config}] ++ Config ++ node_config(Scope, Node)).
 
--spec start(node_info()) -> node_info() | term().
-start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
-                                    host=Host, name=Name, config=BaseConf}) ->
-    ct:pal("Starting ~p on ~p~n", [Name, Host]),
-    code:ensure_loaded(Handler),
-    Id = case erlang:function_exported(Handler, id, 1) of
-             true  -> Handler:id(NodeInfo);
-             false -> node_id(Host, Name)
-         end,
-    NI = set_node_info([{id, Id},
-                        {config,[{node, NodeInfo}|BaseConf]], NodeInfo),
-    gen_server:start_link(?MODULE, [NI], []).
+-spec start(atom(), atom(),
+            list(tuple(atom(), term()))) -> {'ok', pid()} | {error, term()}.
+start(Scope, Node, Config) ->
+    start(make_node(Scope, Node, Config)).
 
--spec stop(node_info()) -> ok.
-stop(NI=#'systest.node_info'{handler=Handler, on_stop=Shutdown}) ->
-    case Shutdown of
-        [] -> ok;
-        _  -> [ct:pal("~p~n", [interact(NI, In)]) || In <- Shutdown]
-    end,
-    Handler:stop(NI).
+%% TODO: everything below this point is probably
+%% somewhat broken, up until the gen server API
 
--spec kill(node_info()) -> ok.
-kill(NI=#'systest.node_info'{handler=Handler}) ->
-    Handler:kill(NI).
+-spec stop(node_ref()) -> ok.
+stop(NodeRef) ->
+    gen_server:cast(NodeRef, stop).
 
--spec sigkill(node_info()) -> string().
-sigkill(#'systest.node_info'{os_pid=Pid}) ->
-    ct:log("executing kill -9 ~s~n", [Pid]),
-    Result = os:cmd("kill -9 " ++ Pid),
-    ct:log(Result).
+-spec kill(node_ref()) -> ok.
+kill(NodeRef) ->
+    gen_server:cast(NodeRef, kill).
 
--spec stop_and_wait(node_info()) -> 'ok'.
-stop_and_wait(NI) when is_record(NI, 'systest.node_info') ->
+-spec('kill -9'/1 :: (node_ref()) -> 'ok').
+'kill -9'(NodeRef) ->
+    ct:pal("[WARNING] using SIGKILL is *NOT*"
+           "guaranteed to work with all node types!~n"),
+    gen_server:cast(NodeRef, sigkill).
+
+-spec stop_and_wait(node_ref()) -> 'ok'.
+stop_and_wait(NodeRef) ->
     shutdown_and_wait(NI, fun stop/1).
 
--spec kill_and_wait(node_info()) -> 'ok'.
-kill_and_wait(NI) when is_record(NI, 'systest.node_info') ->
+-spec kill_and_wait(node_ref()) -> 'ok'.
+kill_and_wait(NodeRef) ->
     shutdown_and_wait(NI, fun kill/1).
 
--spec status(node_info()) -> 'nodeup' | {'nodedown', term()}.
-status(NI=#'systest.node_info'{handler=Handler}) ->
-    Handler:status(NI).
-
--spec interact(node_info(), term()) -> term().
-interact(Node, {local, Mod, Func, Args}) ->
-    apply(Mod, Func, [Node|Args]);
-interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}) ->
-    rpc:call(Node, Mod, Func, Args);
-interact(NI=#'systest.node_info'{handler=Handler}, Inputs) ->
-    Handler:interact(NI, Inputs).
+-spec status(node_ref()) -> 'nodeup' | {'nodedown', term()}.
+status(NodeRef) ->
+    gen_server:call(NodeRef, status).
 
 %% NB: this *MUST* run on the client
-shutdown_and_wait(NI=#'systest.node_info'{owner=Owner},
-                  ShutdownOp) when is_pid(Owner) ->
+shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
+    %% TODO: review whether this makes sense in light of the changes
+    %% on branch 'supervision'
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
         false -> link(Owner),
@@ -142,26 +138,39 @@ shutdown_and_wait(NI=#'systest.node_info'{owner=Owner},
     end.
 
 %%
+%% Handler facing API
+%%
+status_check(Node) when is_atom(Node) ->
+    case net_adm:ping(Node) of
+        pong  -> nodeup;
+        Other -> {nodedown, Other}
+    end.
+
+%%
 %% OTP gen_server API
 %%
 
--record(state, {node, handler, hander_state}).
-
-init([Node#'systest.node_info'{handler=Handler]) ->
+init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
     process_flag(trap_exit, true),
 
-    case catch( apply(Handler, start, [NodeInfo]) ) of
+    case catch( apply(Callback, start, [NodeInfo]) ) of
         {ok, NI2, HState} when is_record(NI2, 'systest.node_info') ->
+
+            %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.apps of
                 []   -> ok;
                 Apps -> [setup(NI2, App) || App <- Apps]
             end,
-            %% TODO: we should really validate that these succeed!
+
+            State = #state{node=NI2, handler=Callback, hander_state=HState},
+
+            %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.on_start of
                 []   -> ok;
-                Xtra -> [ct:pal("~p~n", [interact(NI2, In)]) || In <- Xtra]
+                Xtra -> [interact(NI2, In, HState) || In <- Xtra]
             end,
-            {ok, #state{node=NI2, handler=Handler, hander_state=HState}};
+
+            {ok, State};
         Error ->
             %% TODO: do NOT rely on callbacks returning a proper gen_server
             %% init compatible response tuple - construct this for them....
@@ -174,7 +183,7 @@ handle_call(Msg, From, State) ->
 handle_cast(Msg, St) ->
     handle_msg(Msg, State).
 
-handle_info(Info, St#state{node=Node, handler=Mod, hander_state=Hs}) ->
+handle_info(Info, State) ->
     handle_msg(Info, State).
 
 terminate(Reason, #state{handler=Mod}) ->
@@ -185,17 +194,154 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%
-%% Handler facing API
-%%
-status_check(Node) when is_atom(Node) ->
-    case net_adm:ping(Node) of
-        pong  -> nodeup;
-        Other -> {nodedown, Other}
-    end.
-
-%%
 %% Private API
 %%
+
+start(NodeInfo=#'systest.node_info'{handler=Handler, link=ShouldLink,
+                                    host=Host, name=Name, config=BaseConf}) ->
+    ct:pal("Starting ~p on ~p~n", [Name, Host]),
+
+    %% are there hidden traps here, when (for example) we're running
+    %% embedded in an archive/escript or similarly esoteric situations?
+    %% TODO: perhaps catch(Handler:id(NodeInfo)) would be safer!?
+    code:ensure_loaded(Handler),
+
+    Id = case erlang:function_exported(Handler, id, 1) of
+             true  -> Handler:id(NodeInfo);
+             false -> node_id(Host, Name)
+         end,
+    NI = set_node_info([{id, Id},
+                        {config,[{node, NodeInfo}|BaseConf]}], NodeInfo),
+
+    gen_server:start_link(?MODULE, [NI], []).
+
+interact(Node, {local, Mod, Func, Args}, _) ->
+    apply(Mod, Func, [Node|Args]);
+interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}, _) ->
+    rpc:call(Node, Mod, Func, Args);
+interact(NI=#'systest.node_info'{handler=Handler}, Inputs, HState) ->
+    Handler:handle_interaction(Inputs, NI, HState).
+
+handle_msg(Msg, State) ->
+    handle_msg(Msg, State, noreply).
+
+%% nodedown notifications
+handle_msg({nodedown, NodeId},
+           SvrState=#state{activity_state=State,
+                           node=#'systest.node_info'{id=NodeId}},
+           _ReplyTo) ->
+    ShutdownType = case State of
+                       killed  -> normal;
+                       stopped -> normal;
+                       _       -> nodedown
+                   end,
+    {stop, ShutdownType, SvrState};
+handle_msg({nodedown, NodeId},
+           State=#state{activity_state=running,
+                        node=#'systest.node_info'{id=NodeId}}, _ReplyTo) ->
+    {stop, nodedown, State#state{activity_state=nodedown}};
+%% instructions from clients
+handle_msg(stop, State=#state{activity_state=stopped}, _) ->
+    {noreply, State};
+handle_msg(kill, State=#state{activity_state=stopped}, _) ->
+    {noreply, State};
+handle_msg(stop, State=#state{activity_state=killed}, _) ->
+    {noreply, State};
+%% TODO: consider whether this should be disallowed, or ignored
+% handle_msg(kill, State=#state{activity_state=stopped}, _) ->
+%    {noreply, State};
+handle_msg(stop, State=#state{node=Node, handler=Mod,
+                        on_stop=Shutdown, handler_state=ModState}, ReplyTo) ->
+    case Shutdown of
+        [] -> ok;
+        %% TODO: consider whether this is structured correctly - it *feels*
+        %% a little hackish - and perhaps having a supervising process deal
+        %% with these 'interactions' a little better
+        _  -> [ct:pal("~p~n", [interact(NI, In, ModState)]) || In <- Shutdown]
+    end,
+    handle_callback(stopping_callback(Mod:handle_stop(Node, ModState)),
+                    State#state{activity_state=stopped}, ReplyTo);
+handle_msg(kill, State=#state{node=Node, handler=Mod,
+                              handler_state=ModState}, ReplyTo) ->
+    handle_callback(stopping_callback(Mod:handle_kill(Node, ModState)),
+                    State#state{activity_state=killed}, ReplyTo);
+handle_msg(status, State=#state{activity_state=stopped}, _ReplyTo) ->
+    {reply, {stopping, stopped}, State};
+handle_msg(status, State=#state{activity_state=killed}, _ReplyTo) ->
+    {reply, {stopped, killed}, State};
+handle_msg(status, State=#state{node=Node, handler=Mod,
+                                handler_state=ModState}, ReplyTo) ->
+    handle_callback(Mod:handle_status(Node, ModState), State, ReplyTo);
+handle_msg({interaction, _},
+           State=#state{activity_state=ActivityState}, _)
+                when ActivityState =:= killed orelse
+                     ActivityState =:= stopped ->
+    {reply, {error, stopping}, State};
+handle_msg({interaction, InputData},
+            State=#state{node=Node, handler=Mod,
+                         handler_state=ModState}, ReplyTo) ->
+    handle_callback(Mod:handle_interaction(InputData,
+                                           Node, ModState), State, ReplyTo);
+%% our catch-all, which defers to Mod:handler_state/3 to see if the
+%% callback module knows what to do with Msg or not - this also allows the
+%% handler an opportunity to decide how to deal with unexpected messages
+handle_msg(Msg, State#state{node=Node, handler_state=ModState}, ReplyTo) ->
+    handle_callback(Mod:handle_msg(Msg, Node, ModState), State, ReplyTo).
+
+stopping_callback(Result) ->
+    case Result of
+        {stop, NewNode, NewModState} ->
+            {stopped, NewNode, NewModState};
+        Other ->
+            Other
+    end.
+
+handle_callback(CallbackResult, State, ReplyTo) ->
+    try
+        case CallbackResult of
+            {rpc_stop, {Mod, Func, Args}, NewState} ->
+                apply(rpc, call,
+                      [Node#'systest.node_info'.id|tuple_to_list(Halt)]),
+                {noreply, State#state{handler_state=NewState}};
+            {stopped, NewNode, NewState} ->
+                %% NB: this is an immediate stop in response to the 'stop'
+                %% instruction, so *nothing* is wrong at this point
+                {stop, normal, #state{node=NewNode,
+                                      handler=Mod,
+                                      handler_state=NewState,
+                                      activity_state=stopped}};
+            {stop, Reason, NewState} ->
+                {stop, Reason, State#state{handler_state=NewState}};
+            {stop, Reason, NewNode, NewState} ->
+                {stop, Reason, State#state{node=NewNode,
+                                           handler_state=NewState}};
+            {reply, Reply, NewNode, NewState}
+                    when is_record(NewNode, 'systest.node_info') ->
+                reply(Reply, ReplyTo, State#state{node=NewNode,
+                                                  handler_state=NewState});
+            {reply, Reply, NewState} ->
+                reply(Reply, ReplyTo, State#state{handler_state=NewState});
+            {NewNode, NewState}
+                    when is_record(NewNode, 'systest.node_info') ->
+                {noreply, State#state{node=NewNode,
+                                      handler_state=NewState}};
+            NewState ->
+                {noreply, State#state{handler_state=NewState}}
+        end
+    catch
+        Ex -> {stop, Ex, State}
+    end.
+
+reply(Reply, noreply, State) ->
+    %% NB: here we make sute that a handler return value (from handle_callback)
+    %% which states {reply, ...} is not *incorrectly* used when the entry point
+    %% to this gen_server was handle_cast or handle_info
+    {stop, {handler, noreturn, Reply}, State};
+reply(Reply, ReplyTo, State) ->
+    gen_server:reply(ReplyTo, Reply),
+    {noreply, State}.
+
+%% node making and configuration handling
 
 make_node(Config) ->
     %% NB: new_node_info is an exprecs generated function
@@ -250,8 +396,8 @@ merge_refs(Ref, Acc) ->
      {on_start, OnStart},
      {on_stop, OnStop}|Base].
 
-setup(NI, {App, Vars}) ->
-    interact(NI, {applicaiton, load, [App]}),
-    [interact(NI, {application, set_env, [App, Env, Var]}) ||
-                                            {Env, Var} <- Vars].
+setup(NI, {App, Vars}, HState) ->
+    interact(NI, {applicaiton, load, [App]}, HState),
+    [interact(NI, {application, set_env,
+                    [App, Env, Var]}, HState) || {Env, Var} <- Vars].
 

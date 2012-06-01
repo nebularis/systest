@@ -26,7 +26,7 @@
 
 -include("systest.hrl").
 
--export([start/0]).
+-export([start/0, sigkill/1]).
 -export([start_suite/2, stop_suite/2, start/2, stop/2]).
 -export([active_cluster/1, clusters/1, cluster_nodes/1]).
 -export([cluster_config/1]).
@@ -56,6 +56,11 @@ stop(Scope, Config) ->
     systest_cluster:stop(Scope, Config).
 
 %% interactions
+
+sigkill(Pid) ->
+    ct:log("executing kill -9 ~s~n", [Pid]),
+    Result = os:cmd("kill -9 " ++ Pid),
+    ct:log(Result).
 
 interact(Node, Inputs) ->
     systest_node:interact(Node, Inputs).

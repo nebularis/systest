@@ -32,15 +32,13 @@
 -behaviour(systest_node).
 -behaviour(gen_server).
 
+%% TODO: migrate to ?SYSTEST_LOG
+
 %% API Exports
 
--export([start/1, start_link/1, stop/1, kill/1]).
--export([status/1, interact/2]).
-
-%% OTP gen_server Exports
-
--export([init/1, handle_call/3, handle_cast/2,
-         handle_info/2, terminate/2, code_change/3]).
+-export([init/1, handle_stop/2, handle_kill/2]).
+-export([handle_status/1, handle_interaction/2,
+         handle_msg/3, terminate/3]).
 
 %% private record for tracking...
 -record(sh, {command, args, env, node, state, log, rpc_enabled,
@@ -49,45 +47,15 @@
 -include("systest.hrl").
 
 -ifdef(TEST).
+%% TODO: deprecate this in favour of systest_config:eval/2
 -export([convert_flags/4]).
 -endif.
-
--spec start(systest_node:node_info()) -> systest_node:node_info() | term().
-start(NodeInfo) ->
-    start_it(NodeInfo, start).
-
--spec start_link(systest_node:node_info()) ->
-                            systest_node:node_info() | term().
-start_link(NodeInfo) ->
-    start_it(NodeInfo, start_link).
-
--spec stop(systest_node:node_info()) -> 'ok'.
-stop(#'systest.node_info'{owner=Server}) ->
-    gen_server:cast(Server, stop).
-
--spec kill(systest_node:node_info()) -> 'ok'.
-kill(#'systest.node_info'{owner=Server}) ->
-    gen_server:cast(Server, kill).
-
--spec status(systest_node:node_info()) -> 'nodeup' | {'nodedown', term()}.
-status(#'systest.node_info'{owner=Server}) ->
-    case catch(is_process_alive(Server)) of
-        true  -> gen_server:call(Server, ping);
-        _     -> {'nodedown', no_server}
-    end.
-
--spec interact(systest_node:node_info(),
-               {module(), atom(), [term()]} | string()) -> term().
-interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}) ->
-    rpc:call(Node, Mod, Func, Args);
-interact(#'systest.node_info'{owner=Server}, Data) ->
-    gen_server:call(Server, {command, Data}).
 
 %%
 %% systest_node API
 %%
 
-start(Node=#'systest.node_info'{config=Config, host=Host, name=Name}) ->
+init(Node=#'systest.node_info'{config=Config, host=Host, name=Name}) ->
     %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
     Cmd = systest_config:eval("flags.start.program", Config,
                     [{callback, {node, fun systest_node:get_node_info/2}},
@@ -159,6 +127,161 @@ start(Node=#'systest.node_info'{config=Config, host=Host, name=Name}) ->
             StopError
     end.
 
+
+
+%% @doc handles interactions with the node.
+%% handle_interaction(Data, Node, State) -> {reply, Reply, NewNode, NewState} |
+%%                                          {reply, Reply, NewState} |
+%%                                          {stop, Reason, NewNode, NewState} |
+%%                                          {stop, Reason, NewState} |
+%%                                          {NewNode, NewState} |
+%%                                          NewState.
+%%
+%% NB: interactions via rpc (for suitably enabled nodes)
+%% is handled generically by systest_node, so callback modules
+%% need only deal with more specific scenarios
+handle_interaction(_Data, _Node, Sh=#sh{port=detached}) ->
+    {{error, detached}, Sh};
+handle_interaction(Data, _Node, Sh=#sh{port=Port}) ->
+    port_command(Port, Data, [nosuspend]),
+    {ok, Sh}.
+
+%% @doc handles a status request from the server.
+%% handle_status(Node, State) -> {reply, Reply, NewNode, NewState} |
+%%                               {reply, Reply, NewState} |
+%%                               {stop, NewNode, NewState}.
+handle_status(Node, Sh=#sh{rpc_enabled=true}) ->
+    {reply, systest_node:status_check(Node#'systest.node_info'.id), Sh};
+handle_status(Node, Sh=#sh{rpc_enabled=false, state=ProgramState}) ->
+    %% TODO: this is wrong - we should spawn and use gen_server:reply
+    %%       especially in light of the potential delay in running ./stop
+    case ProgramState of
+        running -> {reply, nodeup, Sh};
+        stopped -> {reply, {nodedown, stopped}, Sh};
+        Other   -> {reply, Other, Sh}
+    end.
+
+%% @doc handles a kill instruction from the server.
+%% handle_kill(Node, State) -> {NewNode, NewState} |
+%%                             {stop, NewNode, NewState} |
+%%                             NewState.
+handle_kill(#'systest.node_info'{os_pid=OsPid},
+            Sh=#sh{detached=true, state=running}) ->
+    systest:sigkill(OsPid),
+    Sh#sh{state=killed};
+handle_kill(_Node, Sh=#sh{port=Port, detached=false, state=running}) ->
+    ct:pal("kill instruction received - terminating port ~p~n", [Port]),
+    Port ! {self(), close},
+    Sh#sh{state=killed}.
+
+%% @doc handles a stop instruction from the server.
+%% handle_stop(Node, State) -> {NewNode, NewNode} |
+%%                             {stop, NewNode, NewState} |
+%%                             {rpc_stop, {M,F,A}, NewState} |
+%%                             NewState.
+handle_stop(Node, Sh=#sh{shutdown=script_stop}) ->
+    ct:pal("running shutdown hooks for ~p",
+           [systest_node:get_node_info(id, Node)]),
+    Flags = systest_node:get_node_info(flags, Node),
+    Config = systest_node:get_node_info(config, Node),
+    {Env, Args, Prog} = convert_flags(stop, Node, Flags, Config),
+    run_shutdown_hook(Sh, Prog, Args, Env);
+%% TODO: could this be core node behaviour?
+handle_stop(Node, Sh=#sh{shutdown=Shutdown, rpc_enabled=true}) ->
+    %% TODO: this rpc/call logic should move into systest_node
+    Halt = case Shutdown of
+               default -> {init, stop, []};
+               Custom  -> Custom
+           end,
+    % apply(rpc, call, [Node#'systest.node_info'.id|tuple_to_list(Halt)]),
+    {rpc_stop, Halt, Sh#sh{state=stopped}}.
+handle_stop(_Node, Sh=#sh{shutdown=stopped}) ->
+    Sh.
+%% TODO: when rpc_enabled=false and shutdown is undefined???
+
+%% @doc handles generic messages from the server.
+%% handle_msg(Msg, Node, State) -> {reply, Reply, NewNode, NewState} |
+%%                                 {reply, Reply, NewState} |
+%%                                 {stop, Reason, NewNode, NewState} |
+%%                                 {stop, Reason, NewState} |
+%%                                 {NewNode, NewState} |
+%%                                 NewState.
+handle_msg(sigkill, #'systest.node_info'{os_pid=OsPid}, Sh#{state=running}) ->
+    systest:sigkill(OsPid),
+    Sh#sh{state=killed};
+handle_msg({Port, {data, {_, Line}}}, Node,
+            Sh=#sh{port=Port, log=LogFd}) ->
+    io:format(LogFd, "~s~n", [Line]),
+    Sh;
+handle_msg({Port, {exit_status, 0}}, _Node,
+            Sh=#sh{port=Port, command=Cmd}) ->
+    ct:pal("Program ~s exited normally (status 0)~n", [Cmd]),
+    {stop, normal, Sh#sh{state=stopped}};
+handle_msg({Port, {exit_status, Exit}=Rc}, Node,
+             Sh=#sh{port=Port, state=State}) ->
+    ct:pal("Node ~p shut down with error/status code ~p~n",
+                      [Node#'systest.node_info'.id, Exit]),
+    ShutdownType = case State of
+                       killed -> normal;
+                       _      -> Rc
+                   end,
+    {stop, ShutdownType, Sh#sh{state=stopped}};
+handle_msg({Port, closed}, Node, Sh=#sh{port=Port,
+                                        state=killed,
+                                        detached=false}) ->
+    ct:pal("~p (attached) closed~n", [Port]),
+    case Sh#sh.rpc_enabled of
+        true ->
+            %% to account for a potential timing issue when the calling test
+            %% execution process is sitting in `kill_and_wait` - we force a
+            %% call to net_adm:ping/1, which gives the net_kernel time to get
+            %% its knickers in order before proceeding....
+            Id = systest_node:get_node_info(id, Node),
+            systest_node:status_check(Id);
+        false ->
+            ok
+    end,
+    {stop, normal, Sh};
+handle_msg({Port, closed}, _Node, Sh=#sh{port=Port}) ->
+    ct:pal("~p closed~n", [Port]),
+    {stop, {port_closed, Port}, Sh};
+handle_msg({'EXIT', Pid, ok}, _Node, Sh=#sh{shutdown_port=Pid,
+                                            detached=Detached,
+                                            state=killed}) ->
+    ct:pal("Termination Port completed ok~n"),
+    case Detached of
+        true  -> {stop, normal, Sh};
+        false -> Sh
+    end;
+handle_msg({'EXIT', Pid, {error, Rc}}, Sh=#sh{shutdown_port=Pid}) ->
+    ct:pal("Termination Port stopped abnormally (status ~p)~n", [Rc]),
+    {stop, termination_port_error, Sh};
+handle_msg(Info, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
+    ct:log("Ignoring Info Message:  ~p~n"
+           "State:                  ~p~n"
+           "Port:                   ~p~n"
+           "Termination Port:       ~p~n",
+           [Info, St, P, SP]),
+    Sh.
+
+%% @doc gives the handler a chance to clean up prior to being fully stopped.
+terminate(Reason, _Node, #sh{port=Port, log=Fd}) ->
+    ct:pal("Terminating due to ~p~n", [Reason]),
+    %% TODO: verify that we're not *leaking* ports if we fail to close them
+    case Fd of
+        user -> ok;
+        _    -> catch(file:close(Fd))
+    end,
+    case Port of
+        detached -> ok;
+        _Port    -> catch(port_close(Port)),
+                    ok
+    end.
+
+%%
+%% Private API
+%%
+
 on_startup(Scope, Id, Port, Detached, RpcEnabled, Config, StartFun) ->
     %% we do the initial receive stuff up-front
     %% just to avoid any initial ordering problems...
@@ -220,142 +343,6 @@ stop_flags(Flags, ShutdownSpec, RpcEnabled) ->
         Spec when is_list(Spec) ->
             script_stop
     end.
-
-handle_call(inspect, _From, Sh=#sh{node=Node}) ->
-    {reply, Node, Sh};
-handle_call({command, _Data}, _From, Sh=#sh{port=detached}) ->
-    {stop, {error, detached}, Sh};
-handle_call({command, Data}, _From, Sh=#sh{port=Port}) ->
-    port_command(Port, Data, [nosuspend]),
-    {reply, ok, Sh};
-handle_call(ping, _From, Sh=#sh{rpc_enabled=true, node=Node}) ->
-    {reply, systest_node:status_check(Node#'systest.node_info'.id), Sh};
-handle_call(ping, _From, Sh=#sh{rpc_enabled=false, state=ProgramState}) ->
-    %% TODO: this is wrong - we should spawn and use gen_server:reply
-    %%       especially in light of the potential delay in running ./stop
-    case ProgramState of
-        running       -> {reply, nodeup, Sh};
-        stopped       -> {reply, {nodedown, stopped}, Sh};
-        wait_shutdown -> {reply, wait_shutdown, Sh}
-    end;
-handle_call(_Msg, _From, Sh) ->
-    {noreply, Sh}.
-
-handle_cast(kill, Sh=#sh{state=stopped}) ->
-    {noreply, Sh};
-handle_cast(kill, Sh=#sh{node=Node, detached=true, state=running}) ->
-    systest_node:sigkill(Node),
-    {noreply, Sh#sh{state=killed}};
-handle_cast(kill, Sh=#sh{port=Port, detached=false, state=running}) ->
-    ct:pal("kill instruction received - terminating port ~p~n", [Port]),
-    Port ! {self(), close},
-    {noreply, Sh#sh{state=killed}};
-
-handle_cast(stop, Sh=#sh{shutdown=stopped}) ->
-    {noreply, Sh};
-handle_cast(stop, Sh=#sh{node=Node, shutdown=script_stop}) ->
-    ct:pal("running shutdown hooks for ~p",
-           [systest_node:get_node_info(id, Node)]),
-    Flags = systest_node:get_node_info(flags, Node),
-    Config = systest_node:get_node_info(config, Node),
-    {Env, Args, Prog} = convert_flags(stop, Node, Flags, Config),
-    {noreply, run_shutdown_hook(Sh, Prog, Args, Env)};
-handle_cast(stop, Sh=#sh{node=Node, shutdown=Shutdown, rpc_enabled=true}) ->
-    Halt = case Shutdown of
-               default -> {init, stop, []};
-               Custom  -> Custom
-           end,
-    apply(rpc, call, [Node#'systest.node_info'.id|tuple_to_list(Halt)]),
-    {noreply, Sh#sh{state=stopped}};
-%% TODO: when rpc_enabled=false and shutdown is undefined???
-handle_cast(_Msg, Sh) ->
-    {noreply, Sh}.
-
-%% TODO: can we handle this one in the generic server???
-handle_msg({nodedown, NodeId}, node=#'systest.node_info'{id=NodeId},
-                               Sh=#sh{state=State}) ->
-    ShutdownType = case State of
-                       killed  -> normal;
-                       stopped -> normal;
-                       _       -> nodedown
-                   end,
-    {stop, ShutdownType, Sh};
-
-handle_msg({nodedown, NodeId},
-            Sh=#sh{state=_, node=#'systest.node_info'{id=NodeId}}) ->
-    {stop, nodedown, Sh};
-handle_msg({Port, {data, {_, Line}}},
-            Sh=#sh{port=Port, log=LogFd}) ->
-    io:format(LogFd, "~s~n", [Line]),
-    {noreply, Sh};
-handle_msg({Port, {exit_status, 0}},
-            Sh=#sh{port=Port, command=Cmd}) ->
-    ct:pal("Program ~s exited normally (status 0)~n", [Cmd]),
-    {stop, normal, Sh#sh{state=stopped}};
-handle_msg({Port, {exit_status, Exit}=Rc},
-             Sh=#sh{port=Port, state=State, node=Node}) ->
-    ct:pal("Node ~p shut down with error/status code ~p~n",
-                      [Node#'systest.node_info'.id, Exit]),
-    ShutdownType = case State of
-                       killed -> normal;
-                       _      -> Rc
-                   end,
-    {stop, ShutdownType, Sh#sh{state=stopped}};
-handle_msg({Port, closed}, Sh=#sh{port=Port, node=Node,
-                                   state=killed, detached=false}) ->
-    ct:pal("~p (attached) closed~n", [Port]),
-    case Sh#sh.rpc_enabled of
-        true ->
-            %% to account for a potential timing issue when the calling test
-            %% execution process is sitting in `kill_and_wait` - we force a
-            %% call to net_adm:ping/1, which gives the net_kernel time to get
-            %% its knickers in order before proceeding....
-            Id = systest_node:get_node_info(id, Node),
-            systest_node:status_check(Id);
-        false ->
-            ok
-    end,
-    %% ct:pal("Node Status: ~p~n", [systest_node:status_check(Id)]),
-    {stop, normal, Sh};
-handle_msg({Port, closed}, Sh=#sh{port=Port}) ->
-    ct:pal("~p closed~n", [Port]),
-    {stop, {port_closed, Port}, Sh};
-handle_msg({'EXIT', Pid, ok}, Sh=#sh{shutdown_port=Pid, state=killed,
-                                      detached=Detached}) ->
-    ct:pal("Termination Port completed ok~n"),
-    case Detached of
-        true  -> {stop, normal, Sh};
-        false -> {noreply, Sh}
-    end;
-handle_msg({'EXIT', Pid, {error, Rc}}, Sh=#sh{shutdown_port=Pid}) ->
-    ct:pal("Termination Port stopped abnormally (status ~p)~n", [Rc]),
-    {stop, termination_port_error, Sh};
-handle_msg(Info, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
-    ct:log("Ignoring Info Message:  ~p~n"
-           "State:                  ~p~n"
-           "Port:                   ~p~n"
-           "Termination Port:       ~p~n",
-           [Info, St, P, SP]),
-    {noreply, Sh}.
-
-terminate(Reason, _Node, #sh{port=Port, log=Fd}) ->
-    ct:pal("Terminating due to ~p~n", [Reason]),
-    %% TODO: verify that we're not *leaking* ports if we fail to close them
-    case Fd of
-        user -> ok;
-        _    -> catch(file:close(Fd))
-    end,
-    case Port of
-        detached -> ok;
-        _Port    -> catch(port_close(Port)),
-                    ok
-    end.
-
-%%
-%% Private API
-%%
-
-
 
 run_shutdown_hook(Sh, Prog, Args, Env) ->
     ct:pal("Spawning executable~n"

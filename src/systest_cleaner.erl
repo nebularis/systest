@@ -48,10 +48,14 @@ kill(Targets) ->
     kill(Targets, infinity).
 
 kill(Targets, Timeout) ->
-    gen_server:call(?MODULE, {kill, Targets}),
+    wait = gen_server:call(?MODULE, {kill, Targets}, Timeout),
     receive
-        {ok, Targets} -> ok
-    after Timeout     -> ok
+        {_Ref, {ok, Killed}} ->
+            case length(Killed) =:= length(Targets) of
+                true  -> ok;
+                false -> {error, {killed, Targets}}
+            end
+    after Timeout -> {error, timeout}
     end.
 
 %%
@@ -66,9 +70,9 @@ init([Killer]) ->
 
 handle_call({kill, Targets}, From,
             State=#state{targets=KillQ, killer=Kill}) ->
-    [dispose(Pid, Kill) || Pid <- Targets],
+    link_and_kill(Targets, Kill),
     Q2 = queue:snoc(KillQ, {From, Targets}),
-    {noreply, State#state{targets=Q2}};
+    {reply, wait, State#state{targets=Q2}};
 handle_call(_Msg, _From, State) ->
     {reply, {error, noapi}, State}.
 
@@ -95,13 +99,16 @@ handle_info({'EXIT', Pid, _},
                             {noreply, State#state{targets=Q, victims=[]}}
                     end;
                 _More ->
-                    {noreply, State#state{targets=Targets, victims=V2}}
+                    RemainingQueue =
+                        queue:cons({Client, T2}, queue:tail(Targets)),
+                    {noreply, State#state{targets=RemainingQueue, victims=V2}}
             end
     end.
 
-dispose(Pid, Kill) ->
-    catch link(Pid),
-    Kill(Pid).
+link_and_kill(Pids, Kill) ->
+    [begin
+        link(P), Kill(P)
+     end || P <- Pids].
 
 terminate(_Reason, _State) ->
     ok.

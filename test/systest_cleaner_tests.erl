@@ -18,12 +18,20 @@
 -module(systest_cleaner_tests).
 -include_lib("eunit/include/eunit.hrl").
 
-kill_many_test() ->
-    systest_cleaner:start(),
+-compile(export_all).
+
+kill_pids_test_() ->
+    [{timeout, 60, fun kill_many/0}].
+
+kill_many() ->
+    systest_cleaner:start(fun kill_it/1),
     Pids = [ spawn(fun loop/0) || _ <- lists:seq(1, 100) ],
     systest_cleaner:kill(Pids),
     [?assertEqual(false, erlang:is_process_alive(P)) || P <- Pids],
     true.
+
+kill_it(Pid) ->
+    exit(Pid, boom).
 
 loop() ->
     loop().

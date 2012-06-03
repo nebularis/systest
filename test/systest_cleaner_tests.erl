@@ -20,13 +20,9 @@
 
 -compile(export_all).
 
-kill_pids_test_() ->
-    [{timeout, 60, fun kill_many/0}].
-
-kill_many() ->
-    systest_cleaner:start(fun kill_it/1),
+kill_many_test() ->
     Pids = [ spawn(fun loop/0) || _ <- lists:seq(1, 100) ],
-    systest_cleaner:kill(Pids),
+    systest_cleaner:kill_wait(Pids, fun kill_it/1),
     [?assertEqual(false, erlang:is_process_alive(P)) || P <- Pids],
     true.
 

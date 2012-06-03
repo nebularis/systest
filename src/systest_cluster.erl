@@ -24,8 +24,15 @@
 %% ----------------------------------------------------------------------------
 -module(systest_cluster).
 
--export([start/1, start/2, stop/2]).
+-behaviour(gen_server).
+
+-export([start/1, start/2, stop/1, stop/2]).
 -export([check_config/2, status/1, print_status/1, log_status/1]).
+
+%% OTP gen_server Exports
+
+-export([init/1, handle_call/3, handle_cast/2,
+         handle_info/2, terminate/2, code_change/3]).
 
 -include("systest.hrl").
 
@@ -41,32 +48,19 @@ start(ClusterId, Config) ->
     case with_cluster(ClusterId, fun start_host/3, Config) of
         noconfig ->
             Config;
-        #'systest.cluster'{}=Cluster ->
-            Config2 = systest_config:ensure_value(?MODULE, Cluster, Config),
-            systest_config:replace_value(active, Cluster, Config2)
+        {ok, Pid} ->
+            Config2 = systest_config:ensure_value(?MODULE, Pid, Config),
+            systest_config:replace_value(active, Pid, Config2)
     end.
 
-stop(ClusterId, Config) ->
-    case lists:keyfind(?MODULE, 1, Config) of
-        false ->
-            ok;
-        {_, Clusters} when is_list(Clusters) ->
-            case lists:keyfind(ClusterId, 2, Clusters) of
-                false ->
-                    ok;
-                #'systest.cluster'{nodes=Nodes} ->
-                    %% TODO: kill order
-                    %% TODO: additional shutdown hooks?
-                    [systest_node:stop(NI) || NI <- Nodes]
-            end;
-        {_, #'systest.cluster'{nodes=Nodes}} ->
-            %% TODO: kill order
-            %% TODO: additional shutdown hooks?
-            [systest_node:stop(NI) || NI <- Nodes]
-    end.
+stop(ClusterRef) ->
+    stop(ClusterRef, infinity).
 
-status(#'systest.cluster'{nodes=Nodes}) ->
-    [{N, systest_node:status(N)} || N <- Nodes].
+stop(ClusterRef, Timeout) ->
+    gen_server:call(ClusterRef, stop, Timeout).
+
+status(ClusterRef) ->
+    gen_server:call(ClusterRef, status).
 
 print_status(Cluster) ->
     ct:pal(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
@@ -78,19 +72,72 @@ check_config(Cluster, Config) ->
     with_cluster(Cluster, fun build_nodes/3, Config).
 
 %%
+%% OTP gen_server API
+%%
+
+init([Id, Config]) ->
+    process_flag(trap_exit, true),
+    case with_cluster(Id, fun start_host/3, Config) of
+        noconfig -> {stop, noconfig};
+        Cluster  -> {ok, Cluster}
+    end.
+
+handle_call(status, _From, State=#'systest.cluster'{nodes=Nodes}) ->
+    {reply, [{N, systest_node:status(N)} || N <- Nodes], State};
+handle_call({stop, Timeout}, _From, State) ->
+    shutdown(State, Timeout);
+handle_call(stop, _From, State) ->
+    shutdown(State, infinity);
+handle_call(_Msg, _From, State) ->
+    {noreply, State}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info({'EXIT', _Pid, normal}, State) ->
+    {noreply, State};
+handle_info({'EXIT', Pid, Reason}, State) ->
+    {stop, {nodedown, node_from_pid(Pid, State), Reason}, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%
 %% Internal API
 %%
+
+shutdown(State=#'systest.cluster'{nodes=Nodes}, Timeout) ->
+    %% NB: unlike systest_node:shutdown_and_wait/2, this does not have to
+    %% block and quite deliberately so - we want 'timed' shutdown when a
+    %% common test hook is in effect unless the user prevents this...
+    case systest_cleaner:kill_wait(Nodes, fun systest_node:stop/1, Timeout) of
+        ok ->
+            {stop, normal, State};
+        {error, {killed, StoppedOk}} ->
+            {stop, {halt_error, orphans, Nodes -- StoppedOk}, State};
+        Other ->
+            {stop, {halt_error, Other}, State}
+    end.
 
 with_cluster(ClusterId, NodeHandler, Config) ->
     case systest:cluster_config(ClusterId) of
         undefined -> noconfig;
+        []        -> noconfig;
         Hosts ->
             ct:log("Configured hosts: ~p~n", [Hosts]),
             Nodes = lists:flatten(
                      [NodeHandler(ClusterId, Host, Config) || Host <- Hosts]),
-            ct:log("Configured nodes: ~p~n",
-                    [[N#'systest.node_info'.name || N <- Nodes]]),
             #'systest.cluster'{name=ClusterId, nodes=Nodes}
+    end.
+
+node_from_pid(Pid, #'systest.cluster'{nodes=Nodes}) ->
+    case [N#'systest.node_info'.id || N <- Nodes,
+                                       N#'systest.node_info'.owner == Pid] of
+        []   -> {unknown_node, Pid};
+        [Id] -> Id
     end.
 
 %% TODO: make a Handler:status call to get detailed information back...
@@ -115,8 +162,8 @@ start_host(Cluster, {Host, Nodes}=HostConf, Config) when is_atom(Host) andalso
     [start_node(Node) || Node <- build_nodes(Cluster, HostConf, Config)].
 
 start_node(Node) ->
-    {ok, NI} = systest_node:start(Node),
-    NI.
+    {ok, NodeRef} = systest_node:start(Node),
+    NodeRef.
 
 verify_host(Host) ->
     case systest_utils:is_epmd_contactable(Host, 5000) of
@@ -124,5 +171,6 @@ verify_host(Host) ->
             ok;
         {false, Reason} ->
             ct:pal("Unable to contact ~p: ~p~n", [Host, Reason]),
-            ct:fail("Cluster configuration failed!~n", [])
+            throw({host_unavailable, Host})
     end.
+

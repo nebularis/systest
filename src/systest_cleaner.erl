@@ -30,7 +30,8 @@
 
 %% API Exports
 
--export([start/1, kill/1, kill/2]).
+-export([start_link/1, start/1, start_permanent/1,
+         kill/2, kill/3, kill_wait/2, kill_wait/3]).
 
 %% OTP gen_server Exports
 
@@ -41,14 +42,27 @@
 %% Public API
 %%
 
-start(Killer) ->
+start_permanent(Killer) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Killer], []).
 
-kill(Targets) ->
-    kill(Targets, infinity).
+start_link(Killer) ->
+    gen_server:start_link(?MODULE, [Killer], []).
 
-kill(Targets, Timeout) ->
-    wait = gen_server:call(?MODULE, {kill, Targets}, Timeout),
+start(Killer) ->
+    gen_server:start(?MODULE, [Killer], []).
+
+kill_wait(Targets, Killer) ->
+    kill_wait(Targets, Killer, infinity).
+
+kill_wait(Targets, Killer, Timeout) ->
+    {ok, Server} = start(Killer),
+    kill(Targets, Server, Timeout).
+
+kill(Targets, Server) ->
+    kill(Targets, Server, infinity).
+
+kill(Targets, Server, Timeout) ->
+    wait = gen_server:call(Server, {kill, Targets}, Timeout),
     receive
         {_Ref, {ok, Killed}} ->
             case length(Killed) =:= length(Targets) of

@@ -32,7 +32,7 @@
 
 -export([behaviour_info/1]).
 -export([make_node/3]).
--export([node_id/2]).
+-export([node_id/2, node_data/1]).
 -export([start/3, stop/1, kill/1]).
 -export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
 -export([shutdown_and_wait/2, status/1]).
@@ -120,6 +120,10 @@ kill_and_wait(NodeRef) ->
 status(NodeRef) ->
     gen_server:call(NodeRef, status).
 
+-spec node_data(node_ref()) -> [{atom(), term()}].
+node_data(NodeRef) ->
+    gen_server:call(NodeRef, node_info_list).
+
 %% NB: this *MUST* run on the client
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     %% TODO: review whether this makes sense in light of the changes
@@ -151,7 +155,7 @@ status_check(Node) when is_atom(Node) ->
 %% OTP gen_server API
 %%
 
-init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
+init([NodeInfo=#'systest.node_info'{scope=Cluster, handler=Callback}]) ->
     process_flag(trap_exit, true),
 
     case catch( apply(Callback, start, [NodeInfo]) ) of
@@ -171,6 +175,7 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
                 Xtra -> [interact(NI2, In, HState) || In <- Xtra]
             end,
 
+            systest_watchdog:node_started(Cluster, self()),
             {ok, State};
         Error ->
             %% TODO: do NOT rely on callbacks returning a proper gen_server
@@ -228,6 +233,10 @@ interact(NI=#'systest.node_info'{handler=Handler}, Inputs, HState) ->
 handle_msg(Msg, State) ->
     handle_msg(Msg, State, noreply).
 
+handle_msg(node_info_list, State=#state{node=Node}, _ReplyTo) ->
+    Attrs = systest_node:info_node_info(fields) -- [config],
+    Info = [{K, get_node_info(K, Node)} || K <- Attrs],
+    {reply, Info, State};
 %% nodedown notifications
 handle_msg({nodedown, NodeId},
            SvrState=#state{activity_state=State,

@@ -31,13 +31,13 @@
          {read_concurrency, true},
          {write_concurrency, false}]).
 
--record(state, {cluster_table, node_table}).
+-record(state, {cluster_table, node_table, orphans_table}).
 
 -behaviour(gen_server).
 
 %% API Exports
 
--export([start/0, watch_cluster/2, watch_node/2]).
+-export([start/0, cluster_started/2, node_started/2]).
 
 %% OTP gen_server Exports
 
@@ -51,11 +51,11 @@
 start() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-watch_cluster(Id, Pid) ->
-    gen_server:call(?MODULE, {watch_cluster, Id, Pid}).
+cluster_started(Id, Pid) ->
+    gen_server:call(?MODULE, {cluster_started, Id, Pid}).
 
-watch_node(Cid, Pid) ->
-    gen_server:call(?MODULE, {watch_node, Cid, Pid}).
+node_started(Cid, Pid) ->
+    gen_server:call(?MODULE, {node_started, Cid, Pid}).
 
 %%
 %% OTP gen_server API
@@ -65,12 +65,15 @@ init([]) ->
     process_flag(trap_exit, true),
     CT = ets:new(cluster_table, [ordered_set|?ETS_OPTS]),
     NT = ets:new(node_table,    [duplicate_bag|?ETS_OPTS]),
-    {ok, #state{cluster_table=CT, node_table=NT}}.
+    OT = ets:new(orphans_table, [duplicate_bag|?ETS_OPTS]),
+    {ok, #state{cluster_table=CT, node_table=NT, orphans_table=OT}}.
 
 handle_call({watch_cluster, ClusterId, ClusterPid},
             _From, State=#state{cluster_table=CT}) ->
     case ets:insert_new(CT, {ClusterId, ClusterPid}) of
-        true  -> link(ClusterPid),
+        true  -> %% NB: we link to cluster pids so that we
+                 %% can be sure to know when and why they exit
+                 link(ClusterPid),
                  {reply, ok, State};
         false -> {reply, {error, clash}, State}
     end;
@@ -81,6 +84,8 @@ handle_call({watch_node, ClusterId, NodePid}, _From,
         [] ->
             {reply, {error, unknown_cluster}, State};
         [ClusterId] ->
+            %% NB: we do *not* link to nodes, as the cluster *should*
+            %% in theory be responsible for cleaning up its own nodes
             case ets:insert_new(NT, {{ClusterId, NodePid}}) of
                 false -> {reply, {error, duplicate_node}, State};
                 true  -> {reply, ok, State}
@@ -95,28 +100,44 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({'EXIT', Pid, normal},
-            State=#state{cluster_table=CT, node_table=NT}) ->
+            State=#state{cluster_table=CT, node_table=NT,
+                         orphans_table=OT}) ->
     case ets:match(CT, {'_', Pid}) of
         [Cluster] ->
             %% the cluster has exited normally - any nodes left
             %% alive are not supposed to be (they're orphans) and
-            %% therefore required shutting down before anything
+            %% so we report these as errors
+            Nodes = find_nodes(NT, Cluster),
+            report_orphans(Cluster, Nodes, OT),
+
             %% else happens....
             handle_down(Cluster, NT);
         [] ->
-            ok %% TODO: ........
+            ok
     end,
     {noreply, State}.
-
-handle_down({ClusterId, Pid}, NodeTable) ->
-    kill_wait(ets:match(NodeTable, {{ClusterId, '_'}})).
-
-kill_wait(Nodes) ->
-    [systest_node:kill(N) || N <- Nodes].
 
 terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%
+%% Private API
+%%
+
+report_orphans({ClusterId, _}, Nodes, OT) ->
+    ct:pal("watchdog detected orphaned nodes of dead cluster ~p: ~p~n",
+           [ClusterId, Nodes]),
+    ets:insert(OT, [{ClusterId, N} || N <- Nodes]).
+
+find_nodes(NodeTable, {ClusterId, _}) ->
+    ets:match(NodeTable, {{ClusterId, '_'}}).
+
+handle_down(Cluster, NodeTable) ->
+    kill_wait(find_nodes(NodeTable, Cluster)).
+
+kill_wait(Nodes) ->
+    systest_cleaner:kill_wait(Nodes, fun systest_node:kill/1).
 

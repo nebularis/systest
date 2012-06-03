@@ -30,7 +30,6 @@
 -module(systest_cli).
 
 -behaviour(systest_node).
--behaviour(gen_server).
 
 %% TODO: migrate to ?SYSTEST_LOG
 
@@ -151,7 +150,7 @@ handle_interaction(Data, _Node, Sh=#sh{port=Port}) ->
 %%                               {stop, NewNode, NewState}.
 handle_status(Node, Sh=#sh{rpc_enabled=true}) ->
     {reply, systest_node:status_check(Node#'systest.node_info'.id), Sh};
-handle_status(Node, Sh=#sh{rpc_enabled=false, state=ProgramState}) ->
+handle_status(_Node, Sh=#sh{rpc_enabled=false, state=ProgramState}) ->
     %% TODO: this is wrong - we should spawn and use gen_server:reply
     %%       especially in light of the potential delay in running ./stop
     case ProgramState of
@@ -207,7 +206,7 @@ handle_msg(sigkill, #'systest.node_info'{os_pid=OsPid},
            Sh=#sh{state=running}) ->
     systest:sigkill(OsPid),
     Sh#sh{state=killed};
-handle_msg({Port, {data, {_, Line}}}, Node,
+handle_msg({Port, {data, {_, Line}}}, _Node,
             Sh=#sh{port=Port, log=LogFd}) ->
     io:format(LogFd, "~s~n", [Line]),
     Sh;

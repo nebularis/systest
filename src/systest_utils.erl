@@ -27,13 +27,9 @@
 -include_lib("kernel/include/inet.hrl").
 
 -export([is_epmd_contactable/2, temp_dir/0]).
--export([node_to_plist/1, proplist_format/1]).
+-export([proplist_format/1]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
-
-node_to_plist(N) ->
-    Attrs = systest_node:info_node_info(fields) -- [private, config],
-    [{K, systest_node:get_node_info(K, N)} || K <- Attrs].
 
 proplist_format(L) ->
     lists:flatten(

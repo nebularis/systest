@@ -62,7 +62,7 @@ parameterised_eval_test_() ->
             Cfg = systest_config:eval("node.flags.start.environment",
                                       Config, [{callback, {node_info,
                                                     fun get_node_info/2}}]),
-            ?debugFmt("Cfg = ~p~n", [Cfg]),
+            % ?debugFmt("Cfg = ~p~n", [Cfg]),
             ?_assertMatch({"LOG_BASE", "/tmp/priv"},
                           lists:keyfind("LOG_BASE", 1, Cfg))
          end},

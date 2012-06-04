@@ -175,7 +175,6 @@ init([NodeInfo=#'systest.node_info'{scope=Cluster, handler=Callback}]) ->
                 Xtra -> [interact(NI2, In, HState) || In <- Xtra]
             end,
 
-            systest_watchdog:node_started(Cluster, self()),
             {ok, State};
         Error ->
             %% TODO: do NOT rely on callbacks returning a proper gen_server

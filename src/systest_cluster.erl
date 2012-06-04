@@ -163,6 +163,7 @@ start_host(Cluster, {Host, Nodes}=HostConf, Config) when is_atom(Host) andalso
 
 start_node(Node) ->
     {ok, NodeRef} = systest_node:start(Node),
+    systest_watchdog:node_started(Cluster, NodeRef),
     NodeRef.
 
 verify_host(Host) ->

@@ -139,10 +139,10 @@ init(Node=#'systest.node_info'{config=Config}) ->
 %% is handled generically by systest_node, so callback modules
 %% need only deal with more specific scenarios
 handle_interaction(_Data, _Node, Sh=#sh{port=detached}) ->
-    {{error, detached}, Sh};
+    {stop, {error, detached}, Sh};
 handle_interaction(Data, _Node, Sh=#sh{port=Port}) ->
     port_command(Port, Data, [nosuspend]),
-    {ok, Sh}.
+    {reply, ok, Sh}.
 
 %% @doc handles a status request from the server.
 %% handle_status(Node, State) -> {reply, Reply, NewNode, NewState} |

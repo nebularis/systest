@@ -36,3 +36,31 @@ export_all(Mod) ->
                                    ({_,1}) -> true;
                                    ({_,_}) -> false
                                end, Functions)].
+
+has_explicit_shutdown(Scope, Mod) ->
+    case Scope == Mod of
+        true ->
+            erlang:function_exported(Scope, end_per_suite, 1);
+        false ->
+            case is_testcase_function(Scope, Mod) of
+                true ->
+                    erlang:function_exported(Mod, end_per_testcase, 2);
+                false ->
+                    case is_group_function(Scope, Mod) of
+                        true ->
+                            erlang:function_exported(Mod, end_per_group, 2);
+                        false ->
+                            false
+                    end
+            end
+    end.
+
+is_testcase_function(Scope, Mod) ->
+    lists:member(Scope, Mod:all()).
+
+is_group_function(Scope, Mod) ->
+    case erlang:function_exported(Mod, groups, 0) of
+        false -> false;
+        true  -> lists:keymember(Scope, 1, Mod:groups())
+    end.
+

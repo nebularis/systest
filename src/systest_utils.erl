@@ -26,11 +26,27 @@
 
 -include_lib("kernel/include/inet.hrl").
 
--export([is_epmd_contactable/2, temp_dir/0]).
--export([proplist_format/1]).
+-export([is_epmd_contactable/2, temp_dir/0, make_node/1, make_node/2]).
+-export([proplist_format/1, strip_suite_suffix/1]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
 
+%% @doc make a valid node shortname from Name,
+%% using the current (local) hostname
+make_node(Name) ->
+    {ok, Hostname} = inet:gethostname(),
+    make_node(Name, list_to_atom(Hostname)).
+
+%% @doc make a node shortname from the supplied name and host atoms
+make_node(Name, Host) ->
+    list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
+
+%% @doc strip the "_SUITE" suffic from a ct test suite name
+strip_suite_suffix(Suite) ->
+    S = atom_to_list(Suite),
+    list_to_atom(re:replace(S, "_SUITE", "", [{return, list}])).
+
+%% @doc convert the 'proplist' L into a printable list
 proplist_format(L) ->
     lists:flatten(
         [begin

@@ -22,49 +22,59 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
--module(systest_stub).
-
--behaviour(systest_node).
-
--export([start/1, start_link/1, stop/1, kill/1]).
--export([status/1, interact/2]).
+-module(systest_event).
 
 -include("systest.hrl").
+-include_lib("common_test/include/ct_event.hrl").
 
--spec start(systest_node:node_info()) ->
-                            systest_node:node_info() | term().
-start(NI=#'systest.node_info'{host=Host, name=Name, flags=VmArgs}) ->
-    notify(start, NI).
+-export([init/1
+        ,handle_event/2
+        ,handle_call/2
+        ,handle_info/2
+        ,terminate/2
+        ,code_change/3]).
 
--spec start_link(systest_node:node_info()) ->
-                            systest_node:node_info() | term().
-start_link(NI) ->
-    notify(start_link, NI).
+init([]) ->
+    {ok, []}.
 
--spec stop(systest_node:node_info()) -> 'ok'.
-stop(NI) ->
-    notify(stop, Node).
-
--spec kill(systest_node:node_info()) -> 'ok'.
-kill(Node) ->
-    notify(kill, Node).
-
--spec status(systest_node:node_info()) -> 'nodeup' | {'nodedown', term()}.
-status(#'systest.node_info'{id=Node}) ->
-    gen_event:call(systest_stub_server, Node).
-
--spec interact(systest_node:node_info(),
-               {module(), atom(), [term()]}) -> term().
-interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}) ->
-    .
+handle_event(#event{name=tc_done,
+                    data={Suite, end_per_suite, _Result}}, State) ->
+    systest_watchdog:force_stop(Suite),
+    {ok, State};
+handle_event(#event{name=tc_done,
+                    data={_Suite, {end_per_group, Group, _}, _Result}},
+             State) ->
+    systest_watchdog:force_stop(Group),
+    {ok, State};
+handle_event(#event{name=tc_done,
+                    data={_Suite, Func, _Result}},
+            State) when is_atom(Func) ->
+    systest_watchdog:force_stop(Func),
+    {ok, State};
+handle_event(_Message, State) ->
+    {ok, State}.
 
 %%
-%% Private API
+%% @private
 %%
+handle_call(_, State) ->
+    {ok, ignored, State}.
 
-on_start(NI, {ok, Node}) ->
-    OsPid = rpc:call(Node, os, getpid, []),
-    NI#'systest.node_info'{owner=self(), os_pid=OsPid, id=Node};
-on_start(_, Error) ->
-    Error.
+%%
+%% @private
+%%
+handle_info(_Info, State) ->
+    {ok, State}.
+
+%%
+%% @private
+%%
+terminate(_Reason, _State) ->
+    ok.
+
+%%
+%% @private
+%%
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 

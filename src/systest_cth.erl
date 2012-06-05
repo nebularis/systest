@@ -27,6 +27,21 @@
 -include("systest.hrl").
 -include_lib("common_test/include/ct.hrl").
 
+-export([id/1, init/2]).
+-export([pre_init_per_suite/3]).
+-export([post_end_per_suite/4]).
+
+-export([pre_init_per_group/3]).
+-export([post_end_per_group/4]).
+
+-export([pre_init_per_testcase/3]).
+-export([post_end_per_testcase/4]).
+
+% -export([on_tc_fail/3]).
+% -export([on_tc_skip/3]).
+
+-export([terminate/1]).
+
 -record(state, {
     auto_start = false      :: boolean(),
     data       = dict:new() :: dict()
@@ -38,17 +53,71 @@ id(_Opts) ->
 
 %% @doc Always called before any other callback function. Use this to initiate
 %% any common state.
-init(systest, Opts) ->
+init(systest, _Opts) ->
     case application:start(systest, permanent) of
         {error, {already_started, systest}} -> systest:reset();
         {error, _Reason}=Err                -> Err;
         ok                                  -> ok
     end,
-    {ok, #state{auto_start=application:get_env(systest, auto_start)}}.
+    AutoStart = case application:get_env(systest, auto_start) of
+                    undefined -> true;
+                    Value     -> Value
+                end,
+    {ok, #state{auto_start=AutoStart}}.
 
 %% @doc Called before init_per_suite is called, this code might start a
 %% cluster, if one is configured for this suite.
+pre_init_per_suite(_Suite, Config, State=#state{auto_start=false}) ->
+    {Config, State};
 pre_init_per_suite(Suite, Config, State) ->
-    {Config, State}.
+    ct:pal("pre_init_per_suite: maybe start ~p", [Suite]),
+    {systest:start_suite(Suite, Config), State}.
 
+post_end_per_suite(_Suite, Config, Result, State) ->
+    %% TODO: check and see whether there *is* actually an active cluster
+    case ?CONFIG(active, Config, undefined) of
+        undefined ->
+            ct:pal("no configured suite to stop~n"),
+            {Result, State};
+        ClusterPid ->
+            ct:pal("stopping ~p~n", [ClusterPid]),
+            process_flag(trap_exit, true),
+            ct:pal("Stop State = ~p~n", [catch(systest_cluster:stop(ClusterPid))]),
+            process_flag(trap_exit, false),
+            ct:pal("stopped.~n"),
+            {Result, State}
+    end.
+
+%% @doc Called before each init_per_group.
+pre_init_per_group(_Group, Config, State=#state{auto_start=false}) ->
+    {Config, State};
+pre_init_per_group(Group, Config, State) ->
+    {systest:start(Group, Config), State}.
+
+post_end_per_group(Group, Config, Result, State) ->
+    case ?CONFIG(Group, Config, undefined) of
+        undefined ->
+            {Result, State};
+        ClusterPid ->
+            {systest_cluster:stop(ClusterPid), State}
+    end.
+
+%% @doc Called before each test case.
+pre_init_per_testcase(_TC, Config, State=#state{auto_start=false}) ->
+    {Config, State};
+pre_init_per_testcase(TC, Config, State) ->
+    {systest:start(TC, Config), State}.
+
+post_end_per_testcase(TC, Config, Return, State) ->
+    %% TODO: handle {save_config, Config} return values in st:stop
+    ct:pal("processing post_end_per_testcase: ~p: ~p~n", [TC, Return]),
+    case ?CONFIG(TC, Config, undefined) of
+        undefined ->
+            {Return, State};
+        ClusterPid ->
+            {systest_cluster:stop(ClusterPid), State}
+    end.
+
+terminate(_State) ->
+    ok.
 

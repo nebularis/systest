@@ -41,8 +41,11 @@ all() ->
 init_per_suite(Config) ->
     Config.
 
-end_per_suite(Config) ->
-    {save_config, Config}.
+end_per_suite(_Config) ->
+    ok.
 
-
+suite_nodes_should_be_up_and_running(_Config) ->
+    ?assertEqual(pong, net_adm:ping(systest_utils:make_node(red))),
+    ?assertEqual(pong, net_adm:ping(systest_utils:make_node(blue))),
+    ok.
 

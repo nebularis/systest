@@ -26,8 +26,8 @@
 
 -include("systest.hrl").
 
--export([start/0, sigkill/1]).
--export([start_suite/2, stop_suite/2, start/2, stop/2]).
+-export([start/0, reset/0, sigkill/1]).
+-export([start_suite/2, stop_scope/1, start/2, stop/1]).
 -export([active_cluster/1, clusters/1, cluster_nodes/1]).
 -export([cluster_config/1]).
 -export([interact/2, write_pid_file/1, write_pid_file/2]).
@@ -41,19 +41,22 @@
 start() ->
     application:start(?MODULE).
 
+reset() ->
+    io:format(user, "RESETING SYSTEST......~n", []).
+
 %% startup/shutdown
 
 start_suite(Suite, Config) ->
-    start(strip_suite_suffix(Suite), Config).
+    start(systest_utils:strip_suite_suffix(Suite), Config).
 
-stop_suite(Suite, Config) ->
-    stop(strip_suite_suffix(Suite), Config).
+stop_scope(Scope) when is_atom(Scope) ->
+    systest_watchdog:force_stop(Scope).
 
 start(Scope, Config) ->
     systest_cluster:start(Scope, Config).
 
-stop(Scope, Config) ->
-    systest_cluster:stop(Scope, Config).
+stop(Scope) when is_pid(Scope) ->
+    systest_cluster:stop(Scope).
 
 %% interactions
 
@@ -97,6 +100,3 @@ cluster_config(Scope) ->
 %    SysTestPath = filename:absname(filename:dirname(code:which(systest))),
 %    [{flags, "-pa " ++ SysTestPath ++ " " ++ VmFlags}];
 
-strip_suite_suffix(Suite) ->
-    S = atom_to_list(Suite),
-    list_to_atom(re:replace(S, "_SUITE", "", [{return, list}])).

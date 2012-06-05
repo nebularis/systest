@@ -3,9 +3,14 @@
 %% ----------------------------------------------------------------------------
 %%
 %% Copyright (c) 2005 - 2012 Nebularis.
+%% Copyright (c) 2010 Dave Smith (dizzyd@dizzyd.com).
+%%
+%% Some portions of the code taken from sh (c) 2005 - 2012 Nebularis
+%% Some portions of the code taken from rebar (c) 2010 Dave Smith
+%% Some portions of the code taken from retest (c) 2010 Dave Smith
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
-%% of this software and associated documentation files (the "Software"), to deal
+%% of this software and associated documentation files (the "Software"), deal
 %% in the Software without restriction, including without limitation the rights
 %% to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 %% copies of the Software, and to permit persons to whom the Software is
@@ -18,17 +23,17 @@
 %% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 %% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 %% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-%% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-%% THE SOFTWARE.
-%% -----------------------------------------------------------------------------
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+%% IN THE SOFTWARE.
+%% ----------------------------------------------------------------------------
 -module(systest_node_SUITE).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("../include/systest.hrl").
 -compile(export_all).
 
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %% Function: suite() -> Info
 %%
 %% Info = [tuple()]
@@ -39,10 +44,10 @@
 %%
 %% Note: The suite/0 function is only meant to be used to return
 %% default data values, not perform any other operations.
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 suite() -> [{timetrap, {seconds, 20}}].
 
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %% Function: groups() -> [Group]
 %%
 %% Group = {GroupName,Properties,GroupsAndTestCases}
@@ -62,10 +67,10 @@ suite() -> [{timetrap, {seconds, 20}}].
 %% N = integer() | forever
 %%
 %% Description: Returns a list of test case group definitions.
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 groups() -> [].
 
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %% Function: all() -> GroupsAndTestCases
 %%
 %% GroupsAndTestCases = [{group,GroupName} | TestCase]
@@ -78,7 +83,7 @@ groups() -> [].
 %%              are to be executed.
 %%
 %%      NB: By default, we export all 1-arity user defined functions
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 all() ->
     [ {exports, Functions} | _ ] = ?MODULE:module_info(),
     [ FName || {FName, _} <- lists:filter(
@@ -90,7 +95,7 @@ all() ->
                                    ({_,_}) -> false
                                end, Functions)].
 
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %% Function: init_per_suite(Config0) ->
 %%               Config1 | {skip,Reason} | {skip_and_save,Reason,Config1}
 %%
@@ -103,22 +108,22 @@ all() ->
 %%
 %% Note: This function is free to add any key/value pairs to the Config
 %% variable, but should NOT alter/remove any existing entries.
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 init_per_suite(Config) ->
     systest:start_suite(?MODULE, Config).
 
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %% Function: end_per_suite(Config0) -> void() | {save_config,Config1}
 %%
 %% Config0 = Config1 = [tuple()]
 %%   A list of key/value pairs, holding the test case configuration.
 %%
 %% Description: Cleanup after the suite.
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 end_per_suite(Config) ->
     systest:stop_suite(?MODULE, Config).
 
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %% Function: init_per_group(GroupName, Config0) ->
 %%               Config1 | {skip,Reason} | {skip_and_save,Reason,Config1}
 %%
@@ -130,11 +135,11 @@ end_per_suite(Config) ->
 %%   The reason for skipping all test cases and subgroups in the group.
 %%
 %% Description: Initialization before each test case group.
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 init_per_group(Group, Config) ->
     systest:start(Group, Config).
 
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %% Function: end_per_group(GroupName, Config0) ->
 %%               void() | {save_config,Config1}
 %%
@@ -144,11 +149,11 @@ init_per_group(Group, Config) ->
 %%   A list of key/value pairs, holding configuration data for the group.
 %%
 %% Description: Cleanup after each test case group.
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 end_per_group(Group, Config) ->
     systest:stop(Group, Config).
 
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %% Function: init_per_testcase(TestCase, Config0) ->
 %%               Config1 | {skip,Reason} | {skip_and_save,Reason,Config1}
 %%
@@ -163,11 +168,11 @@ end_per_group(Group, Config) ->
 %%
 %% Note: This function is free to add any key/value pairs to the Config
 %% variable, but should NOT alter/remove any existing entries.
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 init_per_testcase(TestCase, Config) ->
     systest:start(TestCase, Config).
 
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 %% Function: end_per_testcase(TestCase, Config0) ->
 %%               void() | {save_config,Config1} | {fail,Reason}
 %%
@@ -179,7 +184,7 @@ init_per_testcase(TestCase, Config) ->
 %%   The reason for failing the test case.
 %%
 %% Description: Cleanup after each test case.
-%%--------------------------------------------------------------------
+%% ----------------------------------------------------------------------------
 end_per_testcase(TestCase, Config) ->
     systest:stop(TestCase, Config).
 

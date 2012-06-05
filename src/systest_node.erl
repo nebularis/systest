@@ -33,7 +33,7 @@
 -export([behaviour_info/1]).
 -export([make_node/3]).
 -export([node_id/2, node_data/1]).
--export([start/3, stop/1, kill/1]).
+-export([start/1, start/3, stop/1, kill/1]).
 -export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
 -export([shutdown_and_wait/2, status/1]).
 
@@ -87,12 +87,29 @@ make_node(Scope, Node, Config) ->
     make_node([{ct, Config}] ++ Config ++ node_config(Scope, Node)).
 
 -spec start(atom(), atom(),
-            list(tuple(atom(), term()))) -> {'ok', pid()} | {error, term()}.
+            list(tuple(atom(), term()))) -> {'ok', pid()} | {'error', term()}.
 start(Scope, Node, Config) ->
+
     start(make_node(Scope, Node, Config)).
 
-%% TODO: everything below this point is probably
-%% somewhat broken, up until the gen server API
+-spec start(node_info()) -> {'ok', pid()} | {'error', term()}.
+start(NodeInfo=#'systest.node_info'{handler=Handler, host=Host,
+                                    name=Name, config=BaseConf}) ->
+    ct:pal("Starting ~p on ~p~n", [Name, Host]),
+
+    %% are there hidden traps here, when (for example) we're running
+    %% embedded in an archive/escript or similarly esoteric situations?
+    %% TODO: perhaps catch(Handler:id(NodeInfo)) would be safer!?
+    code:ensure_loaded(Handler),
+
+    Id = case erlang:function_exported(Handler, id, 1) of
+             true  -> Handler:id(NodeInfo);
+             false -> node_id(Host, Name)
+         end,
+    NI = set_node_info([{id, Id},
+                        {config,[{node, NodeInfo}|BaseConf]}], NodeInfo),
+
+    gen_server:start_link(?MODULE, [NI], []).
 
 -spec stop(node_ref()) -> ok.
 stop(NodeRef) ->
@@ -155,10 +172,10 @@ status_check(Node) when is_atom(Node) ->
 %% OTP gen_server API
 %%
 
-init([NodeInfo=#'systest.node_info'{scope=Cluster, handler=Callback}]) ->
+init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
     process_flag(trap_exit, true),
 
-    case catch( apply(Callback, start, [NodeInfo]) ) of
+    case catch( apply(Callback, init, [NodeInfo]) ) of
         {ok, NI2, HState} when is_record(NI2, 'systest.node_info') ->
 
             %% TODO: validate that these succeed and shutdown when they don't
@@ -204,23 +221,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private API
 %%
 
-start(NodeInfo=#'systest.node_info'{handler=Handler, host=Host,
-                                    name=Name, config=BaseConf}) ->
-    ct:pal("Starting ~p on ~p~n", [Name, Host]),
 
-    %% are there hidden traps here, when (for example) we're running
-    %% embedded in an archive/escript or similarly esoteric situations?
-    %% TODO: perhaps catch(Handler:id(NodeInfo)) would be safer!?
-    code:ensure_loaded(Handler),
-
-    Id = case erlang:function_exported(Handler, id, 1) of
-             true  -> Handler:id(NodeInfo);
-             false -> node_id(Host, Name)
-         end,
-    NI = set_node_info([{id, Id},
-                        {config,[{node, NodeInfo}|BaseConf]}], NodeInfo),
-
-    gen_server:start_link(?MODULE, [NI], []).
 
 interact(Node, {local, Mod, Func, Args}, _) ->
     apply(Mod, Func, [Node|Args]);

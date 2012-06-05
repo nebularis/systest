@@ -1,14 +1,12 @@
 
 {logdir, "{{ tmpdir }}/systest/suites/cli/logs"}.
 {config, "{{ base_dir }}/resources/systest_cli.config"}.
+{config, "{{ base_dir }}/resources/systest_supervision.config"}.
 
 {alias, test, "{{ base_dir }}/test"}.
 % {suites, test, systest_cli_SUITE}.
-{cases, test, systest_cli_SUITE,
-    [local_and_global_scope_configuration_handling,
-     starting_and_stopping_nodes,
-     killing_nodes]}.
+{cases, test, systest_supervision_SUITE, all}.
 
-{ct_hooks, [cth_log_redirect]}.
+{ct_hooks, [cth_log_redirect, systest_cth]}.
 {enable_builtin_hooks, true}.
 

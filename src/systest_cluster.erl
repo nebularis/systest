@@ -26,7 +26,7 @@
 
 -behaviour(gen_server).
 
--export([start/1, start/2, stop/1, stop/2]).
+-export([start/1, start/2, start_link/2, stop/1, stop/2]).
 -export([check_config/2, status/1, print_status/1, log_status/1]).
 
 %% OTP gen_server Exports
@@ -44,9 +44,15 @@ start(Config) ->
     start(global, Config).
 
 start(ClusterId, Config) ->
+    start_it(start, ClusterId, Config).
+
+start_link(ClusterId, Config) ->
+    start_it(start_link, ClusterId, Config).
+
+start_it(How, ClusterId, Config) ->
     ct:pal("Processing cluster info for ~p~n", [ClusterId]),
-    case with_cluster(ClusterId, fun start_host/3, Config) of
-        noconfig ->
+    case apply(gen_server, How, [?MODULE, [ClusterId, Config], []]) of
+        {error, noconfig} ->
             Config;
         {ok, Pid} ->
             Config2 = systest_config:ensure_value(?MODULE, Pid, Config),
@@ -84,17 +90,18 @@ init([Id, Config]) ->
 
 handle_call(status, _From, State=#'systest.cluster'{nodes=Nodes}) ->
     {reply, [{N, systest_node:status(N)} || N <- Nodes], State};
-handle_call({stop, Timeout}, _From, State) ->
-    shutdown(State, Timeout);
-handle_call(stop, _From, State) ->
-    shutdown(State, infinity);
+handle_call({stop, Timeout}, From, State) ->
+    shutdown(State, Timeout, From);
+handle_call(stop, From, State) ->
+    shutdown(State, infinity, From);
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'EXIT', _Pid, normal}, State) ->
+handle_info({'EXIT', Pid, normal}, State=#'systest.cluster'{name=Cluster}) ->
+    systest_watchdog:node_stopped(Cluster, Pid),
     {noreply, State};
 handle_info({'EXIT', Pid, Reason}, State) ->
     {stop, {nodedown, node_from_pid(Pid, State), Reason}, State}.
@@ -109,16 +116,28 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal API
 %%
 
-shutdown(State=#'systest.cluster'{nodes=Nodes}, Timeout) ->
+shutdown(State=#'systest.cluster'{nodes=Nodes}, Timeout, ReplyTo) ->
     %% NB: unlike systest_node:shutdown_and_wait/2, this does not have to
     %% block and quite deliberately so - we want 'timed' shutdown when a
     %% common test hook is in effect unless the user prevents this...
+    %%
+    %% Another thing to note here is that systest_cleaner runs the kill_wait
+    %% function in a different process. If we put a selective receive block
+    %% here, we might well run into unexpected message ordering that could
+    %% leave us in an inconsistent state or even deadlock on the wrong kind
+    %% of input message.
+    ct:pal("killing nodes: ~p~n", [Nodes]),
     case systest_cleaner:kill_wait(Nodes, fun systest_node:stop/1, Timeout) of
         ok ->
+            ct:pal("stopping cluster...~n"),
+            gen_server:reply(ReplyTo, ok),
             {stop, normal, State};
         {error, {killed, StoppedOk}} ->
-            {stop, {halt_error, orphans, Nodes -- StoppedOk}, State};
+            Err = {halt_error, orphans, Nodes -- StoppedOk},
+            gen_server:reply(ReplyTo, Err),
+            {stop, Err, State};
         Other ->
+            gen_server:reply(ReplyTo, {error, Other}),
             {stop, {halt_error, Other}, State}
     end.
 
@@ -159,9 +178,10 @@ start_host(Cluster, {Host, Nodes}=HostConf, Config) when is_atom(Host) andalso
         true  -> verify_host(Host);
         false -> ok
     end,
-    [start_node(Node) || Node <- build_nodes(Cluster, HostConf, Config)].
+    [start_node(Cluster, Node) ||
+            Node <- build_nodes(Cluster, HostConf, Config)].
 
-start_node(Node) ->
+start_node(Cluster, Node) ->
     {ok, NodeRef} = systest_node:start(Node),
     systest_watchdog:node_started(Cluster, NodeRef),
     NodeRef.

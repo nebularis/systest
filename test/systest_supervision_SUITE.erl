@@ -33,10 +33,17 @@
 -include("../include/systest.hrl").
 -compile(export_all).
 
-suite() -> [{timetrap, {seconds, 60}}].
+suite() -> [{timetrap, {seconds, 200}}].
 
 all() ->
-    systest_suite:export_all(?MODULE).
+    [suite_nodes_should_be_up_and_running,
+     end_per_tc_can_manage_shutdown,
+     {group, inter_testcase_cleanup}].
+
+groups() ->
+    [{inter_testcase_cleanup, [sequence],
+      [end_per_tc_automation,
+       after_end_per_tc_automation]}].
 
 init_per_suite(Config) ->
     Config.
@@ -44,8 +51,51 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
+init_per_testcase(_TC, Config) ->
+    Config.
+
+end_per_testcase(TC=init_per_tc_manages_shutdown, Config) ->
+    ct:pal("explicitly killing cluster ~p~n", [TC]),
+    Pid = ?CONFIG(active, Config),
+    systest:stop(Pid),
+    ct:pal("explicit stop of ~p has returned (live=~p)~n",
+           [Pid, erlang:is_process_alive(Pid)]),
+    ok;
+end_per_testcase(_TC, _Config) ->
+    ok.
+
 suite_nodes_should_be_up_and_running(_Config) ->
     ?assertEqual(pong, net_adm:ping(systest_utils:make_node(red))),
     ?assertEqual(pong, net_adm:ping(systest_utils:make_node(blue))),
     ok.
+
+end_per_tc_can_manage_shutdown(Config) ->
+    systest_cluster:print_status(?CONFIG(active, Config)),
+    ok.
+
+end_per_tc_automation(Config) ->
+    %% this is a *deliberately* oversimplified test case, which
+    %% exists simply to verify that the 'end_per_tc_automation'
+    %% test cluster *was* up here, and will *not* be later on
+    Pid = ?CONFIG(active, Config),
+    Status = systest_cluster:status(Pid),
+    ?assertMatch([{_, 'nodeup'},
+                  {_, 'nodeup'},
+                  {_, 'nodeup'}], Status),
+    %% common test makes us declare inter-test dependencies
+    %% specifically, accepting that their impossible to remove
+    %% in some cases - this test (of how two test cases in a
+    %% managed test framework will interact) being a perfect example
+    {save_config, [{previous_active, Pid}]}.
+
+after_end_per_tc_automation() ->
+    [{userdata,[{doc, "Runs after end_per_tc_automation, ensuring that the"
+                      " cluster set up during that test has been"
+                      " automatically torn down by our ct_hooks."}]}].
+
+after_end_per_tc_automation(Config) ->
+    {end_per_tc_automation, SavedConfig} = ?config(saved_config, Config),
+    ClusterPid = ?CONFIG(previous_active, SavedConfig),
+    ct:pal("is end_per_tc_automation still alive!?...~n"),
+    ?assertEqual(false, erlang:is_process_alive(ClusterPid)).
 

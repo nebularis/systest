@@ -55,7 +55,7 @@ start_it(How, ClusterId, Config) ->
         {error, noconfig} ->
             Config;
         {ok, Pid} ->
-            Config2 = systest_config:ensure_value(?MODULE, Pid, Config),
+            Config2 = systest_config:ensure_value(ClusterId, Pid, Config),
             systest_config:replace_value(active, Pid, Config2)
     end.
 
@@ -84,8 +84,11 @@ check_config(Cluster, Config) ->
 init([Id, Config]) ->
     process_flag(trap_exit, true),
     case with_cluster(Id, fun start_host/3, Config) of
-        noconfig -> {stop, noconfig};
-        Cluster  -> {ok, Cluster}
+        noconfig ->
+            {stop, noconfig};
+        Cluster ->
+            systest_watchdog:cluster_started(Id, self()),
+            {ok, Cluster}
     end.
 
 handle_call(status, _From, State=#'systest.cluster'{nodes=Nodes}) ->
@@ -116,7 +119,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal API
 %%
 
-shutdown(State=#'systest.cluster'{nodes=Nodes}, Timeout, ReplyTo) ->
+shutdown(State=#'systest.cluster'{name=Id, nodes=Nodes}, Timeout, ReplyTo) ->
     %% NB: unlike systest_node:shutdown_and_wait/2, this does not have to
     %% block and quite deliberately so - we want 'timed' shutdown when a
     %% common test hook is in effect unless the user prevents this...
@@ -130,6 +133,7 @@ shutdown(State=#'systest.cluster'{nodes=Nodes}, Timeout, ReplyTo) ->
     case systest_cleaner:kill_wait(Nodes, fun systest_node:stop/1, Timeout) of
         ok ->
             ct:pal("stopping cluster...~n"),
+            [systest_watchdog:node_stopped(Id, N) || N <- Nodes],
             gen_server:reply(ReplyTo, ok),
             {stop, normal, State};
         {error, {killed, StoppedOk}} ->
@@ -161,9 +165,9 @@ node_from_pid(Pid, #'systest.cluster'{nodes=Nodes}) ->
 
 %% TODO: make a Handler:status call to get detailed information back...
 print_status_info({Node, Status}) ->
-    Lines = [{status, Status}|systest_utils:node_to_plist(Node)],
+    Lines = [{status, Status}|systest_node:node_data(Node)],
     lists:flatten("Node Info~n" ++ systest_utils:proplist_format(Lines) ++
-                  "~n----------------------------------------------------").
+                  "~n----------------------------------------------------~n").
 
 build_nodes(Cluster, {Host, Nodes}, Config) ->
     [systest_node:make_node(Cluster, N, [{host, Host}, {scope, Cluster},

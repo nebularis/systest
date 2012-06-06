@@ -73,18 +73,16 @@ pre_init_per_suite(Suite, Config, State) ->
     ct:pal("pre_init_per_suite: maybe start ~p", [Suite]),
     {systest:start_suite(Suite, Config), State}.
 
-post_end_per_suite(_Suite, Config, Result, State) ->
+post_end_per_suite(Suite, Config, Result, State) ->
     %% TODO: check and see whether there *is* actually an active cluster
-    case ?CONFIG(active, Config, undefined) of
+    case ?CONFIG(Suite, Config, undefined) of
         undefined ->
             ct:pal("no configured suite to stop~n"),
             {Result, State};
         ClusterPid ->
             ct:pal("stopping ~p~n", [ClusterPid]),
-            process_flag(trap_exit, true),
-            ct:pal("Stop State = ~p~n", [catch(systest_cluster:stop(ClusterPid))]),
-            process_flag(trap_exit, false),
-            ct:pal("stopped.~n"),
+            ct:pal("stopped ~p~n",
+                   [systest_cluster:stop(ClusterPid)]),
             {Result, State}
     end.
 
@@ -106,17 +104,22 @@ post_end_per_group(Group, Config, Result, State) ->
 pre_init_per_testcase(_TC, Config, State=#state{auto_start=false}) ->
     {Config, State};
 pre_init_per_testcase(TC, Config, State) ->
+    ct:pal("~p handling pre_init_per_testcase [~p]~n", [?MODULE, TC]),
     {systest:start(TC, Config), State}.
 
 post_end_per_testcase(TC, Config, Return, State) ->
     %% TODO: handle {save_config, Config} return values in st:stop
-    ct:pal("processing post_end_per_testcase: ~p: ~p~n", [TC, Return]),
+    ct:pal("processing post_end_per_testcase: ~p: ~p~n", [TC, Config]),
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
             {Return, State};
         ClusterPid ->
-            {systest_cluster:stop(ClusterPid), State}
+            ct:pal("stopping ~p~n", [ClusterPid]),
+            ct:pal("stopped ~p~n",
+                   [systest_cluster:stop(ClusterPid)]),
+            {Return, State}
     end.
+
 
 terminate(_State) ->
     ok.

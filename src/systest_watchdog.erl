@@ -27,7 +27,7 @@
 -include("systest.hrl").
 
 -define(ETS_OPTS,
-        [private, named_table,
+        [named_table,
          {read_concurrency, true},
          {write_concurrency, false}]).
 
@@ -58,17 +58,28 @@ cluster_started(Id, Pid) ->
 force_stop(Id) ->
     case gen_server:call(?MODULE, {force_stop, Id}) of
         {error, regname, Id} ->
-            ct:pal("ignoring stop for deceased cluster ~p~n",
-                   [Id]);
+            ct:pal("ignoring stop for deceased cluster ~p~n", [Id]);
         Ok ->
             Ok
     end.
 
 node_started(Cid, Pid) ->
-    gen_server:call(?MODULE, {node_started, Cid, Pid}).
+    %% NB: we do *not* link to nodes, as the cluster *should*
+    %% in theory be responsible for cleaning up its own nodes
+    %%
+    %% NB: if we blocked on accessing the node_table, we would
+    %% very likely deadlock the system - just when automated
+    %% cleanup is meant to be leaving a clean environment behind
+    case ets:insert_new(node_table, {{Cid, Pid}}) of
+        false -> {error, duplicate_node};
+        true  -> ok
+    end.
 
 node_stopped(Cid, Pid) ->
-    gen_server:call(?MODULE, {node_stopped, Cid, Pid}).
+    %% NB: if we blocked on accessing the node_table, we would
+    %% very likely deadlock the system - just when automated
+    %% cleanup is meant to be leaving a clean environment behind
+    ets:delete(node_table, {Cid, Pid}).
 
 exceptions(ClusterId) ->
     gen_server:call(?MODULE, {exceptions, ClusterId}).
@@ -79,25 +90,28 @@ exceptions(ClusterId) ->
 
 init([]) ->
     process_flag(trap_exit, true),
-    CT = ets:new(cluster_table,   [ordered_set|?ETS_OPTS]),
-    NT = ets:new(node_table,      [duplicate_bag|?ETS_OPTS]),
-    OT = ets:new(exception_table, [duplicate_bag|?ETS_OPTS]),
+    CT = ets:new(cluster_table,   [ordered_set, private|?ETS_OPTS]),
+    NT = ets:new(node_table,      [duplicate_bag, public|?ETS_OPTS]),
+    OT = ets:new(exception_table, [duplicate_bag, private|?ETS_OPTS]),
     {ok, #state{cluster_table=CT, node_table=NT, exception_table=OT}}.
 
 handle_call({force_stop, ClusterId}, _From,
             State=#state{cluster_table=CT}) ->
     case ets:lookup(CT, ClusterId) of
         [] ->
+            ct:pal("~p not found in ~p~n", [ClusterId, ets:tab2list(CT)]),
             {reply, {error, regname, ClusterId}, State};
         [{ClusterId, Pid}] ->
             systest_cluster:stop(Pid),
+            ct:pal("force stop complete~n"),
             {reply, ok, State}
     end;
 handle_call({exceptions, ClusterId}, _From,
             State=#state{exception_table=ET}) ->
-    {reply, ets:match(ET, {ClusterId, '_', '_'}), State};
+    {reply, ets:match_object(ET, {ClusterId, '_', '_'}), State};
 handle_call({cluster_started, ClusterId, ClusterPid},
             _From, State=#state{cluster_table=CT}) ->
+    ct:pal("cluster ~p has started...~n", [ClusterId]),
     case ets:insert_new(CT, {ClusterId, ClusterPid}) of
         true  -> %% NB: we link to cluster pids so that we
                  %% can be sure to know when and why they exit
@@ -105,24 +119,6 @@ handle_call({cluster_started, ClusterId, ClusterPid},
                  {reply, ok, State};
         false -> {reply, {error, clash}, State}
     end;
-handle_call({node_started, ClusterId, NodePid}, _From,
-            State=#state{cluster_table=CT,
-                         node_table=NT}) ->
-    case ets:member(CT, ClusterId) of
-        false ->
-            {reply, {error, unknown_cluster}, State};
-        true  ->
-            %% NB: we do *not* link to nodes, as the cluster *should*
-            %% in theory be responsible for cleaning up its own nodes
-            case ets:insert_new(NT, {{ClusterId, NodePid}}) of
-                false -> {reply, {error, duplicate_node}, State};
-                true  -> {reply, ok, State}
-            end
-    end;
-handle_call({node_stopped, ClusterId, NodePid}, _From,
-            State=#state{node_table=NT}) ->
-    ets:delete(NT, {ClusterId, NodePid}),
-    {reply, ok, State};
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
@@ -132,8 +128,11 @@ handle_cast(_Msg, State) ->
 handle_info({'EXIT', Pid, normal},
             State=#state{cluster_table=CT, node_table=NT,
                          exception_table=ET}) ->
-    case ets:match(CT, {'_', Pid}) of
-        [Cluster] ->
+    case ets:match_object(CT, {'_', Pid}) of
+        [{ClusterId, _}=Cluster] ->
+            ct:pal("watchdog handling cluster (process) down"
+                   " event for ~p~n", [ClusterId]),
+
             %% the cluster has exited normally - any nodes left
             %% alive are not supposed to be (they're orphans) and
             %% so we report these as errors
@@ -142,15 +141,20 @@ handle_info({'EXIT', Pid, normal},
 
             %% else happens....
             handle_down(Cluster, NT);
-        [] ->
+        [[]] ->
+            ct:pal("cluster down even unhandled: no id for "
+                   "~p in ~p~n", [Pid, ets:tab2list(CT)]),
             ok
     end,
     {noreply, State};
 handle_info({'EXIT', Pid, Reason},
             State=#state{cluster_table=CT, node_table=NT,
                          exception_table=ET}) ->
-    case ets:match(CT, {'_', Pid}) of
+    case ets:match_object(CT, {'_', Pid}) of
         [{ClusterId, _}=Cluster] ->
+            ct:pal("watchdog handling cluster (process) down"
+                   " event for ~p~n", [ClusterId]),
+
             %% the cluster has crashed (reason /= normal)
             ets:insert(ET, [{ClusterId, crashed, Reason}]),
 
@@ -158,7 +162,9 @@ handle_info({'EXIT', Pid, Reason},
             %% in this case we don't register them as 'errors'
             %% because the cluster crash is the more immediate cause
             handle_down(Cluster, NT);
-        [] ->
+        [[]] ->
+            ct:pal("cluster down even unhandled: no id for "
+                   "~p in ~p~n", [Pid, ets:tab2list(CT)]),
             ok
     end,
     {noreply, State}.
@@ -173,17 +179,21 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private API
 %%
 
+report_orphans(_, [], _) ->
+    ok;
 report_orphans({ClusterId, _}, Nodes, ET) ->
     ct:pal("watchdog detected orphaned nodes of dead cluster ~p: ~p~n",
            [ClusterId, Nodes]),
     ets:insert(ET, [{ClusterId, orphan, N} || N <- Nodes]).
 
 find_nodes(NodeTable, {ClusterId, _}) ->
-    ets:match(NodeTable, {{ClusterId, '_'}}).
+    ets:match_object(NodeTable, {{ClusterId, '_'}}).
 
 handle_down(Cluster, NodeTable) ->
     kill_wait(find_nodes(NodeTable, Cluster)).
 
+kill_wait([]) ->
+    ct:pal("no nodes to kill~n");
 kill_wait(Nodes) ->
     systest_cleaner:kill_wait(Nodes, fun systest_node:kill/1).
 

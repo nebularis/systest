@@ -61,9 +61,9 @@ handle_interaction(_Data, _Node, State) ->
 %%                               {stop, NewNode, NewState}.
 handle_status(Node, State) ->
     case net_adm:ping(systest_node:get_node_info(id, Node)) of
-        ping ->
-            {reply, nodeup, State};
         pong ->
+            {reply, nodeup, State};
+        pang ->
             {reply, nodedown, State#state{runstate=rpc_down}}
     end.
 

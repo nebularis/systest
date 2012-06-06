@@ -64,10 +64,34 @@ systest(Config, _) ->
             {ok, SpecOutput} = transform_file(Spec, temp_dir(), Env),
             {ok, FinalSpec} = process_config_files(ScratchDir,
                                                    SpecOutput, Env),
+
+            maybe_compile(Config),
+
             FinalConfig = rebar_config:set(Config, ct_extra_params,
+                                           "-pa test-ebin " ++
+                                           "-no_auto_compile " ++
                                            "-spec " ++ FinalSpec ++
-                                          " -s systest start"),
+                                           " -s systest start"),
             rebar_core:process_commands([ct], FinalConfig)
+    end.
+
+maybe_compile(Config) ->
+    rebar_erlc_compiler:doterl_compile(compiler_config(Config), "test-ebin").
+
+compiler_config(Config) ->
+    ErlOpts = rebar_config:get_local(Config, erl_opts, []),
+    TestOpts = {src_dirs, ["test"]},
+    case lists:keyfind(src_dirs, 1, ErlOpts) of
+        false ->
+            rebar_config:set(Config, erl_opts, [TestOpts|ErlOpts]);
+        {src_dirs, Dirs} ->
+            case lists:member("test", Dirs) of
+                true->
+                    Config;
+                false ->
+                    Opts = lists:keydelete(src_dirs, 1, ErlOpts),
+                    rebar_config:set(Config, erl_opts, [TestOpts|Opts])
+            end
     end.
 
 process_config_files(ScratchDir, TempSpec, Env) ->

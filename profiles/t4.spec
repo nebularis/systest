@@ -3,10 +3,12 @@
 {config, "{{ base_dir }}/resources/systest_cli.config"}.
 {config, "{{ base_dir }}/resources/systest_supervision.config"}.
 
-{alias, test, "{{ base_dir }}/test"}.
-% {suites, test, systest_cli_SUITE}.
-{cases, test, systest_supervision_SUITE, all}.
+{alias, test, "{{ base_dir }}/test-ebin"}.
+{suites, test, systest_supervision_SUITE}.
+% {cases, test, systest_supervision_SUITE, all}.
 
-{ct_hooks, [cth_log_redirect, systest_cth]}.
+{ct_hooks, [cth_log_redirect,
+            {systest_supervision_cth, [], 0},
+            {systest_cth, [], 1000}]}.
 {enable_builtin_hooks, true}.
 

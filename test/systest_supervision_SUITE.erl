@@ -33,11 +33,16 @@
 -include("../include/systest.hrl").
 -compile(export_all).
 
+%%
+%% Config/Fixture Definitions
+%%
+
 suite() -> [{timetrap, {seconds, 200}}].
 
 all() ->
     [suite_nodes_should_be_up_and_running,
      end_per_tc_can_manage_shutdown,
+     should_fail,
      {group, inter_testcase_cleanup}].
 
 groups() ->
@@ -51,6 +56,12 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
+%% NB: this clause is *deliberately* used to trigger a failure...
+init_per_testcase(should_fail, Config) ->
+    Pid = ?CONFIG(active, Config),
+    true = erlang:is_process_alive(Pid),
+    systest:start(should_fail, Config),
+    throw(duplicate_cluster_created);
 init_per_testcase(_TC, Config) ->
     Config.
 
@@ -62,6 +73,20 @@ end_per_testcase(TC=init_per_tc_manages_shutdown, Config) ->
            [Pid, erlang:is_process_alive(Pid)]),
     ok;
 end_per_testcase(_TC, _Config) ->
+    ok.
+
+%%
+%% Test Case Definitions
+%%
+
+should_fail() ->
+    [{userdata, [{doc, "this testcase should never run, being simply "
+                       "a place-holder for an init_per_testcase that "
+                       "we expect to fail.\n"
+                       "The validation of this failure is performed in "
+                       "the systest_supervision_cth common test hook!"}]}].
+
+should_fail(_) ->
     ok.
 
 suite_nodes_should_be_up_and_running(_Config) ->

@@ -54,6 +54,8 @@ start(Killer) ->
 kill_wait(Targets, Killer) ->
     kill_wait(Targets, Killer, infinity).
 
+kill_wait([], _Killer, _Timeout) ->
+    no_targets;
 kill_wait(Targets, Killer, Timeout) ->
     {ok, Server} = start(Killer),
     kill(Targets, Server, Timeout).
@@ -61,6 +63,8 @@ kill_wait(Targets, Killer, Timeout) ->
 kill(Targets, Server) ->
     kill(Targets, Server, infinity).
 
+kill([], _Server, _Timeout) ->
+    no_targets;
 kill(Targets, Server, Timeout) ->
     wait = gen_server:call(Server, {kill, Targets}, Timeout),
     receive

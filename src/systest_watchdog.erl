@@ -27,8 +27,7 @@
 -include("systest.hrl").
 
 -define(ETS_OPTS,
-        [named_table,
-         {read_concurrency, true},
+        [{read_concurrency, true},
          {write_concurrency, false}]).
 
 -record(state, {cluster_table, node_table, exception_table}).
@@ -37,7 +36,7 @@
 
 %% API Exports
 
--export([start/0, cluster_started/2, exceptions/1,
+-export([start/0, cluster_started/2, exceptions/1, reset/0,
          node_started/2, node_stopped/2, force_stop/1]).
 
 %% OTP gen_server Exports
@@ -54,6 +53,9 @@ start() ->
 
 cluster_started(Id, Pid) ->
     gen_server:call(?MODULE, {cluster_started, Id, Pid}).
+
+reset() ->
+    gen_server:call(?MODULE, reset).
 
 force_stop(Id) ->
     case gen_server:call(?MODULE, {force_stop, Id}) of
@@ -91,10 +93,18 @@ exceptions(ClusterId) ->
 init([]) ->
     process_flag(trap_exit, true),
     CT = ets:new(cluster_table,   [ordered_set, private|?ETS_OPTS]),
-    NT = ets:new(node_table,      [duplicate_bag, public|?ETS_OPTS]),
+    NT = ets:new(node_table,      [ordered_set, named_table,
+                                   public|?ETS_OPTS]),
     OT = ets:new(exception_table, [duplicate_bag, private|?ETS_OPTS]),
     {ok, #state{cluster_table=CT, node_table=NT, exception_table=OT}}.
 
+handle_call(reset, _From, State=#state{cluster_table=CT,
+                                       node_table=NT,
+                                       exception_table=ET}) ->
+    CPids = [CPid || {_, CPid} <- ets:tab2list(CT)],
+    systest_cleaner:kill_wait(CPids, fun(P) -> erlang:exit(P, reset) end),
+    [ets:delete_all_objects(T) || T <- [ET, NT, CT]],
+    {reply, ok, State};
 handle_call({force_stop, ClusterId}, _From,
             State=#state{cluster_table=CT}) ->
     case ets:lookup(CT, ClusterId) of
@@ -125,28 +135,6 @@ handle_call(_Msg, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'EXIT', Pid, normal},
-            State=#state{cluster_table=CT, node_table=NT,
-                         exception_table=ET}) ->
-    case ets:match_object(CT, {'_', Pid}) of
-        [{ClusterId, _}=Cluster] ->
-            ct:pal("watchdog handling cluster (process) down"
-                   " event for ~p~n", [ClusterId]),
-
-            %% the cluster has exited normally - any nodes left
-            %% alive are not supposed to be (they're orphans) and
-            %% so we report these as errors
-            Nodes = find_nodes(NT, Cluster),
-            report_orphans(Cluster, Nodes, ET),
-
-            %% else happens....
-            handle_down(Cluster, NT);
-        [[]] ->
-            ct:pal("cluster down even unhandled: no id for "
-                   "~p in ~p~n", [Pid, ets:tab2list(CT)]),
-            ok
-    end,
-    {noreply, State};
 handle_info({'EXIT', Pid, Reason},
             State=#state{cluster_table=CT, node_table=NT,
                          exception_table=ET}) ->
@@ -155,13 +143,22 @@ handle_info({'EXIT', Pid, Reason},
             ct:pal("watchdog handling cluster (process) down"
                    " event for ~p~n", [ClusterId]),
 
-            %% the cluster has crashed (reason /= normal)
-            ets:insert(ET, [{ClusterId, crashed, Reason}]),
+            case Reason of
+                normal ->
+                    %% the cluster has exited normally - any nodes left
+                    %% alive are not supposed to be (they're orphans) and
+                    %% so we report these as errors
+                    Nodes = find_nodes(NT, Cluster),
+                    report_orphans(Cluster, Nodes, ET);
+                noconfig ->
+                    ok;
+                _Other ->
+                    %% the cluster has crashed (reason /= normal)
+                    ets:insert(ET, [{ClusterId, crashed, Reason}])
+            end,
 
-            %% ensure any orphan nodes are cleaned up, but
-            %% in this case we don't register them as 'errors'
-            %% because the cluster crash is the more immediate cause
-            handle_down(Cluster, NT);
+            handle_down(Cluster, NT),
+            ets:delete(CT, ClusterId);
         [[]] ->
             ct:pal("cluster down even unhandled: no id for "
                    "~p in ~p~n", [Pid, ets:tab2list(CT)]),

@@ -56,7 +56,9 @@ start_it(How, ClusterId, Config) ->
             Config;
         {ok, Pid} ->
             Config2 = systest_config:ensure_value(ClusterId, Pid, Config),
-            systest_config:replace_value(active, Pid, Config2)
+            systest_config:replace_value(active, Pid, Config2);
+        {error, _Other}=Err ->
+            throw(Err)
     end.
 
 stop(ClusterRef) ->
@@ -83,12 +85,16 @@ check_config(Cluster, Config) ->
 
 init([Id, Config]) ->
     process_flag(trap_exit, true),
-    case with_cluster(Id, fun start_host/3, Config) of
-        noconfig ->
-            {stop, noconfig};
-        Cluster ->
-            systest_watchdog:cluster_started(Id, self()),
-            {ok, Cluster}
+    case systest_watchdog:cluster_started(Id, self()) of
+        ok ->
+            case with_cluster(Id, fun start_host/3, Config) of
+                noconfig ->
+                    {stop, noconfig};
+                Cluster ->
+                    {ok, Cluster}
+            end;
+        {error, clash} ->
+            {stop, name_in_use}
     end.
 
 handle_call(status, _From, State=#'systest.cluster'{nodes=Nodes}) ->

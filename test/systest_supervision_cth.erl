@@ -49,6 +49,14 @@ pre_init_per_testcase(TC, Config, State) ->
     ct:pal("active cluster: ~p~n", [Active]),
     {Config, State#ctx{active={TC, Active}}}.
 
+%% NB: this cheecky clause is being used to pass a failing test - there are few
+%% other ways to test the behaviour of common test hooks without performing
+%% incantations of this ilk
+post_end_per_testcase(should_fail, Config,
+                      {skip,{failed,
+                        {systest_supervision_SUITE,init_per_testcase,
+                        {error, name_in_use}}}}, State) ->
+    {Config, State};
 post_end_per_testcase(TC, Config, Return,
                       State=#ctx{active={TC, Active}}) when is_pid(Active) ->
     %% the end_per_testcase implementation in the SUITE *should* have shut down
@@ -85,6 +93,8 @@ post_end_per_testcase(TC, Config, Return,
 post_end_per_testcase(TC, _Config, Return, State) ->
     ct:pal("ignoring testcase ~p~n", [TC]),
     {Return, State}.
+
+%% TODO: test group shutdown here....
 
 
 terminate(_State) ->

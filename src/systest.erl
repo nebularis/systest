@@ -42,7 +42,8 @@ start() ->
     application:start(?MODULE).
 
 reset() ->
-    io:format(user, "RESETING SYSTEST......~n", []).
+    systest_watchdog:reset(),
+    ok.
 
 %% startup/shutdown
 

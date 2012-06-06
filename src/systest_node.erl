@@ -103,11 +103,10 @@ start(NodeInfo=#'systest.node_info'{handler=Handler, host=Host,
     code:ensure_loaded(Handler),
 
     Id = case erlang:function_exported(Handler, id, 1) of
-             true  -> Handler:id(NodeInfo);
-             false -> node_id(Host, Name)
+             true  -> set_node_info([{id, Handler:id(NodeInfo)}], NodeInfo);
+             false -> set_node_info([{id, node_id(Host, Name)}], NodeInfo)
          end,
-    NI = set_node_info([{id, Id},
-                        {config,[{node, NodeInfo}|BaseConf]}], NodeInfo),
+    NI = set_node_info([{config,[{node, Id}|BaseConf]}], Id),
 
     gen_server:start_link(?MODULE, [NI], []).
 

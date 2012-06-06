@@ -64,6 +64,7 @@ init(Node=#'systest.node_info'{config=Config}) ->
                      {return, value}]),
     Args = case ?ENCONFIG("flags.start.args", Config) of
                not_found -> [];
+               undefined -> [];
                Argv      -> Argv
            end,
     Extra = [{env, Env}|?CONFIG(on_start, Config, [])],
@@ -80,16 +81,16 @@ init(Node=#'systest.node_info'{config=Config}) ->
 
     case check_command(Cmd, Detached, RpcEnabled) of
         ok ->
-            Env = case ?CONFIG(env, Extra, undefined) of
-                      not_found -> [];
-                      []        -> [];
-                      Other     -> [{env, Other}]
-                  end,
-            ExecutableCommand = maybe_patch_command(Cmd, Env, Args,
+            RunEnv = case ?CONFIG(env, Extra, []) of
+                         not_found -> [];
+                         []        -> [];
+                         Other     -> [{env, Other}]
+                      end,
+            ExecutableCommand = maybe_patch_command(Cmd, RunEnv, Args,
                                                     Detached, RpcEnabled),
 
             LaunchOpts = [exit_status, hide, stderr_to_stdout,
-                          use_stdio, {line, 16384}] ++ Env,
+                          use_stdio, {line, 16384}] ++ RunEnv,
 
             Shutdown = stop_flags(Flags, ShutdownSpec, RpcEnabled),
             Port = open_port(ExecutableCommand, Detached, Args, LaunchOpts),
@@ -101,7 +102,7 @@ init(Node=#'systest.node_info'{config=Config}) ->
                 fun(Port2, Pid, LogFd) ->
                     %% NB: as not all kinds of nodes can be contacted
                     %% via rpc, we have to do this manually here....
-                    if RpcEnabled =:= true -> erlang:monitor_node({Id, true});
+                    if RpcEnabled =:= true -> erlang:monitor_node(Id, true);
                                       true -> ok
                     end,
 
@@ -399,15 +400,15 @@ read_pid(NodeId, Port, Detached, RpcEnabled, Fd) ->
                     end;
                 Pid ->
                     case Detached of
-                        false -> {Port, Pid};
-                        true  -> {detached, Pid}
+                        false -> {Port, Pid, Fd};
+                        true  -> {detached, Pid, Fd}
                     end
             end;
         false ->
             %% NB: detached + rpc_disabled is currently disallowed, so we don't
             %% cater for {detached, Pid} here at all.
             receive
-                {Port, {data, {eol, Pid}}} -> Pid;
+                {Port, {data, {eol, Pid}}} -> {Port, Pid, Fd};
                 {Port, {exit_status, Rc}}  -> {error, {stopped, Rc}}
             end
     end.

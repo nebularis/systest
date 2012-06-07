@@ -86,8 +86,8 @@ active_cluster(Config) ->
 clusters(Config) ->
     systest_config:read(?MODULE, Config).
 
-cluster_nodes(#'systest.cluster'{nodes=Nodes}) ->
-    Nodes.
+cluster_nodes(ClusterRef) ->
+    systest_cluster:list_nodes(ClusterRef).
 
 cluster_config(Scope) ->
     ct:get_config({Scope, cluster}).

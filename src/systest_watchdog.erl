@@ -184,7 +184,7 @@ report_orphans({ClusterId, _}, Nodes, ET) ->
     ets:insert(ET, [{ClusterId, orphan, N} || N <- Nodes]).
 
 find_nodes(NodeTable, {ClusterId, _}) ->
-    ets:match_object(NodeTable, {{ClusterId, '_'}}).
+    [P || {{_, P}} <- ets:match_object(NodeTable, {{ClusterId, '_'}})].
 
 handle_down(Cluster, NodeTable) ->
     kill_wait(find_nodes(NodeTable, Cluster)).

@@ -120,7 +120,7 @@ kill(NodeRef) ->
 -spec('kill -9'/1 :: (node_ref()) -> 'ok').
 'kill -9'(NodeRef) ->
     ct:pal("[WARNING] using SIGKILL is *NOT*"
-           "guaranteed to work with all node types!~n"),
+           " guaranteed to work with all node types!~n"),
     gen_server:cast(NodeRef, sigkill).
 
 -spec stop_and_wait(node_ref()) -> 'ok'.
@@ -146,10 +146,8 @@ shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
         false -> link(Owner),
-                 ct:pal("Waiting for ~p to exit~n", [Owner]),
-                 %ct:log("Stopping ~p ....~n"
-                 %       "Waiting for port owning process (~p) to exit...~n",
-                 %       [NI#'systest.node_info'.id, Owner]),
+                 ct:pal("Waiting for ~p to exit from: ~p~n",
+                        [Owner, erlang:process_info(self())]),
                  ok = ShutdownOp(Owner),
                  receive
                      {'EXIT', Owner, _Reason} -> ok;

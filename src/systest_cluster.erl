@@ -49,9 +49,9 @@ start(ClusterId, Config) ->
 start_link(ClusterId, Config) ->
     start_it(start_link, ClusterId, ClusterId, Config).
 
-start_it(How, ScopeId, ClusterI>
+start_it(How, ScopeId, ClusterId, Config) ->
     ct:pal("Processing cluster n", [ClusterId]),
-    case apply(gen_server, How, [ScopeId, ClusterId, Config], []]) of
+    case apply(gen_server, How, [[ScopeId, ClusterId, Config], []]) of
         {error, noconfig} ->
             Config;
         {ok, Pid} ->

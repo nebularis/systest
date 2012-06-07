@@ -72,7 +72,9 @@
 }).
 
 -record('systest.cluster', {
+    id      :: atom(),
+    scope   :: atom(),
     name    :: atom(),
-    nodes   :: [#'systest.node_info'{}]
+    nodes   :: [pid()]
 }).
 

@@ -89,7 +89,6 @@ make_node(Scope, Node, Config) ->
 -spec start(atom(), atom(),
             list(tuple(atom(), term()))) -> {'ok', pid()} | {'error', term()}.
 start(Scope, Node, Config) ->
-
     start(make_node(Scope, Node, Config)).
 
 -spec start(node_info()) -> {'ok', pid()} | {'error', term()}.

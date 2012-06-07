@@ -27,7 +27,7 @@
 -include("systest.hrl").
 
 -export([start/0, reset/0, sigkill/1]).
--export([start_suite/2, stop_scope/1, start/2, stop/1]).
+-export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
 -export([active_cluster/1, clusters/1, cluster_nodes/1]).
 -export([cluster_config/1]).
 -export([interact/2, write_pid_file/1, write_pid_file/2]).
@@ -55,6 +55,9 @@ stop_scope(Scope) when is_atom(Scope) ->
 
 start(Scope, Config) ->
     systest_cluster:start(Scope, Config).
+
+start(Scope, Identify, Config) ->
+    systest_cluster:start(Scope, Identify, Config).
 
 stop(Scope) when is_pid(Scope) ->
     systest_cluster:stop(Scope).

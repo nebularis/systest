@@ -33,7 +33,7 @@
 -export_type([config_key/0, config/0]).
 
 -export([read/2, read/3, require/2]).
--export([eval/2, eval/3]).
+-export([eval/2, eval/3, cluster_config/2]).
 -export([replace_value/3, ensure_value/3]).
 -export([get_config/1, get_config/3, merge_config/2]).
 -export([get_env/0, get_env/1, set_env/2]).
@@ -61,6 +61,20 @@
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+cluster_config(Scope, Identity) ->
+    case search_eval([Scope, {Identity, 'all'}],
+                     ct:get_config(shared, []),
+                     search_options([{key_func, fun(X) -> X end}])) of
+        Bad when Bad =:= not_found orelse
+                 Bad =:= undefined ->
+            ct:pal("nothing at ~p.~p(|all)~n", [Scope, Identity]),
+            {Identity, ct:get_config({Identity, cluster}, noconfig)};
+        Alias when is_atom(Alias) ->
+            {Alias, ct:get_config({Alias, cluster}, noconfig)};
+        Other ->
+            throw(Other)
+    end.
 
 eval(Key, Config) ->
     eval(Key, Config, []).
@@ -124,17 +138,20 @@ search_eval([Current|Remaining], Config, Opts=#search{key_func='id'}) ->
 search_eval([Current|Remaining], Config, Opts=#search{key_func=KF}) ->
     search_eval(Remaining, search(KF(Current), Config, Opts), Opts).
 
+search({Either, Or}, Config, Search) ->
+    case search(Either, Config, Search) of
+        not_found ->
+            search(Or, Config, Search);
+        Thing ->
+            Thing
+    end;
 search(Key, Config, Search=#search{callbacks=CB}) ->
-    % io:format(user, "searching ~p for ~p~n", [Config, Key]),
-    % io:format(user, "do we have a callback for ~p in ~p?~n", [Key, CB]),
     case lists:keyfind(Key, 1, CB) of
-        {Key, Fun} -> % io:format(user, "matched ~p~n", [{Key, Fun}]),
-                      {callback, key_search(Key, Config, Search), Fun};
+        {Key, Fun} -> {callback, key_search(Key, Config, Search), Fun};
         false      -> key_search(Key, Config, Search)
     end.
 
 key_search(Key, Config, #search{key_index=Kidx}) ->
-    %% io:format(user, "searching for ~p in ~p~n", [Key, Config]),
     case lists:keyfind(Key, Kidx, Config) of
         false                    -> not_found;
         {Key, Value}             -> Value;

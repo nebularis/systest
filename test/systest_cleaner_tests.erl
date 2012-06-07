@@ -20,6 +20,14 @@
 
 -compile(export_all).
 
+kill_some_maybe_dead_test() ->
+    Pids = [spawn(fun short_loop/0) || _ <- lists:seq(1, 100000)],
+    timer:sleep(1000),
+    erlang:yield(),
+    systest_cleaner:kill_wait(Pids, fun kill_it/1),
+    [?assertEqual(false, erlang:is_process_alive(P)) || P <- Pids],
+    true.
+
 kill_many_test() ->
     Pids = [ spawn(fun loop/0) || _ <- lists:seq(1, 100) ],
     systest_cleaner:kill_wait(Pids, fun kill_it/1),
@@ -32,4 +40,6 @@ kill_it(Pid) ->
 loop() ->
     loop().
 
+short_loop() ->
+    ok.
 

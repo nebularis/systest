@@ -36,7 +36,9 @@
 suite() -> [{timetrap, {seconds, 60}}].
 
 all() ->
-    systest_suite:export_all(?MODULE).
+    [local_and_global_scope_configuration_handling,
+     starting_and_stopping_nodes].
+%% :systest_suite:export_all(?MODULE).
 
 local_and_global_scope_configuration_handling(Config) ->
     Scope = systest_cli_config_example,
@@ -46,17 +48,14 @@ local_and_global_scope_configuration_handling(Config) ->
 
 starting_and_stopping_nodes(Config) ->
     process_flag(trap_exit, true),
-    Config2 = systest_cluster:start(systest_cli, Config),
-    Cluster = systest:active_cluster(Config2),
+    Cluster = systest:active_cluster(Config),
     systest_cluster:print_status(Cluster),
     [begin
-         Node = N#'systest.node_info'.id,
-         ?assertEqual(nodeup, systest_node:status(N)),
-         ?assertEqual(pong, net_adm:ping(Node)),
-
-         ok = systest_node:stop_and_wait(N),
-         ?assertEqual(pang, net_adm:ping(Node))
-     end || N <- systest:cluster_nodes(Cluster)],
+         ?assertEqual(nodeup, systest_node:status(Ref)),
+         ?assertEqual(pong,   net_adm:ping(Id)),
+         ok = systest_node:stop_and_wait(Ref),
+         ?assertEqual(pang, net_adm:ping(Id))
+     end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
     ok.
 
 killing_nodes(Config) ->

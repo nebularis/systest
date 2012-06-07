@@ -26,7 +26,8 @@
 
 -behaviour(gen_server).
 
--export([start/1, start/2, start_link/2, stop/1, stop/2]).
+-export([start/1, start/2, start_link/2, list_nodes/1,
+         start/3, start_link/3, stop/1, stop/2]).
 -export([check_config/2, status/1, print_status/1, log_status/1]).
 
 %% OTP gen_server Exports
@@ -44,14 +45,20 @@ start(Config) ->
     start(global, Config).
 
 start(ClusterId, Config) ->
-    start_it(start, ClusterId, ClusterId, Config).
+    start(ClusterId, ClusterId, Config).
+
+start(ScopeId, ClusterId, Config) ->
+    start_it(start, ScopeId, ClusterId, Config).
 
 start_link(ClusterId, Config) ->
-    start_it(start_link, ClusterId, ClusterId, Config).
+    start(ClusterId, ClusterId, Config).
+
+start_link(ScopeId, ClusterId, Config) ->
+    start_it(start_link, ScopeId, ClusterId, Config).
 
 start_it(How, ScopeId, ClusterId, Config) ->
-    ct:pal("Processing cluster n", [ClusterId]),
-    case apply(gen_server, How, [[ScopeId, ClusterId, Config], []]) of
+    ct:pal("Processing cluster ~p~n", [ClusterId]),
+    case apply(gen_server, How, [?MODULE, [ScopeId, ClusterId, Config], []]) of
         {error, noconfig} ->
             Config;
         {ok, Pid} ->
@@ -70,6 +77,9 @@ stop(ClusterRef, Timeout) ->
 status(ClusterRef) ->
     gen_server:call(ClusterRef, status).
 
+list_nodes(ClusterRef) ->
+    gen_server:call(ClusterRef, nodes).
+
 print_status(Cluster) ->
     ct:pal(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
 
@@ -77,7 +87,7 @@ log_status(Cluster) ->
     ct:log(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
 
 check_config(Cluster, Config) ->
-    with_cluster(Cluster, fun build_nodes/3, Config).
+    with_cluster({Cluster, Cluster}, fun build_nodes/4, Config).
 
 %%
 %% OTP gen_server API
@@ -87,7 +97,7 @@ init([Scope, Id, Config]) ->
     process_flag(trap_exit, true),
     case systest_watchdog:cluster_started(Id, self()) of
         ok ->
-            case with_cluster({Scope, Id}, fun start_host/3, Config) of
+            case with_cluster({Scope, Id}, fun start_host/4, Config) of
                 noconfig ->
                     {stop, noconfig};
                 Cluster ->
@@ -97,6 +107,8 @@ init([Scope, Id, Config]) ->
             {stop, name_in_use}
     end.
 
+handle_call(nodes, _From, State=#'systest.cluster'{nodes=Nodes}) ->
+    {reply,[{?CONFIG(id,systest_node:node_data(N)), N} || N <- Nodes],State};
 handle_call(status, _From, State=#'systest.cluster'{nodes=Nodes}) ->
     {reply, [{N, systest_node:status(N)} || N <- Nodes], State};
 handle_call({stop, Timeout}, From, State) ->
@@ -143,23 +155,27 @@ shutdown(State=#'systest.cluster'{name=Id, nodes=Nodes}, Timeout, ReplyTo) ->
             gen_server:reply(ReplyTo, ok),
             {stop, normal, State};
         {error, {killed, StoppedOk}} ->
+            ct:pal("Halt Error: killed~n"),
             Err = {halt_error, orphans, Nodes -- StoppedOk},
             gen_server:reply(ReplyTo, Err),
             {stop, Err, State};
         Other ->
+            ct:pal("Halt Error: ~p~n", [Other]),
             gen_server:reply(ReplyTo, {error, Other}),
             {stop, {halt_error, Other}, State}
     end.
 
-with_cluster(ClusterId, NodeHandler, Config) ->
-    case systest:cluster_config(ClusterId) of
-        undefined -> noconfig;
-        []        -> noconfig;
-        Hosts ->
+with_cluster({Scope, Identity}, NodeHandler, Config) ->
+    case systest_config:cluster_config(Scope, Identity) of
+        {_, noconfig} ->
+            noconfig;
+        {Alias, Hosts} ->
             ct:log("Configured hosts: ~p~n", [Hosts]),
-            Nodes = lists:flatten(
-                     [NodeHandler(ClusterId, Host, Config) || Host <- Hosts]),
-            #'systest.cluster'{name=ClusterId, nodes=Nodes}
+            Nodes =
+                lists:flatten([NodeHandler(Identity, Alias,
+                                           Host, Config) || Host <- Hosts]),
+            #'systest.cluster'{id=Identity, scope=Scope,
+                               name=Alias, nodes=Nodes}
     end.
 
 node_from_pid(Pid, #'systest.cluster'{nodes=Nodes}) ->
@@ -175,25 +191,28 @@ print_status_info({Node, Status}) ->
     lists:flatten("Node Info~n" ++ systest_utils:proplist_format(Lines) ++
                   "~n----------------------------------------------------~n").
 
-build_nodes(Cluster, {Host, Nodes}, Config) ->
-    [systest_node:make_node(Cluster, N, [{host, Host}, {scope, Cluster},
+build_nodes(Identity, Cluster, {Host, Nodes}, Config) ->
+    [systest_node:make_node(Cluster, N, [{host, Host}, {scope, Identity},
                                          {name, N}|Config]) || N <- Nodes].
 
-start_host(Cluster, {localhost, Nodes}, Config) ->
+start_host(Identity, Cluster, {localhost, Nodes}, Config) ->
     {ok, Hostname} = inet:gethostname(),
-    start_host(Cluster, {list_to_atom(Hostname), Nodes}, Config);
-start_host(Cluster, {Host, Nodes}=HostConf, Config) when is_atom(Host) andalso
-                                                         is_list(Nodes) ->
+    start_host(Identity, Cluster, {list_to_atom(Hostname), Nodes}, Config);
+start_host(Identity, Cluster,
+           {Host, Nodes}=HostConf, Config) when is_atom(Host) andalso
+                                                is_list(Nodes) ->
     case ?CONFIG(verify_hosts, Config, false) of
         true  -> verify_host(Host);
         false -> ok
     end,
-    [start_node(Cluster, Node) ||
-            Node <- build_nodes(Cluster, HostConf, Config)].
+    [start_node(Identity, Node) ||
+            Node <- build_nodes(Identity, Cluster, HostConf, Config)].
 
-start_node(Cluster, Node) ->
+start_node(Identity, Node) ->
     {ok, NodeRef} = systest_node:start(Node),
-    systest_watchdog:node_started(Cluster, NodeRef),
+    %% REFACTOR: we *must* ensure that the correct cluster ID is passed here!
+    %%
+    systest_watchdog:node_started(Identity, NodeRef),
     NodeRef.
 
 verify_host(Host) ->

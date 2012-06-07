@@ -39,11 +39,11 @@
 -type name()             :: string().
 -type value()            :: string() | binary().
 -type attribute()        :: atom().
--type setenv_flags()     :: {'environment', name(), value()}   |   %% explicit
-                            {'environment', value()}           |   %% from os
-                            {'node', attribute()}.                 %% node_info
+-type setenv_flags()     :: {'environment', [{name(), value()}]} |
+                            {'node', attribute()}.
 -type vmflags()          :: string().
--type program()          :: {'program', string()}.
+-type program()          :: {'program', string()} |
+                            {'args', [{name(), value()}]}.
 -type script_flags()     :: [program() | value() | setenv_flags()].
 -type hook()             :: script_flags()                      |
                             {module(), function(), [term()]}    |

@@ -40,7 +40,7 @@ init([]) ->
         {systest_config_server,
             {systest_config, start_link, []},
              permanent, 5000, worker, [gen_server]},
-        {dxdb_event_handler, 
+        {systest_event_log,
             {gen_event, start_link, [{local, systest_event_log}]},
              permanent, 5000, worker, dynamic}
         ]}}.

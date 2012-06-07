@@ -44,14 +44,14 @@ start(Config) ->
     start(global, Config).
 
 start(ClusterId, Config) ->
-    start_it(start, ClusterId, Config).
+    start_it(start, ClusterId, ClusterId, Config).
 
 start_link(ClusterId, Config) ->
-    start_it(start_link, ClusterId, Config).
+    start_it(start_link, ClusterId, ClusterId, Config).
 
-start_it(How, ClusterId, Config) ->
-    ct:pal("Processing cluster info for ~p~n", [ClusterId]),
-    case apply(gen_server, How, [?MODULE, [ClusterId, Config], []]) of
+start_it(How, ScopeId, ClusterI>
+    ct:pal("Processing cluster n", [ClusterId]),
+    case apply(gen_server, How, [ScopeId, ClusterId, Config], []]) of
         {error, noconfig} ->
             Config;
         {ok, Pid} ->
@@ -83,11 +83,11 @@ check_config(Cluster, Config) ->
 %% OTP gen_server API
 %%
 
-init([Id, Config]) ->
+init([Scope, Id, Config]) ->
     process_flag(trap_exit, true),
     case systest_watchdog:cluster_started(Id, self()) of
         ok ->
-            case with_cluster(Id, fun start_host/3, Config) of
+            case with_cluster({Scope, Id}, fun start_host/3, Config) of
                 noconfig ->
                     {stop, noconfig};
                 Cluster ->

@@ -58,7 +58,7 @@
 -record(state, {
     node            :: node_info(),
     handler         :: module(),
-    handler_state    :: term(),
+    handler_state   :: term(),
     activity_state  :: activity_state()
 }).
 

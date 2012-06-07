@@ -43,8 +43,8 @@
 -export([terminate/1]).
 
 -record(state, {
-    auto_start = false      :: boolean(),
-    data       = dict:new() :: dict()
+    auto_start :: boolean(),
+    suite      :: atom()
 }).
 
 %% @doc Return a unique id for this CTH.
@@ -67,11 +67,12 @@ init(systest, _Opts) ->
 
 %% @doc Called before init_per_suite is called, this code might start a
 %% cluster, if one is configured for this suite.
-pre_init_per_suite(_Suite, Config, State=#state{auto_start=false}) ->
-    {Config, State};
+pre_init_per_suite(Suite, Config, State=#state{auto_start=false}) ->
+    {Config, State#state{suite=Suite}};
 pre_init_per_suite(Suite, Config, State) ->
     ct:pal("pre_init_per_suite: maybe start ~p", [Suite]),
-    {systest:start_suite(Suite, Config), State}.
+    %% TODO: handle init_per_suite use of cluster aliases
+    {systest:start_suite(Suite, Config), State#state{suite=Suite}}.
 
 post_end_per_suite(Suite, Config, Result, State) ->
     %% TODO: check and see whether there *is* actually an active cluster
@@ -89,8 +90,8 @@ post_end_per_suite(Suite, Config, Result, State) ->
 %% @doc Called before each init_per_group.
 pre_init_per_group(_Group, Config, State=#state{auto_start=false}) ->
     {Config, State};
-pre_init_per_group(Group, Config, State) ->
-    {systest:start(Group, Config), State}.
+pre_init_per_group(Group, Config, State=#state{suite=Suite}) ->
+    {systest:start(Suite, Group, Config), State}.
 
 post_end_per_group(Group, Config, Result, State) ->
     case ?CONFIG(Group, Config, undefined) of
@@ -103,9 +104,9 @@ post_end_per_group(Group, Config, Result, State) ->
 %% @doc Called before each test case.
 pre_init_per_testcase(_TC, Config, State=#state{auto_start=false}) ->
     {Config, State};
-pre_init_per_testcase(TC, Config, State) ->
+pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
     ct:pal("~p handling pre_init_per_testcase [~p]~n", [?MODULE, TC]),
-    {systest:start(TC, Config), State}.
+    {systest:start(Suite, TC, Config), State}.
 
 post_end_per_testcase(TC, Config, Return, State) ->
     %% TODO: handle {save_config, Config} return values in st:stop

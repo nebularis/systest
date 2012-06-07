@@ -167,9 +167,6 @@ require(Key, Config) ->
             Value
     end.
 
-%% TODO: move these API calls into the gen_server mechanism, so that we can
-%% easily switch between common_test and stand-alone runs if we wish...
-
 get_env() ->
     gen_server:call(?MODULE, list).
 
@@ -250,10 +247,6 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%%
-%% Private API
-%%
-
 merge(New, Existing) when is_tuple(New) ->
     K = element(1, New),
     case lists:keymember(K, 1, Existing) of
@@ -265,6 +258,7 @@ merge(New, Existing) when is_tuple(New) ->
 merge(New, Existing) ->
     append_if_missing(fun lists:member/2, New, Existing).
 
+%% TODO: this head (clause) isn't used any more!?
 extend({Path, Spec}=New, Existing) when Path =:= dir orelse
                                         Path =:= file ->
     %% TODO: this isn't very flexible - make it simpler to use...
@@ -283,6 +277,7 @@ extend({Path, Spec}=New, Existing) when Path =:= dir orelse
                                      {[], ScratchDir}, Members),
             [{Path, Rewrite(Value)}|Existing]
     end;
+%% TODO: deprecate 'extra' as it is no longer used
 extend({extra, [{_, _, _}|_]=Stuff}, Existing) ->
     Items = [{M,F,[hd(extend(A, Existing)) || A <- Args]} ||
                                                         {M,F,Args} <- Stuff],
@@ -302,6 +297,7 @@ extend({K, NewVal}=New, Existing) when is_list(NewVal) ->
         _ ->
             lists:keyreplace(K, 1, Existing, New)
     end;
+%% TODO: deprecate 'environment' tuples, as they're not longer used
 extend({environment, _}=New, Existing) ->
     [New|Existing];
 extend({environment, _, _}=New, Existing) ->

@@ -36,9 +36,7 @@
 suite() -> [{timetrap, {seconds, 60}}].
 
 all() ->
-    [local_and_global_scope_configuration_handling,
-     starting_and_stopping_nodes].
-%% :systest_suite:export_all(?MODULE).
+    systest_suite:export_all(?MODULE).
 
 local_and_global_scope_configuration_handling(Config) ->
     Scope = systest_cli_config_example,
@@ -53,6 +51,7 @@ starting_and_stopping_nodes(Config) ->
     [begin
          ?assertEqual(nodeup, systest_node:status(Ref)),
          ?assertEqual(pong,   net_adm:ping(Id)),
+
          ok = systest_node:stop_and_wait(Ref),
          ?assertEqual(pang, net_adm:ping(Id))
      end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
@@ -60,28 +59,26 @@ starting_and_stopping_nodes(Config) ->
 
 killing_nodes(Config) ->
     process_flag(trap_exit, true),
-    Config2 = systest_cluster:start(systest_cli, Config),
-    Cluster = systest:active_cluster(Config2),
+    Cluster = systest:active_cluster(Config),
     systest_cluster:print_status(Cluster),
     [begin
-         ?assertEqual(nodeup, systest_node:status(N)),
-         ok = systest_node:kill_and_wait(N),
+         ?assertEqual(nodeup, systest_node:status(Ref)),
+         ok = systest_node:kill_and_wait(Ref),
 
-         Node = N#'systest.node_info'.id,
-         ?assertEqual(pang, net_adm:ping(Node))
-     end || N <- systest:cluster_nodes(Cluster)],
+         ?assertEqual(pang, net_adm:ping(Id))
+     end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
     ok.
 
 sigkill_on_nodes(Config) ->
     process_flag(trap_exit, true),
-    Config2 = systest_cluster:start(systest_cli, Config),
-    Cluster = systest:active_cluster(Config2),
+    Cluster = systest:active_cluster(Config),
     systest_cluster:print_status(Cluster),
     [begin
-         ?assertEqual(nodeup, systest_node:status(N)),
-         ok = systest_node:shutdown_and_wait(N, fun systest_node:sigkill/1),
-         ?assertMatch({'nodedown', _}, systest_node:status(N))
-     end || N <- systest:cluster_nodes(Cluster)],
+         ?assertEqual(nodeup, systest_node:status(Ref)),
+         ok = systest_node:shutdown_and_wait(Ref,
+                                             fun systest_node:'kill -9'/1),
+         ?assertEqual(false, erlang:is_process_alive(Ref))
+     end || {_, Ref} <- systest:cluster_nodes(Cluster)],
     ok.
 
 handling_detached_processes(Config) ->
@@ -89,10 +86,9 @@ handling_detached_processes(Config) ->
     Cluster = systest:active_cluster(Config),
     systest_cluster:print_status(Cluster),
     [begin
-         ?assertEqual(nodeup, systest_node:status(N)),
-         ok = systest_node:kill_and_wait(N),
+         ?assertEqual(nodeup, systest_node:status(Ref)),
+         ok = systest_node:kill_and_wait(Ref),
 
-         Node = N#'systest.node_info'.id,
-         ?assertEqual(pang, net_adm:ping(Node))
-     end || N <- systest:cluster_nodes(Cluster)],
+         ?assertEqual(pang, net_adm:ping(Id))
+     end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
     ok.

@@ -72,7 +72,9 @@ kill(Targets, Server, Timeout) ->
             case length(Killed) =:= length(Targets) of
                 true  -> ok;
                 false -> {error, {killed, Targets}}
-            end
+            end;
+        {'EXIT', Server, normal} ->
+            ok
     after Timeout -> {error, timeout}
     end.
 

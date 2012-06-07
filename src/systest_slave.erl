@@ -115,7 +115,7 @@ terminate(Reason, _Node, _State) ->
 on_start(NI, {ok, Node}) ->
     OsPid = rpc:call(Node, os, getpid, []),
     erlang:monitor_node(Node, true),
-    NI2 = NI#'systest.node_info'{owner=self(), os_pid=OsPid, id=Node},
+    NI2 = NI#'systest.node_info'{os_pid=OsPid, id=Node},
     {ok, NI2, #state{runstate=running}};
 on_start(_, Error) ->
     Error.

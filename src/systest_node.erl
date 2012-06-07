@@ -180,7 +180,8 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
                 Apps -> [setup(NI2, App, HState) || App <- Apps]
             end,
 
-            State = #state{node=NI2, handler=Callback, handler_state=HState},
+            State = #state{node=NI2#'systest.node_info'{owner=self()},
+                           handler=Callback, handler_state=HState},
 
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.on_start of
@@ -273,6 +274,10 @@ handle_msg(stop, State=#state{node=Node, handler=Mod,
 handle_msg(kill, State=#state{node=Node, handler=Mod,
                               handler_state=ModState}, ReplyTo) ->
     handle_callback(stopping_callback(Mod:handle_kill(Node, ModState)),
+                    State#state{activity_state=killed}, ReplyTo);
+handle_msg(sigkill, State=#state{node=Node, handler=Mod,
+                                 handler_state=ModState}, ReplyTo) ->
+    handle_callback(stopping_callback(Mod:handle_msg(sigkill, Node, ModState)),
                     State#state{activity_state=killed}, ReplyTo);
 handle_msg(status, State=#state{activity_state=stopped}, _ReplyTo) ->
     {reply, {stopping, stopped}, State};

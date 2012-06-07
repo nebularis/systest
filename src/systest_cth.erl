@@ -115,9 +115,14 @@ post_end_per_testcase(TC, Config, Return, State) ->
         undefined ->
             {Return, State};
         ClusterPid ->
-            ct:pal("stopping ~p~n", [ClusterPid]),
-            ct:pal("stopped ~p~n",
-                   [systest_cluster:stop(ClusterPid)]),
+            case erlang:is_process_alive(ClusterPid) of
+                true ->
+                    ct:pal("stopping ~p~n", [ClusterPid]),
+                    ct:pal("stopped ~p~n",
+                           [systest_cluster:stop(ClusterPid)]);
+                false ->
+                    ct:pal("cluster ~p is already down~n", [ClusterPid])
+            end,
             {Return, State}
     end.
 

@@ -36,6 +36,7 @@
 -export([node_id/2, node_data/1]).
 -export([start/1, start/3, stop/1, kill/1]).
 -export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
+-export([sigkill/1, kill_after/2, kill_after/3]).
 -export([shutdown_and_wait/2, status/1]).
 
 -export([status_check/1]).
@@ -116,9 +117,22 @@ kill(NodeRef) ->
 
 -spec('kill -9'/1 :: (node_ref()) -> 'ok').
 'kill -9'(NodeRef) ->
+    sigkill(NodeRef).
+
+-spec sigkill(node_ref()) -> 'ok'.
+sigkill(NodeRef) ->
     ct:pal("[WARNING] using SIGKILL is *NOT*"
            " guaranteed to work with all node types!~n"),
     gen_server:cast(NodeRef, sigkill).
+
+-spec kill_after(integer(), node_ref()) -> 'ok'.
+kill_after(TimeoutMs, NodeRef) ->
+    kill_after(TimeoutMs, NodeRef, kill).
+
+-spec kill_after(integer(), node_ref(), atom()) -> 'ok'.
+kill_after(TimeoutMs, NodeRef, Killer) ->
+    {ok, _TRef} = timer:apply_after(TimeoutMs, ?MODULE, Killer, [NodeRef]),
+    ok.
 
 -spec stop_and_wait(node_ref()) -> 'ok'.
 stop_and_wait(NodeRef) ->

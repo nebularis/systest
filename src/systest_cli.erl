@@ -107,7 +107,7 @@ init(Node=#'systest.node_info'{config=Config}) ->
                     end,
 
                     N2 = Node#'systest.node_info'{os_pid=Pid,
-                                    user=[{env, RunEnv}|
+                                    user=[hd(RunEnv)|
                                           Node#'systest.node_info'.user]},
                     Sh = #sh{pid=Pid,
                              port=Port2,

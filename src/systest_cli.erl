@@ -106,7 +106,9 @@ init(Node=#'systest.node_info'{config=Config}) ->
                                       true -> ok
                     end,
 
-                    N2 = Node#'systest.node_info'{os_pid=Pid},
+                    N2 = Node#'systest.node_info'{os_pid=Pid,
+                                    user=[{env, RunEnv}|
+                                          Node#'systest.node_info'.user]},
                     Sh = #sh{pid=Pid,
                              port=Port2,
                              detached=Detached,
@@ -115,7 +117,7 @@ init(Node=#'systest.node_info'{config=Config}) ->
                              shutdown=Shutdown,
                              command=ExecutableCommand,
                              args=Args,
-                             env=Env,
+                             env=RunEnv,
                              state=running},
                     ct:pal(info,
                            "External Process Handler ~p::~p"

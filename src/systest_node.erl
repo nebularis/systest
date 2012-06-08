@@ -214,7 +214,11 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
 apply_startup(Item, {Node, HState}) ->
     case interact(Node, Item, HState) of
         {write, Loc, Data} ->
-            {systest_node:set_node_info(Loc, Data, Node), HState};
+            ct:pal("[~p] on_start~n"
+                   "argv: ~p~n"
+                   "state-update: ~p => ~p~n",
+                   [Node#'systest.node_info'.id, Item, Loc, Data]),
+            {systest_node:set_node_info([{Loc, Data}], Node), HState};
         Other ->
             ct:pal("[~p] on_start~n"
                    "argv: ~p~n"

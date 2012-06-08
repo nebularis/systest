@@ -136,9 +136,9 @@ init(Node=#'systest.node_info'{config=Config}) ->
 %%                                          {NewNode, NewState} |
 %%                                          NewState.
 %%
-%% NB: interactions via rpc (for suitably enabled nodes)
-%% is handled generically by systest_node, so callback modules
-%% need only deal with more specific scenarios
+handle_interaction({M, F, Argv},
+                   #'systest.node_info'{id=Id}, Sh=#sh{rpc_enabled=true}) ->
+    {reply, rpc:call(Id, M, F, Argv), Sh};
 handle_interaction(_Data, _Node, Sh=#sh{port=detached}) ->
     {stop, {error, detached}, Sh};
 handle_interaction(Data, _Node, Sh=#sh{port=Port}) ->

@@ -30,7 +30,7 @@
 -export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
 -export([active_cluster/1, clusters/1, cluster_nodes/1]).
 -export([cluster_config/1]).
--export([interact/2, write_pid_file/1, write_pid_file/2]).
+-export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
 
 %%
 %% Public APIs
@@ -72,9 +72,19 @@ sigkill(Pid) ->
 interact(Node, Inputs) ->
     systest_node:interact(Node, Inputs).
 
-write_pid_file(Dir) ->
+write_pid_file() ->
+    application:load(?MODULE),
+    case application:get_env(?MODULE, scratch_dir) of
+        {ok, {file, Path}} ->
+            Pid = os:getpid(),
+            write_pid_file(filename:join(Path, Pid ++ ".pid"));
+        Other ->
+            {error, {env, Other}}
+    end.
+
+write_pid_file(Path) ->
     Pid = os:getpid(),
-    write_pid_file(Pid ++ ".pid", Dir).
+    file:write_file(Path, Pid, [write]).
 
 write_pid_file(Name, {dir, Dir}) ->
     Pid = os:getpid(),

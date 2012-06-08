@@ -48,12 +48,10 @@ init(NI=#'systest.node_info'{host=Host, name=Name, flags=VmArgs}) ->
 %%                                          {stop, Reason, NewState} |
 %%                                          {NewNode, NewState} |
 %%                                          NewState.
-%%
-%% NB: interactions via rpc (for suitably enabled nodes)
-%% is handled generically by systest_node, so callback modules
-%% need only deal with more specific scenarios
+handle_interaction({M, F, Argv}, #'systest.node_info'{id=Id}, State) ->
+    {reply, rpc:call(Id, M, F, Argv), State};
 handle_interaction(_Data, _Node, State) ->
-    State.
+    {reply, ignored, State}.
 
 %% @doc handles a status request from the server.
 %% handle_status(Node, State) -> {reply, Reply, NewNode, NewState} |

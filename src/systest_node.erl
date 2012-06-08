@@ -32,6 +32,7 @@
 
 -export([behaviour_info/1]).
 -export([make_node/3]).
+-export([interact/2]).
 -export([node_id/2, node_data/1]).
 -export([start/1, start/3, stop/1, kill/1]).
 -export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
@@ -77,10 +78,6 @@ behaviour_info(callbacks) ->
      {terminate,          3}];
 behaviour_info(_) ->
     undefined.
-
--spec node_id(Host::atom(), Name::atom()) -> atom().
-node_id(Host, Name) ->
-    list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
 
 -spec make_node(atom(), atom(), systest_config:config()) -> node_info().
 make_node(Scope, Node, Config) ->
@@ -135,6 +132,10 @@ kill_and_wait(NodeRef) ->
 status(NodeRef) ->
     gen_server:call(NodeRef, status).
 
+-spec interact(node_ref(), term()) -> term().
+interact(NodeRef, InputData) ->
+    gen_server:call(NodeRef, {interaction, InputData}).
+
 -spec node_data(node_ref()) -> [{atom(), term()}].
 node_data(NodeRef) ->
     gen_server:call(NodeRef, node_info_list).
@@ -186,7 +187,11 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.on_start of
                 []   -> ok;
-                Xtra -> [interact(NI2, In, HState) || In <- Xtra]
+                Xtra -> [ct:pal("[~p] on_start~n"
+                                "argv: ~p~n"
+                                "response: ~p~n",
+                                [NI2#'systest.node_info'.id, In,
+                                 interact(NI2, In, HState)]) || In <- Xtra]
             end,
 
             {ok, State};
@@ -218,7 +223,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private API
 %%
 
-
+-spec node_id(Host::atom(), Name::atom()) -> atom().
+node_id(Host, Name) ->
+    list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
 
 interact(Node, {local, Mod, Func, Args}, _) ->
     apply(Mod, Func, [Node|Args]);
@@ -294,6 +301,7 @@ handle_msg({interaction, _},
 handle_msg({interaction, InputData},
             State=#state{node=Node, handler=Mod,
                          handler_state=ModState}, ReplyTo) ->
+    ct:pal("handle_interaction: ~p~n", [InputData]),
     handle_callback(Mod:handle_interaction(InputData,
                                            Node, ModState), State, ReplyTo);
 %% our catch-all, which defers to Mod:handler_state/3 to see if the

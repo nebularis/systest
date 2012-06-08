@@ -186,19 +186,27 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
 
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.on_start of
-                []   -> ok;
-                Xtra -> [ct:pal("[~p] on_start~n"
-                                "argv: ~p~n"
-                                "response: ~p~n",
-                                [NI2#'systest.node_info'.id, In,
-                                 interact(NI2, In, HState)]) || In <- Xtra]
-            end,
-
-            {ok, State};
+                []   -> {ok, State};
+                Xtra -> NI3 = lists:foldl(fun apply_startup/2,
+                                          {NI2, HState}, Xtra),
+                        {ok, State#state{node=NI3}}
+            end;
         Error ->
             %% TODO: do NOT rely on callbacks returning a proper gen_server
             %% init compatible response tuple - construct this for them....
             Error
+    end.
+
+apply_startup(Item, {Node, HState}) ->
+    case interact(Node, Item, HState) of
+        {write, Loc, Data} ->
+            {systest_node:set_node_info(Loc, Data, Node), HState};
+        Other ->
+            ct:pal("[~p] on_start~n"
+                   "argv: ~p~n"
+                   "response: ~p~n",
+                    [Node#'systest.node_info'.id, Item, Other]),
+            {Node, HState}
     end.
 
 handle_call(Msg, From, State) ->

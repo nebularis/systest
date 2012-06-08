@@ -40,7 +40,7 @@
          handle_msg/3, terminate/3]).
 
 %% private record for tracking...
--record(sh, {command, args, env, node, state, log, rpc_enabled,
+-record(sh, {command, args, env, state, log, rpc_enabled,
              pid, port, shutdown, detached, shutdown_port}).
 
 -include("systest.hrl").

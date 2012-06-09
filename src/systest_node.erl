@@ -201,8 +201,8 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.on_start of
                 []   -> {ok, State};
-                Xtra -> NI3 = lists:foldl(fun apply_startup/2,
-                                          {NI2, HState}, Xtra),
+                Xtra -> {NI3, _} = lists:foldl(fun apply_startup/2,
+                                               {NI2, HState}, Xtra),
                         {ok, State#state{node=NI3}}
             end;
         Error ->

@@ -144,7 +144,7 @@ kill_and_wait(NodeRef) ->
 
 -spec status(node_ref()) -> 'nodeup' | {'nodedown', term()}.
 status(NodeRef) ->
-    gen_server:call(NodeRef, status).
+    safe_call(NodeRef, status, {nodedown, noproc}).
 
 -spec interact(node_ref(), term()) -> term().
 interact(NodeRef, InputData) ->
@@ -152,7 +152,7 @@ interact(NodeRef, InputData) ->
 
 -spec node_data(node_ref()) -> [{atom(), term()}].
 node_data(NodeRef) ->
-    gen_server:call(NodeRef, node_info_list).
+    safe_call(NodeRef, node_info_list, [{owner, NodeRef}]).
 
 %% NB: this *MUST* run on the client
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
@@ -249,7 +249,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private API
 %%
 
--spec node_id(Host::atom(), Name::atom()) -> atom().
+safe_call(NodeRef, Msg, Default) ->
+    try
+        gen_server:call(NodeRef, Msg)
+    catch
+        _:{noproc,{gen_server,call,[NodeRef, Msg]}} ->
+            Default
+    end.
+
 node_id(Host, Name) ->
     list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
 

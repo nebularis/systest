@@ -43,7 +43,8 @@ all() ->
     [suite_nodes_should_be_up_and_running,
      end_per_tc_can_manage_shutdown,
      should_fail,
-     {group, inter_testcase_cleanup}].
+     {group, inter_testcase_cleanup},
+     trapping_nodedown_messages].
 
 groups() ->
     [{inter_testcase_cleanup, [sequence],
@@ -124,3 +125,10 @@ after_end_per_tc_automation(Config) ->
     ct:pal("is end_per_tc_automation still alive!?...~n"),
     ?assertEqual(false, erlang:is_process_alive(ClusterPid)).
 
+trapping_nodedown_messages(Config) ->
+    process_flag(trap_exit, true),
+    Pid = ?CONFIG(active, Config),
+    {_, NodeRef} = hd(systest:cluster_nodes(Pid)),
+    systest_node:stop_and_wait(NodeRef),
+    ?assertEqual({nodedown, noproc}, systest_node:status(NodeRef)),
+    systest_cluster:print_status(Pid).  %% just to make sure it doesn't crash!

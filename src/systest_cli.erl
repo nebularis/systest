@@ -33,6 +33,8 @@
 
 %% TODO: migrate to ?SYSTEST_LOG
 
+-compile({no_auto_import, [open_port/2]}).
+
 %% API Exports
 
 -export([init/1, handle_stop/2, handle_kill/2]).
@@ -40,8 +42,23 @@
          handle_msg/3, terminate/3]).
 
 %% private record for tracking...
--record(sh, {command, args, env, state, log, rpc_enabled,
-             pid, port, shutdown, detached, shutdown_port}).
+-record(sh, {
+    start_command,
+    stop_command,
+    state,
+    log,
+    rpc_enabled,
+    pid,
+    port,
+    detached,
+    shutdown_port
+}).
+
+-record(exec, {
+    command,
+    argv,
+    environment
+}).
 
 -include("systest.hrl").
 
@@ -55,20 +72,10 @@
 %%
 
 init(Node=#'systest.node_info'{config=Config}) ->
-    %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
-    Cmd = systest_config:eval("flags.start.program", Config,
-                    [{callback, {node, fun systest_node:get_node_info/2}},
-                     {return, value}]),
-    Env = systest_config:eval("flags.start.environment", Config,
-                    [{callback, {node, fun systest_node:get_node_info/2}},
-                     {return, value}]),
-    Args = case ?ENCONFIG("flags.start.args", Config) of
-               not_found -> [];
-               undefined -> [];
-               Argv      -> Argv
-           end,
-    Extra = [{env, Env}|?CONFIG(on_start, Config, [])],
-
+    
+    %% TODO: don't carry all the config around all the time - 
+    %% e.g., append the {node, NI} tuple only when needed
+    
     Scope = systest_node:get_node_info(scope, Node),
     Id = systest_node:get_node_info(id, Node),
     Config = systest_node:get_node_info(config, Node),
@@ -79,21 +86,14 @@ init(Node=#'systest.node_info'{config=Config}) ->
     {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
                                          Startup, {true, default}),
 
-    case check_command(Cmd, Detached, RpcEnabled) of
+    StartCmd = make_exec(start, Detached, RpcEnabled, Config),
+    StopCmd  = stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, Config),
+
+    case check_command(StartCmd#exec.command, Detached, RpcEnabled) of
         ok ->
-            RunEnv = case ?CONFIG(env, Extra, []) of
-                         not_found -> [];
-                         []        -> [];
-                         Other     -> [{env, Other}]
-                      end,
-            ExecutableCommand = maybe_patch_command(Cmd, RunEnv, Args,
-                                                    Detached, RpcEnabled),
+            Port = open_port(StartCmd, Detached),
+            #exec{environment=Env} = StartCmd,
 
-            LaunchOpts = [exit_status, hide, stderr_to_stdout,
-                          use_stdio, {line, 16384}] ++ RunEnv,
-
-            Shutdown = stop_flags(Flags, ShutdownSpec, RpcEnabled),
-            Port = open_port(ExecutableCommand, Detached, Args, LaunchOpts),
             if Detached =:= true -> link(Port);
                             true -> ok
             end,
@@ -107,17 +107,15 @@ init(Node=#'systest.node_info'{config=Config}) ->
                     end,
 
                     N2 = Node#'systest.node_info'{os_pid=Pid,
-                                    user=[hd(RunEnv)|
+                                    user=[{env, Env}|
                                           Node#'systest.node_info'.user]},
                     Sh = #sh{pid=Pid,
                              port=Port2,
                              detached=Detached,
                              log=LogFd,
                              rpc_enabled=RpcEnabled,
-                             shutdown=Shutdown,
-                             command=ExecutableCommand,
-                             args=Args,
-                             env=RunEnv,
+                             start_command=StartCmd,
+                             stop_command=StopCmd,
                              state=running},
                     ct:pal(info,
                            "External Process Handler ~p::~p"
@@ -127,8 +125,6 @@ init(Node=#'systest.node_info'{config=Config}) ->
         StopError ->
             StopError
     end.
-
-
 
 %% @doc handles interactions with the node.
 %% handle_interaction(Data, Node, State) -> {reply, Reply, NewNode, NewState} |
@@ -180,15 +176,12 @@ handle_kill(_Node, Sh=#sh{port=Port, detached=false, state=running}) ->
 %%                             {stop, NewNode, NewState} |
 %%                             {rpc_stop, {M,F,A}, NewState} |
 %%                             NewState.
-handle_stop(Node, Sh=#sh{shutdown=script_stop}) ->
+handle_stop(Node, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
     ct:pal("running shutdown hooks for ~p",
            [systest_node:get_node_info(id, Node)]),
-    Flags = systest_node:get_node_info(flags, Node),
-    Config = systest_node:get_node_info(config, Node),
-    {Env, Args, Prog} = convert_flags(stop, Node, Flags, Config),
-    run_shutdown_hook(Sh, Prog, Args, Env);
+    run_shutdown_hook(SC, Sh);
 %% TODO: could this be core node behaviour?
-handle_stop(_Node, Sh=#sh{shutdown=Shutdown, rpc_enabled=true}) ->
+handle_stop(_Node, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->
     %% TODO: this rpc/call logic should move into systest_node
     Halt = case Shutdown of
                default -> {init, stop, []};
@@ -214,7 +207,7 @@ handle_msg({Port, {data, {_, Line}}}, _Node,
     io:format(LogFd, "~s~n", [Line]),
     Sh;
 handle_msg({Port, {exit_status, 0}}, _Node,
-            Sh=#sh{port=Port, command=Cmd}) ->
+            Sh=#sh{port=Port, start_command=#exec{command=Cmd}}) ->
     ct:pal("Program ~s exited normally (status 0)~n", [Cmd]),
     {stop, normal, Sh#sh{state=stopped}};
 handle_msg({Port, {exit_status, Exit}=Rc}, Node,
@@ -318,20 +311,28 @@ log_file(Suffix, Scope, Id, Env, Config) ->
 log_to(Suffix, Scope, Id, Dir) ->
     filename:join(Dir, logfile(Scope, Id) ++ Suffix).
 
-open_port(ExecutableCommand, Detached, Args, LaunchOpts) ->
-    ct:pal("Spawning executable~n"
-           "Command:         ~s~n"
-           "Detached:        ~p~n"
-           "Args:            ~p~n"
-           "Launch:          ~p~n",
-           [ExecutableCommand, Detached, Args, LaunchOpts]),
-    case Detached of
-        false -> open_port({spawn_executable, ExecutableCommand},
-                           [{args, Args}|LaunchOpts]);
-        true  -> open_port({spawn, ExecutableCommand}, LaunchOpts)
-    end.
+make_exec(FG, Detached, RpcEnabled, Config) ->
+    FlagsGroup = atom_to_list(FG),
+    %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
+    Cmd = systest_config:eval("flags." ++ FlagsGroup ++ ".program", Config,
+                    [{callback, {node, fun systest_node:get_node_info/2}},
+                     {return, value}]),
+    Env = case ?ENCONFIG("flags." ++ FlagsGroup ++ ".environment", Config) of
+              not_found -> [];
+              undefined -> [];
+              Environ   -> Environ
+          end,
+    Args = case ?ENCONFIG("flags." ++ FlagsGroup ++ ".args", Config) of
+               not_found -> [];
+               undefined -> [];
+               Argv      -> Argv
+           end,
+    RunEnv = [{env, Env}],
+    ExecutableCommand = maybe_patch_command(Cmd, RunEnv, Args,
+                                            Detached, RpcEnabled),
+    #exec{command=ExecutableCommand, argv=Args, environment=Env}.
 
-stop_flags(Flags, ShutdownSpec, RpcEnabled) ->
+stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, Config) ->
     case ?CONFIG(stop, Flags, undefined) of
         undefined ->
             case RpcEnabled of
@@ -341,18 +342,31 @@ stop_flags(Flags, ShutdownSpec, RpcEnabled) ->
             end;
         {call, M, F, Argv} ->
             {M, F, Argv};
-        Spec when is_list(Spec) ->
-            script_stop
+        _Spec ->
+            make_exec(stop, Detached, RpcEnabled, Config)
     end.
 
-run_shutdown_hook(Sh, Prog, Args, Env) ->
+
+open_port(#exec{command=ExecutableCommand,
+                argv=Args, environment=Env}, Detached) ->
+    RunEnv = [{env, Env}],
+    LaunchOpts = [exit_status, hide, stderr_to_stdout,
+                  use_stdio, {line, 16384}] ++ RunEnv,
     ct:pal("Spawning executable~n"
-           "Command: ~s~nArgs: ~p~n", [Prog, Args]),
+           "Command:         ~s~n"
+           "Detached:        ~p~n"
+           "Args:            ~p~n"
+           "Launch:          ~p~n",
+           [ExecutableCommand, Detached, Args, LaunchOpts]),
+    case Detached of
+        false -> erlang:open_port({spawn_executable, ExecutableCommand},
+                                  [{args, Args}|LaunchOpts]);
+        true  -> erlang:open_port({spawn, ExecutableCommand}, LaunchOpts)
+    end.
+
+run_shutdown_hook(Exec, Sh=#sh{detached=Detached}) ->
     Pid= spawn_link(fun() ->
-                        Port = open_port({spawn_executable, Prog},
-                                         [{env, Env}, {line, 16384},
-                                         use_stdio, stderr_to_stdout,
-                                         exit_status, {args, Args}]),
+                        Port = open_port(Exec, Detached),
                         exit(shutdown_loop(Port))
                     end),
     Sh#sh{shutdown_port=Pid, state=stopped}.
@@ -438,6 +452,7 @@ maybe_patch_command(Cmd, _, _, false, true) ->
     Cmd;
 maybe_patch_command(Cmd, Env, Args, Detached, RpcEnabled) when Detached orelse
                                                                RpcEnabled ->
+    %% TODO: reconsider this, as I'm not convinced it behaves properly....
     case os:type() of
         {win32, _} ->
             %% TODO: the argv conversion thing here....

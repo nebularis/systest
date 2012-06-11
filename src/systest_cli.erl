@@ -72,10 +72,10 @@
 %%
 
 init(Node=#'systest.node_info'{config=Config}) ->
-    
-    %% TODO: don't carry all the config around all the time - 
+
+    %% TODO: don't carry all the config around all the time -
     %% e.g., append the {node, NI} tuple only when needed
-    
+
     Scope = systest_node:get_node_info(scope, Node),
     Id = systest_node:get_node_info(id, Node),
     Config = systest_node:get_node_info(config, Node),
@@ -238,16 +238,20 @@ handle_msg({Port, closed}, Node, Sh=#sh{port=Port,
 handle_msg({Port, closed}, _Node, Sh=#sh{port=Port}) ->
     ct:pal("~p closed~n", [Port]),
     {stop, {port_closed, Port}, Sh};
-handle_msg({'EXIT', Pid, ok}, _Node, Sh=#sh{shutdown_port=Pid,
-                                            detached=Detached,
-                                            state=killed}) ->
+handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Node, Sh=#sh{shutdown_port=Pid,
+                                                       detached=Detached,
+                                                       state=killed,
+                                                       log=Fd}) ->
     ct:pal("Termination Port completed ok~n"),
+    io:format(Fd, "Halt Log ==============~n~p~n", [StopAcc]),
     case Detached of
         true  -> {stop, normal, Sh};
         false -> Sh
     end;
-handle_msg({'EXIT', Pid, {error, Rc}}, _Node, Sh=#sh{shutdown_port=Pid}) ->
+handle_msg({'EXIT', Pid, {error, Rc, StopAcc}},
+           _Node, Sh=#sh{shutdown_port=Pid}) ->
     ct:pal("Termination Port stopped abnormally (status ~p)~n", [Rc]),
+    io:format(Fd, "Halt Log ==============~n~p~n", [StopAcc]),
     {stop, termination_port_error, Sh};
 handle_msg(Info, _Node, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
     ct:log("Ignoring Info Message:  ~p~n"
@@ -367,17 +371,17 @@ open_port(#exec{command=ExecutableCommand,
 run_shutdown_hook(Exec, Sh=#sh{detached=Detached}) ->
     Pid= spawn_link(fun() ->
                         Port = open_port(Exec, Detached),
-                        exit(shutdown_loop(Port))
+                        exit(shutdown_loop(Port, []))
                     end),
     Sh#sh{shutdown_port=Pid, state=stopped}.
 
 %% port handling
 
-shutdown_loop(Port) ->
+shutdown_loop(Port, Acc) ->
     receive
-        {Port, {exit_status, 0}}  -> ok;
-        {Port, {exit_status, Rc}} -> {error, Rc};
-        {Port, {data, {_, _}}}    -> shutdown_loop(Port)
+        {Port, {exit_status, 0}}  -> {ok, Acc};
+        {Port, {exit_status, Rc}} -> {error, Rc, Acc};
+        {Port, {data, Data}}      -> shutdown_loop(Port, [Data|Acc])
     end.
 
 read_pid(NodeId, Port, Detached, RpcEnabled, Fd) ->

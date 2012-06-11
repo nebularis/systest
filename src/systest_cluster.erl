@@ -172,13 +172,21 @@ with_cluster({Scope, Identity}, NodeHandler, Config) ->
     case systest_config:cluster_config(Scope, Identity) of
         {_, noconfig} ->
             noconfig;
-        {Alias, Hosts} ->
+        {Alias, ClusterConfig} ->
+            {Hosts, Hooks} = lists:splitwith(fun(E) -> 
+                                                 element(1, E) =/= on_start
+                                             end, ClusterConfig),
             ct:log("Configured hosts: ~p~n", [Hosts]),
             Nodes =
                 lists:flatten([NodeHandler(Identity, Alias,
                                            Host, Config) || Host <- Hosts]),
-            #'systest.cluster'{id=Identity, scope=Scope,
-                               name=Alias, nodes=Nodes}
+            Cluster = #'systest.cluster'{id=Identity, scope=Scope,
+                                         name=Alias, nodes=Nodes},
+            case Hooks of
+                [] -> ok;
+                _  -> [systest_hooks:run(Cluster, H, Cluster) || H <- Hooks]
+            end,
+            Cluster
     end.
 
 node_from_pid(Pid, #'systest.cluster'{nodes=Nodes}) ->

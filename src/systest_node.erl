@@ -260,8 +260,10 @@ safe_call(NodeRef, Msg, Default) ->
 node_id(Host, Name) ->
     list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
 
+%% TODO: migrate this to systest_hooks....
+
 interact(Node=#'systest.node_info'{id=NodeId},
-         {eval, Where, Mod, Func, Args}, HState) ->
+         {eval, Where, Mod, Func, Args}, _HState) ->
     Argv = lists:reverse(lists:foldl(fun proc_interact/2, {Node, []}, Args)),
     case Where of
         local ->
@@ -278,7 +280,7 @@ interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}, _) ->
 interact(NI=#'systest.node_info'{handler=Handler}, Inputs, HState) ->
     Handler:handle_interaction(Inputs, NI, HState).
 
-proc_interact({plain_call, M, F, A}, {Node, Acc}) ->
+proc_interact({plain_call, M, F, A}, {_Node, Acc}) ->
     [apply(M, F, A)|Acc];
 proc_interact({call, M, F, A}, {Node, Acc}) ->
     [apply(M, F, [Node|A])|Acc];

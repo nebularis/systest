@@ -183,8 +183,12 @@ with_cluster({Scope, Identity}, NodeHandler, Config) ->
             Cluster = #'systest.cluster'{id=Identity, scope=Scope,
                                          name=Alias, nodes=Nodes},
             case Hooks of
-                [] -> ok;
-                _  -> [systest_hooks:run(Cluster, H, Cluster) || H <- Hooks]
+                [{on_start, Run}|_] ->
+                    ct:pal("running cluster on_start hooks ~p~n", [Run]),
+                    [systest_hooks:run(Cluster, Hook, Cluster) || Hook <- Run];
+                Other ->
+                    ct:pal("ignoring cluster hooks ~p~n", [Other]),
+                    ok
             end,
             Cluster
     end.

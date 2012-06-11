@@ -260,12 +260,32 @@ safe_call(NodeRef, Msg, Default) ->
 node_id(Host, Name) ->
     list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
 
+interact(Node=#'systest.node_info'{id=NodeId},
+         {eval, Where, Mod, Func, Args}, HState) ->
+    Argv = lists:reverse(lists:foldl(fun proc_interact/2, {Node, []}, Args)),
+    case Where of
+        local ->
+            apply(Mod, Func, Argv);
+        remote ->
+            rpc:call(NodeId, Mod, Func, Argv);
+        Id when is_atom(Id) ->
+            rpc:call(Id, Mod, Func, Argv)
+    end;
 interact(Node, {local, Mod, Func, Args}, _) ->
     apply(Mod, Func, [Node|Args]);
 interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}, _) ->
     rpc:call(Node, Mod, Func, Args);
 interact(NI=#'systest.node_info'{handler=Handler}, Inputs, HState) ->
     Handler:handle_interaction(Inputs, NI, HState).
+
+proc_interact({plain_call, M, F, A}, {Node, Acc}) ->
+    [apply(M, F, A)|Acc];
+proc_interact({call, M, F, A}, {Node, Acc}) ->
+    [apply(M, F, [Node|A])|Acc];
+proc_interact({node, Field}, {Node, Acc}) ->
+    [get_node_info(Field, Node)|Acc];
+proc_interact(Term, {_, Acc}) ->
+    [Term|Acc].
 
 handle_msg(Msg, State) ->
     handle_msg(Msg, State, noreply).

@@ -58,7 +58,8 @@ start_link(ScopeId, ClusterId, Config) ->
 
 start_it(How, ScopeId, ClusterId, Config) ->
     ct:pal("Processing cluster ~p~n", [ClusterId]),
-    case apply(gen_server, How, [?MODULE, [ScopeId, ClusterId, Config], []]) of
+    case apply(gen_server, How, [{local, ClusterId},
+                                 ?MODULE, [ScopeId, ClusterId, Config], []]) of
         {error, noconfig} ->
             Config;
         {ok, Pid} ->
@@ -95,6 +96,8 @@ check_config(Cluster, Config) ->
 
 init([Scope, Id, Config]) ->
     process_flag(trap_exit, true),
+    %% TODO: now that we're using locally registered 
+    %% names, perhaps this logic can go away?
     case systest_watchdog:cluster_started(Id, self()) of
         ok ->
             case with_cluster({Scope, Id}, fun start_host/4, Config) of

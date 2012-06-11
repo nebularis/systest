@@ -55,7 +55,7 @@ pre_init_per_testcase(TC, Config, State) ->
 post_end_per_testcase(should_fail, Config,
                       {skip,{failed,
                         {systest_supervision_SUITE,init_per_testcase,
-                        {error, name_in_use}}}}, State) ->
+                        {error, {already_started, _Pid}}}}}, State) ->
     {Config, State};
 post_end_per_testcase(TC, Config, Return,
                       State=#ctx{active={TC, Active}}) when is_pid(Active) ->

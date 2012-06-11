@@ -31,7 +31,8 @@
 %%
 
 systest(Config, _) ->
-    systest_config:start_link(),
+    systest:start(),
+    net_kernel:start([systest_master, shortnames]),
 
     %% TODO: consider adding a time stamp to the scratch
     %%       dir like common test does
@@ -40,7 +41,7 @@ systest(Config, _) ->
                      Dir   -> Dir
                  end,
     rebar_file_utils:rm_rf(ScratchDir),
-    filelib:ensure_dir(filename:join(ScratchDir, "foo")),
+    filelib:ensure_dir(filename:join([ScratchDir, "ct-logs", "foo"])),
     rebar_config:set_global(scratch_dir, ScratchDir),
 
     Profile = case os:getenv("SYSTEST_PROFILE") of
@@ -67,16 +68,23 @@ systest(Config, _) ->
 
             maybe_compile(Config),
 
-            FinalConfig = rebar_config:set(Config, ct_extra_params,
-                                           "-pa test-ebin " ++
-                                           "-no_auto_compile " ++
-                                           "-spec " ++ FinalSpec ++
-                                           " -s systest start"),
-            rebar_core:process_commands([ct], FinalConfig)
+            case ct:run_test([{'spec', FinalSpec},
+                              {logdir, filename:join(ScratchDir, "ct-logs")},
+                              {auto_compile, false}]) of
+                {error, Reason}=Err ->
+                    error(Reason);
+                Results ->
+                    rebar_log:log(info, "Results: ~p~n", [Results]),
+                    ok
+            end
     end.
 
 maybe_compile(Config) ->
-    rebar_erlc_compiler:doterl_compile(compiler_config(Config), "test-ebin").
+    rebar_erlc_compiler:doterl_compile(compiler_config(Config), "test-ebin"),
+    code:add_patha(filename:join(rebar_utils:get_cwd(), "test-ebin")),
+    {ok, Beams} = file:list_dir("test-ebin"),
+    [ code:ensure_loaded(list_to_atom(
+                filename:basename(F, ".beam"))) || F <- Beams ].
 
 compiler_config(Config) ->
     ErlOpts = rebar_config:get_local(Config, erl_opts, []),

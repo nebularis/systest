@@ -111,7 +111,7 @@ init([Scope, Id, Config]) ->
     end.
 
 handle_call(nodes, _From, State=#'systest.cluster'{nodes=Nodes}) ->
-    {reply,[{?CONFIG(id,systest_node:node_data(N)), N} || N <- Nodes],State};
+    {reply,[{?CONFIG(id, systest_node:node_data(N)), N} || N <- Nodes],State};
 handle_call(status, _From, State=#'systest.cluster'{nodes=Nodes}) ->
     {reply, [{N, systest_node:status(N)} || N <- Nodes], State};
 handle_call({stop, Timeout}, From, State) ->

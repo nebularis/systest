@@ -243,15 +243,15 @@ handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Node, Sh=#sh{shutdown_port=Pid,
                                                        state=killed,
                                                        log=Fd}) ->
     ct:pal("Termination Port completed ok~n"),
-    io:format(Fd, "Halt Log ==============~n~p~n", [StopAcc]),
+    io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     case Detached of
         true  -> {stop, normal, Sh};
         false -> Sh
     end;
 handle_msg({'EXIT', Pid, {error, Rc, StopAcc}},
-           _Node, Sh=#sh{shutdown_port=Pid}) ->
+           _Node, Sh=#sh{shutdown_port=Pid, log=Fd}) ->
     ct:pal("Termination Port stopped abnormally (status ~p)~n", [Rc]),
-    io:format(Fd, "Halt Log ==============~n~p~n", [StopAcc]),
+    io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     {stop, termination_port_error, Sh};
 handle_msg(Info, _Node, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
     ct:log("Ignoring Info Message:  ~p~n"
@@ -379,10 +379,16 @@ run_shutdown_hook(Exec, Sh=#sh{detached=Detached}) ->
 
 shutdown_loop(Port, Acc) ->
     receive
-        {Port, {exit_status, 0}}  -> {ok, Acc};
-        {Port, {exit_status, Rc}} -> {error, Rc, Acc};
-        {Port, {data, Data}}      -> shutdown_loop(Port, [Data|Acc])
+        {Port, {exit_status, 0}}    -> {ok, output(Acc)};
+        {Port, {exit_status, Rc}}   -> {error, Rc, output(Acc)};
+        {Port, {data, {eol, Line}}} -> shutdown_loop(Port, [Line|Acc]);
+        {Port, {data, {eol, []}}}   -> shutdown_loop(Port, Acc);
+        {Port, {data, Data}}        -> shutdown_loop(Port,
+                                          [io_lib:format("~p~n", [Data])|Acc])
     end.
+
+output(Items) ->
+    string:join(Items, "\n").
 
 read_pid(NodeId, Port, Detached, RpcEnabled, Fd) ->
     case RpcEnabled of
@@ -488,38 +494,6 @@ expand_env_variable(InStr, VarName, RawVarValue) ->
     end.
 
 %% node configuration/setup
-
-convert_flags(Operation, Node, AllFlags, Config) ->
-    Flags = ?REQUIRE(Operation, AllFlags),
-    ct:pal("flags: ~p~n", [Flags]),
-    {_, _, Env, Acc, Prog} =
-            lists:foldl(fun process/2,
-                        {Node, Config, [], [], undefined}, Flags),
-    {Env, Acc, Prog}.
-
-process({program, Prog}, Acc) ->
-    setelement(5, Acc, Prog);
-process({node, Attr}, {Node, _, _, Output, _}=Acc) ->
-    setelement(4, Acc, Output ++
-                       [atom_to_list(systest_node:get_node_info(Attr, Node))]);
-process({environment, Attr}, {_, _, Output, _, _}=Acc) ->
-    case systest_config:get_env(Attr) of
-        {Attr, _Value}=Env -> setelement(3, Acc, [Env|Output]);
-        _                  -> Acc
-    end;
-process({environment, Key, {node, Attr}}, {Node, _, Output, _, _}=Acc) ->
-    Value = convert_node_attribute(Attr, Node),
-    setelement(3, Acc, [{Key, Value}|Output]);
-process({environment, Attr, Value}, {_, _, Output, _, _}=Acc) ->
-    setelement(3, Acc, [{Attr, Value}|Output]);
-process(Data, {_, _, _, Output, _}=Acc) ->
-    setelement(4, Acc, Output ++ [Data]).
-
-convert_node_attribute(Attr, Node) ->
-    case lists:member(Attr, [name, host, id]) of
-        true  -> atom_to_list(systest_node:get_node_info(Attr, Node));
-        false -> systest_node:get_node_info(Attr, Node)
-    end.
 
 default_log_dir(Config) ->
     ?CONFIG(scratch_dir, Config, systest_utils:temp_dir()).

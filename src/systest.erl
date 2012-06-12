@@ -26,6 +26,7 @@
 
 -include("systest.hrl").
 
+-export([main/1]).
 -export([start/0, reset/0, sigkill/1]).
 -export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
 -export([active_cluster/1, clusters/1, cluster_nodes/1]).
@@ -35,6 +36,10 @@
 %%
 %% Public APIs
 %%
+
+%% escript API
+main(Args) ->
+    systest_main:run(Args).
 
 %% application startup
 

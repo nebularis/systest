@@ -32,6 +32,7 @@
 
 systest(Config, _) ->
     systest:start(),
+    code:add_patha(filename:dirname(filename:absname(code:which(systest)))),
     net_kernel:start([systest_master, shortnames]),
 
     %% TODO: consider adding a time stamp to the scratch

@@ -34,5 +34,15 @@ pre_escriptize(_Config, _) ->
          Dest = filename:join([Base, "ebin", Hdr]),
          file:copy(Src, Dest)
      end || Hdr <- Hrls],
+    copy_rebar_badness(Base),
     ok.
+
+copy_rebar_badness(Base) ->
+    [copy_rebar_badness(Base, F) || F <- ["rebar_file_utils.beam",
+                                          "mustache.beam"]].
+
+copy_rebar_badness(Base, Mod) ->
+    Src = filename:join([Base, "deps", "rebar", "ebin", Mod]),
+    Dest = filename:join([Base, "ebin", Mod]),
+    file:copy(Src, Dest).
 

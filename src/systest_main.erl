@@ -71,9 +71,7 @@ export_entry({File, Bin}=Entry, Config) ->
     end.
 
 do_export({File, Bin}, Config) ->
-    DepsDir = rebar_config:get_local(Config, deps_dir,
-                    rebar_config:get_global(deps_dir, "deps")),
-    Path = filename:join(DepsDir, File),
+    Path = filename:join(deps_dir(Config), File),
     rebar_utils:ensure_dir(Path),
     file:write_file(Path, Bin).
 
@@ -82,6 +80,10 @@ maybe_write_headers(Commands, Config) ->
         false -> ok;
         true  -> export(Config)
     end.
+
+deps_dir(Config) ->
+    rebar_config:get_local(Config, deps_dir,
+                    rebar_config:get_global(deps_dir, "deps")).
 
 init_rebar(Options) ->
     %% Initialize rebar *stuff*

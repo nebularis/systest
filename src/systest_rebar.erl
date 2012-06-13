@@ -32,7 +32,12 @@
 
 systest(Config, _) ->
     systest:start(),
-    code:add_patha(filename:dirname(filename:absname(code:which(systest)))),
+    % code:add_pathz(filename:dirname(filename:absname(code:which(systest)))),
+    DepsDir = rebar_config:get_local(Config, deps_dir,
+                        rebar_config:get_global(deps_dir, "deps")),
+    code:add_patha(filename:join([rebar_utils:get_cwd(),
+                                  DepsDir, "systest", "ebin"])),
+    
     net_kernel:start([systest_master, shortnames]),
 
     %% TODO: consider adding a time stamp to the scratch
@@ -41,6 +46,7 @@ systest(Config, _) ->
                      false -> filename:join(temp_dir(), "systest");
                      Dir   -> Dir
                  end,
+
     rebar_file_utils:rm_rf(ScratchDir),
     filelib:ensure_dir(filename:join([ScratchDir, "ct-logs", "foo"])),
     rebar_config:set_global(scratch_dir, ScratchDir),
@@ -67,7 +73,7 @@ systest(Config, _) ->
             {ok, FinalSpec} = process_config_files(ScratchDir,
                                                    SpecOutput, Env),
 
-            maybe_compile(Config),
+            % maybe_compile(Config),
 
             case ct:run_test([{'spec', FinalSpec},
                               {logdir, filename:join(ScratchDir, "ct-logs")},
@@ -81,6 +87,8 @@ systest(Config, _) ->
     end.
 
 maybe_compile(Config) ->
+    rebar_log:log(debug, "~p~n", [Config]),
+    code:add_paths(["lib", "lib/systest", "lib/systest.ebin"]),
     rebar_erlc_compiler:doterl_compile(compiler_config(Config), "test-ebin"),
     code:add_patha(filename:join(rebar_utils:get_cwd(), "test-ebin")),
     {ok, Beams} = file:list_dir("test-ebin"),
@@ -159,6 +167,8 @@ temp_dir() ->
         {win32, _} ->
             %% mirrors the behaviour of the win32 GetTempPath function...
             get("TMP", get("TEMP", element(2, file:get_cwd())));
+        {unix, darwin} ->
+            "/tmp";  %% unfeasibly long paths can occur otherwise...
         _ ->
             case os:getenv("TMPDIR") of
                 false -> "/tmp"; %% this is what the JVM does, but honestly...

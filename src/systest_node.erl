@@ -34,6 +34,7 @@
 -export([make_node/3]).
 -export([interact/2]).
 -export([node_id/2, node_data/1]).
+-export([user_data/1, user_data/2]).
 -export([start/1, start/3, stop/1, kill/1]).
 -export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
 -export([sigkill/1, kill_after/2, kill_after/3]).
@@ -153,6 +154,14 @@ interact(NodeRef, InputData) ->
 -spec node_data(node_ref()) -> [{atom(), term()}].
 node_data(NodeRef) ->
     safe_call(NodeRef, node_info_list, [{owner, NodeRef}]).
+
+-spec user_data(node_ref()) -> [{atom(), term()}].
+user_data(NodeRef) ->
+    gen_server:call(NodeRef, user_data).
+
+-spec user_data(node_ref(), term()) -> 'ok'.
+user_data(NodeRef, Data) ->
+    gen_server:call(NodeRef, {user_data, Data}).
 
 %% NB: this *MUST* run on the client
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
@@ -292,6 +301,10 @@ proc_interact(Term, {_, Acc}) ->
 handle_msg(Msg, State) ->
     handle_msg(Msg, State, noreply).
 
+handle_msg(user_data, State=#state{node=Node}, _ReplyTo) ->
+    {reply, get_node_info(user, Node), State};
+handle_msg({user_data, Data}, State=#state{node=Node}, _ReplyTo) ->
+    {reply, 'ok', State#state{node=set_node_info(user, Data)}};
 handle_msg(node_info_list, State=#state{node=Node}, _ReplyTo) ->
     Attrs = systest_node:info_node_info(fields) -- [config],
     Info = [{K, get_node_info(K, Node)} || K <- Attrs],

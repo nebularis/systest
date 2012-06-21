@@ -217,7 +217,7 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
         Error ->
             %% TODO: do NOT rely on callbacks returning a proper gen_server
             %% init compatible response tuple - construct this for them....
-            Error
+            {stop, Error}
     end.
 
 apply_startup(Item, {Node, HState}) ->

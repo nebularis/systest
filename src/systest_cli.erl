@@ -451,11 +451,11 @@ check_command(_, false, true) ->
     ok;
 check_command(_, true, false) ->
     %% TODO: think about if/how we can relax this rule....
-    {stop, {error, {detached, no_rpc}}};
+    {error, {detached, no_rpc}};
 check_command(Cmd, true, true) ->
     case re:run(Cmd, "(&&|;)") of
         nomatch -> ok;
-        _       -> {stop, async_multicmds_disallowed}
+        _       -> {error, async_multicmds_disallowed}
     end.
 
 maybe_patch_command(Cmd, _, _, false, true) ->

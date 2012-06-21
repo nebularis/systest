@@ -204,15 +204,15 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
                 Apps -> [setup(NI2, App, HState) || App <- Apps]
             end,
 
-            State = #state{node=NI2#'systest.node_info'{owner=self()},
-                           handler=Callback, handler_state=HState},
+            NI3 = #'systest.node_info'{owner=self()},
+            State = #state{node=NI3, handler=Callback, handler_state=HState},
 
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.on_start of
                 []   -> {ok, State};
-                Xtra -> {NI3, _} = lists:foldl(fun apply_startup/2,
-                                               {NI2, HState}, Xtra),
-                        {ok, State#state{node=NI3}}
+                Xtra -> {NI4, _} = lists:foldl(fun apply_startup/2,
+                                               {NI3, HState}, Xtra),
+                        {ok, State#state{node=NI4}}
             end;
         Error ->
             %% TODO: do NOT rely on callbacks returning a proper gen_server

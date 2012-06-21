@@ -204,7 +204,7 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
                 Apps -> [setup(NI2, App, HState) || App <- Apps]
             end,
 
-            NI3 = #'systest.node_info'{owner=self()},
+            NI3 = NI2#'systest.node_info'{owner=self()},
             State = #state{node=NI3, handler=Callback, handler_state=HState},
 
             %% TODO: validate that these succeed and shutdown when they don't
@@ -304,7 +304,7 @@ handle_msg(Msg, State) ->
 handle_msg(user_data, State=#state{node=Node}, _ReplyTo) ->
     {reply, get_node_info(user, Node), State};
 handle_msg({user_data, Data}, State=#state{node=Node}, _ReplyTo) ->
-    {reply, 'ok', State#state{node=set_node_info(user, Data)}};
+    {reply, 'ok', State#state{node=set_node_info([{user, Data}], Node)}};
 handle_msg(node_info_list, State=#state{node=Node}, _ReplyTo) ->
     Attrs = systest_node:info_node_info(fields) -- [config],
     Info = [{K, get_node_info(K, Node)} || K <- Attrs],

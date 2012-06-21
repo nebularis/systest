@@ -63,12 +63,12 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 cluster_config(Scope, Identity) ->
-    case search_eval([Scope, {Identity, 'all'}],
-                     ct:get_config(shared, []),
-                     search_options([{key_func, fun(X) -> X end}])) of
+    case search({Identity, 'all'},
+                ct:get_config(Scope, []),
+                search_options([{key_func, fun(X) -> X end}])) of
         Bad when Bad =:= not_found orelse
                  Bad =:= undefined ->
-            ct:pal("nothing at ~p.~p(|all)~n", [Scope, Identity]),
+            ct:pal("nothing at ~p.(~p|all)~n", [Scope, Identity]),
             {Identity, ct:get_config({Identity, cluster}, noconfig)};
         Alias when is_atom(Alias) ->
             {Alias, ct:get_config({Alias, cluster}, noconfig)};

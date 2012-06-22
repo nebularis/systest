@@ -3,8 +3,8 @@
 % {config, "{{ base_dir }}/resources/systest_nodes.config"}.
 {config, "{{ base_dir }}/resources/systest_supervision.config"}.
 
-{alias, test, "{{ base_dir }}/test-ebin"}.
-{suites, test, all}.
+{alias, test, "{{ base_dir }}/ebin"}.
+{suites, test, systest_cli_SUITE}.
 % {cases, test, systest_supervision_SUITE, all}.
 
 {ct_hooks, [cth_log_redirect,

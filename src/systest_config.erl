@@ -63,17 +63,28 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 cluster_config(Scope, Identity) ->
-    case search({Identity, 'all'},
-                ct:get_config(Scope, []),
-                search_options([{key_func, fun(X) -> X end}])) of
-        Bad when Bad =:= not_found orelse
-                 Bad =:= undefined ->
-            ct:pal("nothing at ~p.(~p|all)~n", [Scope, Identity]),
+    case is_configured_explicitly(Identity) of
+        true ->
             {Identity, ct:get_config({Identity, cluster}, noconfig)};
-        Alias when is_atom(Alias) ->
-            {Alias, ct:get_config({Alias, cluster}, noconfig)};
-        Other ->
-            throw(Other)
+        false ->
+            case search({Identity, 'all'},
+                        ct:get_config(Scope, []),
+                        search_options([{key_func, fun(X) -> X end}])) of
+                Bad when Bad =:= not_found orelse
+                         Bad =:= undefined ->
+                    ct:pal("nothing at ~p.(~p|all)~n", [Scope, Identity]),
+                    {Identity, ct:get_config({Identity, cluster}, noconfig)};
+                Alias when is_atom(Alias) ->
+                    {Alias, ct:get_config({Alias, cluster}, noconfig)};
+                Other ->
+                    throw(Other)
+            end
+    end.
+
+is_configured_explicitly(Identity) ->
+    case ct:require({Identity, cluster}) of
+        ok         -> true;
+        {error, _} -> false
     end.
 
 eval(Key, Config) ->

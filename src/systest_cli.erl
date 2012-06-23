@@ -89,7 +89,7 @@ init(Node=#'systest.node_info'{config=Config}) ->
     StartCmd = make_exec(start, Detached, RpcEnabled, Config),
     StopCmd  = stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, Config),
 
-    case check_command(StartCmd#exec.command, Detached, RpcEnabled) of
+    case check_command_mode(Detached, RpcEnabled) of
         ok ->
             Port = open_port(StartCmd, Detached),
             #exec{environment=Env} = StartCmd,
@@ -447,16 +447,11 @@ wait_for_nodeup(NodeId) ->
 
 %% command processing
 
-check_command(_, false, true) ->
-    ok;
-check_command(_, true, false) ->
+check_command_mode(true, false) ->
     %% TODO: think about if/how we can relax this rule....
     {error, {detached, no_rpc}};
-check_command(Cmd, true, true) ->
-    case re:run(Cmd, "(&&|;)") of
-        nomatch -> ok;
-        _       -> {error, async_multicmds_disallowed}
-    end.
+check_command_mode(_, _) ->
+    ok.
 
 maybe_patch_command(Cmd, _, _, false, true) ->
     Cmd;

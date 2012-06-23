@@ -99,7 +99,7 @@ write_pid_file(Name, {dir, Dir}) ->
 %% config handling
 
 active_cluster(Config) ->
-    systest_config:read(active, Config).
+    ?REQUIRE(active, Config).
 
 clusters(Config) ->
     systest_config:read(?MODULE, Config).

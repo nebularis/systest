@@ -121,7 +121,6 @@ handle_call({exceptions, ClusterId}, _From,
     {reply, ets:match_object(ET, {ClusterId, '_', '_'}), State};
 handle_call({cluster_started, ClusterId, ClusterPid},
             _From, State=#state{cluster_table=CT}) ->
-    ct:pal("cluster ~p has started...~n", [ClusterId]),
     case ets:insert_new(CT, {ClusterId, ClusterPid}) of
         true  -> %% NB: we link to cluster pids so that we
                  %% can be sure to know when and why they exit

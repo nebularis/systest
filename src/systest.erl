@@ -110,12 +110,3 @@ cluster_nodes(ClusterRef) ->
 cluster_config(Scope) ->
     ct:get_config({Scope, cluster}).
 
-%%
-%% Private API
-%%
-
-%global_config(Scope, Node#'systest.node_info'{handler=systest_slave}) ->
-%    VmFlags = systest_config:get_config(Scope, Node, flags),
-%    SysTestPath = filename:absname(filename:dirname(code:which(systest))),
-%    [{flags, "-pa " ++ SysTestPath ++ " " ++ VmFlags}];
-

@@ -31,6 +31,7 @@
 -export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
 -export([active_cluster/1, clusters/1, cluster_nodes/1]).
 -export([cluster_config/1]).
+-export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
 
 %%
@@ -62,10 +63,20 @@ start(Scope, Config) ->
     systest_cluster:start(Scope, Config).
 
 start(Scope, Identify, Config) ->
-    systest_cluster:start(Scope, Identify, Config).
+    systest_cluster:start(Scope, Identify, trace_on(Identify, Config)).
 
 stop(Scope) when is_pid(Scope) ->
     systest_cluster:stop(Scope).
+
+%% tracing/debugging
+
+trace_on(Scope, Config) ->
+    systest_trace:debug(Scope, Config).
+
+trace_off(Config) ->
+    systest_trace:stop(Config).
+
+%% instrumentation
 
 %% interactions
 

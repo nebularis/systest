@@ -102,8 +102,8 @@ post_end_per_group(Group, Config, Result, State) ->
     end.
 
 %% @doc Called before each test case.
-pre_init_per_testcase(_TC, Config, State=#state{auto_start=false}) ->
-    {Config, State};
+pre_init_per_testcase(TC, Config, State=#state{auto_start=false}) ->
+    {systest:trace_on(TC, Config), State};
 pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
     ct:pal("~p handling pre_init_per_testcase [~p]~n", [?MODULE, TC]),
     {systest:start(Suite, TC, Config), State}.
@@ -113,6 +113,7 @@ post_end_per_testcase(TC, Config, Return, State) ->
     ct:pal("processing post_end_per_testcase: ~p: ~p~n", [TC, Config]),
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
+            systest:trace_off(Config),
             {Return, State};
         ClusterPid ->
             case erlang:is_process_alive(ClusterPid) of
@@ -123,6 +124,7 @@ post_end_per_testcase(TC, Config, Return, State) ->
                 false ->
                     ct:pal("cluster ~p is already down~n", [ClusterPid])
             end,
+            systest:trace_off(Config),
             {Return, State}
     end.
 

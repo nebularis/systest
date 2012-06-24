@@ -63,8 +63,9 @@
     flags       :: vmflags() | script_flags(),  %% used for 'all sorts',
                                                 %% depending on the handler...
     apps        :: [application_info()],        %% mainly used by slave
-    on_start    :: hook(),                      %% mainly used by slave, or tc
-    on_stop     :: hook(),
+    on_start    :: hook(),                      %% startup hooks
+    on_stop     :: hook(),                      %% shutdown hooks
+    on_join     :: hook(),                      %% joining (cluster) hooks
     id          :: atom(),                      %% set by the handler!
     os_pid      :: string(),                    %% set by the handler!
     owner       :: pid() | port(),              %% set by the handler!

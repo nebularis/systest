@@ -39,7 +39,7 @@
 -export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
 -export([sigkill/1, kill_after/2, kill_after/3]).
 -export([shutdown_and_wait/2, status/1]).
-
+-export([joined_cluster/3]).
 -export([status_check/1]).
 
 %% OTP gen_server Exports
@@ -163,6 +163,10 @@ user_data(NodeRef) ->
 user_data(NodeRef, Data) ->
     gen_server:call(NodeRef, {user_data, Data}).
 
+-spec joined_cluster(node_ref(), pid(), [{atom(), pid()}]) -> 'ok'.
+joined_cluster(NodeRef, ClusterRef, SiblingNodes) ->
+    ok = gen_server:call(NodeRef, {joined, ClusterRef, SiblingNodes}).
+
 %% NB: this *MUST* run on the client
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     %% TODO: review whether this makes sense in light of the changes
@@ -220,22 +224,6 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
             {stop, Error}
     end.
 
-apply_startup(Item, {Node, HState}) ->
-    case interact(Node, Item, HState) of
-        {write, Loc, Data} ->
-            ct:pal("[~p] on_start~n"
-                   "argv: ~p~n"
-                   "state-update: ~p => ~p~n",
-                   [Node#'systest.node_info'.id, Item, Loc, Data]),
-            {systest_node:set_node_info([{Loc, Data}], Node), HState};
-        Other ->
-            ct:pal("[~p] on_start~n"
-                   "argv: ~p~n"
-                   "response: ~p~n",
-                    [Node#'systest.node_info'.id, Item, Other]),
-            {Node, HState}
-    end.
-
 handle_call(Msg, From, State) ->
     handle_msg(Msg, State, From).
 
@@ -269,6 +257,39 @@ safe_call(NodeRef, Msg, Default) ->
 node_id(Host, Name) ->
     list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
 
+apply_startup(Item, NodeState) ->
+    apply_hook(on_start, Item, NodeState).
+
+apply_hook(Hook, Item, {Node, HState}) ->
+    case interact(Node, Item, HState) of
+        {upgrade, Node2} ->
+            {Node2, HState};
+        {write, Loc, Data} ->
+            ct:pal("[~p] ~p~n"
+                   "argv: ~p~n"
+                   "state-update: ~p => ~p~n",
+                   [Node#'systest.node_info'.id, Hook, Item, Loc, Data]),
+            {systest_node:set_node_info([{Loc, Data}], Node), HState};
+        Other ->
+            ct:pal("[~p] ~p~n"
+                   "argv: ~p~n"
+                   "response: ~p~n",
+                    [Node#'systest.node_info'.id, Hook, Item, Other]),
+            {Node, HState}
+    end.
+
+on_join(Node, Cluster, Nodes, Hooks) ->
+    {Node2, _} = lists:foldl(fun({M, F}, Acc) ->
+                                 apply_hook(on_join,
+                                            {M, F, [Node, Cluster, Nodes]},
+                                            {Acc, undefined});
+                                ({M, F, A}, Acc) ->
+                                 apply_hook(on_join,
+                                            {M, F, [Node, Cluster, Nodes|A]},
+                                            {Acc, undefined})
+                             end, Node, Hooks),
+    Node2.
+
 %% TODO: migrate this to systest_hooks....
 
 interact(Node=#'systest.node_info'{id=NodeId},
@@ -284,6 +305,8 @@ interact(Node=#'systest.node_info'{id=NodeId},
     end;
 interact(Node, {local, Mod, Func, Args}, _) ->
     apply(Mod, Func, [Node|Args]);
+interact(Node=#'systest.node_info'{id=Id}, {remote, Mod, Func, Args}, _) ->
+    rpc:call(Id, Mod, Func, [Node|Args]);
 interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}, _) ->
     rpc:call(Node, Mod, Func, Args);
 interact(NI=#'systest.node_info'{handler=Handler}, Inputs, HState) ->
@@ -309,6 +332,12 @@ handle_msg(node_info_list, State=#state{node=Node}, _ReplyTo) ->
     Attrs = systest_node:info_node_info(fields) -- [config],
     Info = [{K, get_node_info(K, Node)} || K <- Attrs],
     {reply, Info, State};
+handle_msg({joined, Cluster, Nodes}, State=#state{node=Node}, _ReplyTo) ->
+    case Node#'systest.node_info'.on_join of
+        []    -> {reply, ok, State};
+        Hooks -> Node2 = on_join(Node, Cluster, Nodes, Hooks),
+                 {reply, ok, State#state{node=Node2}}
+    end;
 %% nodedown notifications
 handle_msg({nodedown, NodeId},
            SvrState=#state{activity_state=State,
@@ -450,6 +479,7 @@ make_node(Config) ->
                    {apps,       ?CONFIG(applications, Config)},
                    {on_start,   ?CONFIG(on_start, Config)},
                    {on_stop,    ?CONFIG(on_stop, Config)},
+                   {on_join,    ?CONFIG(on_join, Config)},
                    {config,     Config}]).
 
 lookup(Key, Config, Default) ->
@@ -484,7 +514,7 @@ merge_refs(Ref, Acc) ->
               ?CONFIG(on_stop, RefConfig, []),
 
     Base = [ I || I={K, _} <- Acc,
-                  lists:member(K, [flags, apps, user]) ],
+                  lists:member(K, [on_join, flags, apps, user]) ],
     [{startup, Startup},
      {on_start, OnStart},
      {on_stop, OnStop}|Base].

@@ -340,7 +340,7 @@ handle_msg(stop, State=#state{node=Node, handler=Mod,
         [] -> ok;
         %% TODO: consider whether this is structured correctly - it *feels*
         %% a little hackish - and perhaps having a supervising process deal
-        %% with these 'interactions' a little better
+        %% with these 'interactions' would be better
         Shutdown  -> [ct:pal("~p~n",
                         [interact(Node, In, ModState)]) || In <- Shutdown]
     end,

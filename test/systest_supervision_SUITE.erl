@@ -109,7 +109,7 @@ end_per_tc_automation(Config) ->
                   {_, 'nodeup'},
                   {_, 'nodeup'}], Status),
     %% common test makes us declare inter-test dependencies
-    %% specifically, accepting that their impossible to remove
+    %% specifically, accepting that they're impossible to remove
     %% in some cases - this test (of how two test cases in a
     %% managed test framework will interact) being a perfect example
     {save_config, [{previous_active, Pid}]}.

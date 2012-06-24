@@ -37,28 +37,16 @@
 %% Config/Fixture Definitions
 %%
 
-suite() -> [{timetrap, {seconds, 200}}].
+all() ->
+    systest_suite:export_all(?MODULE).
 
-all() -> [].
-    %%systest_suite:export_all(?MODULE).
-
-slave_nodes_are_fully_configured_on_testcase_init(Config) ->
-    Cluster = ?CONFIG(systest_node, Config),
-    systest_cluster:print_status(Cluster),
+restarting_nodes(Config) ->
+    process_flag(trap_exit, true),
+    Cluster = systest:active_cluster(Config),
     [begin
          ?assertEqual(pong, net_adm:ping(Id)),
-
-         EbinPath = code:which(systest),
-         ?assertMatch(EbinPath,
-                      systest:interact(Ref, {code, which, [systest]})),
-
-         Wildcard = filename:join(?CONFIG(scratch_dir, Config), "*.pid"),
-         ct:pal("find ~s...~n", [Wildcard]),
-         [PidFile] = filelib:wildcard(Wildcard),
-
-         {ok, Pid} = file:read_file(PidFile),
-         ?assertEqual(?CONFIG(os_pid, systest_node:node_data(Ref)),
-                      binary_to_list(Pid))
+         {ok, {Id, Pid}} = systest_cluster:restart_node(Cluster, Ref),
+         ?assertEqual(true, erlang:is_process_alive(Pid))
      end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
     ok.
 

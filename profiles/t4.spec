@@ -6,7 +6,7 @@
 
 {alias, test, "{{ base_dir }}/ebin"}.
 {suites, test, all}.
-% {cases, test, systest_cli_SUITE, starting_and_stopping_nodes}.
+% {cases, test, systest_node_SUITE, restarting_nodes}.
 
 {ct_hooks, [cth_log_redirect,
             {systest_supervision_cth, [], 0},

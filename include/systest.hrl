@@ -72,9 +72,11 @@
 }).
 
 -record('systest.cluster', {
-    id      :: atom(),
-    scope   :: atom(),
-    name    :: atom(),
-    nodes   :: [pid()]
+    id              :: atom(),
+    scope           :: atom(),
+    name            :: atom(),
+    nodes           :: [pid()],
+    config          :: systest_config:config(),
+    pending = []    :: [{term(), atom()}]
 }).
 

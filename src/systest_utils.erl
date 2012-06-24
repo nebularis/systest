@@ -27,7 +27,8 @@
 -include_lib("kernel/include/inet.hrl").
 
 -export([is_epmd_contactable/2, temp_dir/0, make_node/1, make_node/2]).
--export([proplist_format/1, strip_suite_suffix/1]).
+-export([proplist_format/1, strip_suite_suffix/1, hostname/1]).
+-export([node_id_and_hostname/1]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
 
@@ -40,6 +41,13 @@ make_node(Name) ->
 %% @doc make a node shortname from the supplied name and host atoms
 make_node(Name, Host) ->
     list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
+
+hostname(NodeName) ->
+    element(2, node_id_and_hostname(NodeName)).
+
+node_id_and_hostname(NodeId) ->
+    list_to_tuple(lists:map(fun erlang:list_to_atom/1,
+                            string:tokens(atom_to_list(NodeId), "@"))).
 
 %% @doc strip the "_SUITE" suffic from a ct test suite name
 strip_suite_suffix(Suite) ->

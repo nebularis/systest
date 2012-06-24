@@ -4,7 +4,6 @@ REBAR=$(shell which rebar)
 SOURCE_DIR=src
 TEST_DIR=test
 EBIN_DIR=ebin
-TEST_EBIN_DIR=test-ebin
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) 
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
@@ -20,12 +19,14 @@ ifeq ($(REBAR), '')
 REBAR=bin/rebar/rebar
 endif
 
+.PHONY: all
 all: clean test
 
 .PHONY: clean
 clean:
 	$(REBAR) skip_deps=true clean -v $(LOGLEVEL)
 
+.PHONY: dist-clean
 dist-clean:
 	rm -drf deps
 	rm -drf bin
@@ -36,10 +37,11 @@ $(DEPS): $(REBAR)
 $(MAIN_TARGETS): $(SOURCES) $(INCLUDES)
 	$(REBAR) compile -v $(LOGLEVEL)
 
-$(TEST_TARGETS): $(MAIN_TARGETS)
+$(TEST_TARGETS): $(TEST_SOURCES)
 	$(REBAR) skip_deps=true -C test.config compile -v $(LOGLEVEL)
 
-test: $(TEST_TARGETS)
+.PHONE: test
+test: $(MAIN_TARGETS) $(TEST_TARGETS)
 	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true systest -v $(LOGLEVEL)
 
 bin/%:

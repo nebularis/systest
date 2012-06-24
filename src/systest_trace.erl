@@ -87,23 +87,7 @@ load_trace_configuration({ct, TestCase}, _Config) ->
             ?TRACE_DISABLED;
         TraceConfig ->
             load_tc_trace_config(lists:keysearch(TestCase, 1, TraceConfig))
-    end;
-load_trace_configuration(_TestCase, _Config) ->
-  %% how many nested case blocks? Yuk - fix this before committing!.
-  %%case proplists:get_value(test_cases, Config) of
-  %% undefined -> {trace, disabled};
-  %% TestCases when is_list(TestCases) ->
-  %% case proplists:get_value(TestCase, TestCases) of
-  %% undefined -> ?TRACE_DISABLED;
-  %% TraceTarget when is_atom(TraceTarget) ->
-  %% case proplists:get_value(trace_targets, Config) of
-  %% undefined -> ?TRACE_DISABLED;
-  %% TraceTargets when is_list(TraceTargets) ->
-  %% {proplists:get_value(TraceTarget, TraceTargets, ?TRACE_DISABLED)
-  %% end
-  %% end
-  %%end;
-  throw(enot_supported).
+    end.
 
 %%load_trace_configuration(TestCaseOrConfig) when is_atom(TestCaseOrConfig) ->
 %% load_tc_trace_config(lists:keysearch(TestCase, 1,

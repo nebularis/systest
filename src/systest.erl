@@ -45,7 +45,7 @@ main(Args) ->
 %% application startup
 
 start() ->
-    application:start(?MODULE).
+    systest_app:start().
 
 reset() ->
     systest_watchdog:reset(),

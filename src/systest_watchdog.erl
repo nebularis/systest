@@ -101,6 +101,7 @@ init([]) ->
 handle_call(reset, _From, State=#state{cluster_table=CT,
                                        node_table=NT,
                                        exception_table=ET}) ->
+    ct:pal("Resetting Watchdog~n", []),
     CPids = [CPid || {_, CPid} <- ets:tab2list(CT)],
     systest_cleaner:kill_wait(CPids, fun(P) -> erlang:exit(P, reset) end),
     [ets:delete_all_objects(T) || T <- [ET, NT, CT]],

@@ -26,7 +26,17 @@
 -behaviour(application).
 
 %% Application callbacks
--export([start/2, stop/1]).
+-export([start/0, start/1, start/2, stop/1]).
+
+%%
+%% Public Interface
+%%
+
+start() ->
+    start(temporary).
+
+start(Type) ->
+    appstart:start(systest, Type).
 
 %%
 %% Application callbacks

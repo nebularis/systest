@@ -78,6 +78,7 @@
     name            :: atom(),
     nodes           :: [pid()],
     config          :: systest_config:config(),
+    on_start        :: [hook()],
     pending = []    :: [{term(), atom()}]
 }).
 

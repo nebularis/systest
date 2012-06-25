@@ -76,7 +76,7 @@ pre_init_per_suite(Suite, Config, State) ->
 
 post_end_per_suite(Suite, Config, Result, State) ->
     %% TODO: check and see whether there *is* actually an active cluster
-    case ?CONFIG(Suite, Config, undefined) of
+    case ?CONFIG(systest_utils:strip_suite_suffix(Suite), Config, undefined) of
         undefined ->
             ct:pal("no configured suite to stop~n"),
             {Result, State};

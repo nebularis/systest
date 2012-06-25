@@ -116,8 +116,22 @@ init([Scope, Id, Config]) ->
             case with_cluster({Scope, Id}, fun start_host/4, Config) of
                 noconfig ->
                     {stop, noconfig};
-                Cluster ->
-                    ct:pal("Starting with ~p~n", [Cluster]),
+                Cluster=#'systest.cluster'{nodes=Nodes, on_start=Hooks} ->
+                    case Hooks of
+                        [{on_start, Run}|_] ->
+                            ct:pal("running cluster on_start hooks ~p~n",
+                                   [Run]),
+                            [systest_hooks:run(Cluster,
+                                               Hook, Cluster) || Hook <- Run];
+                        Other ->
+                            ct:pal("ignoring cluster hooks ~p~n", [Other]),
+                            ok
+                    end,
+                    [begin
+                         {_, Ref} = Node,
+                         systest_node:joined_cluster(Ref, Cluster,
+                                                     Nodes -- [Node])
+                     end || Node <- Nodes],
                     {ok, Cluster}
             end;
         {error, clash} ->
@@ -231,20 +245,12 @@ with_cluster({Scope, Identity}, Handler, Config) ->
             Nodes = lists:flatten([Handler(Identity, Alias,
                                            Host, Config) || Host <- Hosts]),
 
-            Cluster = #'systest.cluster'{id = Identity,
-                                         scope = Scope,
-                                         name = Alias,
-                                         nodes = Nodes,
-                                         config = Config},
-            case Hooks of
-                [{on_start, Run}|_] ->
-                    ct:pal("running cluster on_start hooks ~p~n", [Run]),
-                    [systest_hooks:run(Cluster, Hook, Cluster) || Hook <- Run];
-                Other ->
-                    ct:pal("ignoring cluster hooks ~p~n", [Other]),
-                    ok
-            end,
-            Cluster
+            #'systest.cluster'{id = Identity,
+                               scope = Scope,
+                               name = Alias,
+                               nodes = Nodes,
+                               config = Config,
+                               on_start = Hooks}
     end.
 
 %% TODO: make a Handler:status call to get detailed information back...

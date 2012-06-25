@@ -28,6 +28,7 @@ EBIN_DIR=ebin
 INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
 SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) 
 TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
+BIN_FILE=priv/bin/systest
 
 MAIN_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
 TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(TEST_SOURCES))
@@ -41,14 +42,14 @@ REBAR=bin/rebar/rebar
 endif
 
 .PHONY: all
-all: clean test
+all: clean $(BIN_FILE)
 
 .PHONY: clean
 clean:
 	$(REBAR) skip_deps=true clean -v $(LOGLEVEL)
 
 .PHONY: dist-clean
-dist-clean:
+dist-clean: clean
 	rm -drf deps
 	rm -drf bin
 
@@ -61,7 +62,10 @@ $(MAIN_TARGETS): $(SOURCES) $(INCLUDES)
 $(TEST_TARGETS): $(TEST_SOURCES)
 	$(REBAR) skip_deps=true -C test.config compile -v $(LOGLEVEL)
 
-.PHONE: test
+$(BIN_FILE): test
+	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true escriptize -v $(LOGLEVEL)
+
+.PHONY: test
 test: $(MAIN_TARGETS) $(TEST_TARGETS)
 	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true systest -v $(LOGLEVEL)
 

@@ -284,12 +284,12 @@ on_join(Node, Cluster, Nodes, Hooks) ->
     {Node2, _} = lists:foldl(fun({M, F}, Acc) ->
                                  apply_hook(on_join,
                                             {M, F, [Node, Cluster, Nodes]},
-                                            {Acc, undefined});
+                                            Acc);
                                 ({M, F, A}, Acc) ->
                                  apply_hook(on_join,
                                             {M, F, [Node, Cluster, Nodes|A]},
-                                            {Acc, undefined})
-                             end, Node, Hooks),
+                                            Acc)
+                             end, {Node, undefined}, Hooks),
     Node2.
 
 %% TODO: migrate this to systest_hooks....

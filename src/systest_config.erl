@@ -65,7 +65,7 @@ start_link() ->
 cluster_config(Scope, Identity) ->
     case is_configured_explicitly(Identity) of
         true ->
-            {Identity, ct:get_config({Identity, cluster}, noconfig)};
+            {Identity, extract_cluster_config(Identity)};
         false ->
             case search({Identity, 'all'},
                         ct:get_config(Scope, []),
@@ -73,12 +73,20 @@ cluster_config(Scope, Identity) ->
                 Bad when Bad =:= not_found orelse
                          Bad =:= undefined ->
                     ct:pal("nothing at ~p.(~p|all)~n", [Scope, Identity]),
-                    {Identity, ct:get_config({Identity, cluster}, noconfig)};
+                    {Identity, extract_cluster_config(Identity)};
                 Alias when is_atom(Alias) ->
-                    {Alias, ct:get_config({Alias, cluster}, noconfig)};
+                    {Alias, extract_cluster_config(Alias)};
                 Other ->
                     throw(Other)
             end
+    end.
+
+extract_cluster_config(Identity) ->
+    case ct:get_config({Identity, cluster}, noconfig) of
+        noconfig ->
+            noconfig;
+        Cfg ->
+            Cfg ++ [{on_start, ct:get_config({Identity, on_start}, [])}]
     end.
 
 is_configured_explicitly(Identity) ->

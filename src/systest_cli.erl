@@ -76,10 +76,10 @@ init(Node=#'systest.node_info'{config=Config}) ->
     %% TODO: don't carry all the config around all the time -
     %% e.g., append the {node, NI} tuple only when needed
 
-    Scope = systest_node:get_node_info(scope, Node),
-    Id = systest_node:get_node_info(id, Node),
-    Config = systest_node:get_node_info(config, Node),
-    Flags = systest_node:get_node_info(flags, Node),
+    Scope = systest_node:get(scope, Node),
+    Id = systest_node:get(id, Node),
+    Config = systest_node:get(config, Node),
+    Flags = systest_node:get(flags, Node),
 
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
@@ -178,7 +178,7 @@ handle_kill(_Node, Sh=#sh{port=Port, detached=false, state=running}) ->
 %%                             NewState.
 handle_stop(Node, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
     ct:pal("running shutdown hooks for ~p",
-           [systest_node:get_node_info(id, Node)]),
+           [systest_node:get(id, Node)]),
     run_shutdown_hook(SC, Sh);
 %% TODO: could this be core node behaviour?
 handle_stop(_Node, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->
@@ -229,7 +229,7 @@ handle_msg({Port, closed}, Node, Sh=#sh{port=Port,
             %% execution process is sitting in `kill_and_wait` - we force a
             %% call to net_adm:ping/1, which gives the net_kernel time to get
             %% its knickers in order before proceeding....
-            Id = systest_node:get_node_info(id, Node),
+            Id = systest_node:get(id, Node),
             systest_node:status_check(Id);
         false ->
             ok
@@ -319,7 +319,7 @@ make_exec(FG, Detached, RpcEnabled, Config) ->
     FlagsGroup = atom_to_list(FG),
     %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
     Cmd = systest_config:eval("flags." ++ FlagsGroup ++ ".program", Config,
-                    [{callback, {node, fun systest_node:get_node_info/2}},
+                    [{callback, {node, fun systest_node:get/2}},
                      {return, value}]),
     Env = case ?ENCONFIG("flags." ++ FlagsGroup ++ ".environment", Config) of
               not_found -> [];

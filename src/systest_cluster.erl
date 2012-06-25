@@ -31,6 +31,7 @@
 -export([restart_node/2, restart_node/3]).
 -export([list_nodes/1, check_config/2, status/1]).
 -export([print_status/1, log_status/1]).
+-export([node_names/1, node_pids/1]).
 
 %% OTP gen_server Exports
 
@@ -38,6 +39,13 @@
          handle_info/2, terminate/2, code_change/3]).
 
 -include("systest.hrl").
+
+-exprecs_prefix([operation]).
+-exprecs_fname(["record_", prefix]).
+-exprecs_vfname([fname, "__", version]).
+
+-compile({parse_transform, exprecs}).
+-export_records(['systest.cluster']).
 
 %%
 %% Public API
@@ -103,6 +111,14 @@ log_status(Cluster) ->
 check_config(Cluster, Config) ->
     with_cluster({Cluster, Cluster}, fun build_nodes/4, Config).
 
+%% doing useful things with cluster records....
+
+node_names(Cluster) when is_record(Cluster, 'systest.cluster') ->
+    [element(1, N) || N <- get(nodes, Cluster)].
+
+node_pids(Cluster) when is_record(Cluster, 'systest.cluster') ->
+    [element(2, N) || N <- get(nodes, Cluster)].
+
 %%
 %% OTP gen_server API
 %%
@@ -129,6 +145,7 @@ init([Scope, Id, Config]) ->
                     end,
                     [begin
                          {_, Ref} = Node,
+                         ct:pal("~p joined_cluster~n", [Node]),
                          systest_node:joined_cluster(Ref, Cluster,
                                                      Nodes -- [Node])
                      end || Node <- Nodes],
@@ -260,8 +277,6 @@ print_status_info({Node, Status}) ->
                   "~n----------------------------------------------------~n").
 
 build_nodes(Identity, Cluster, {Host, Nodes}, Config) ->
-    ct:pal("build_nodes: ~p, ~p, ~p, ~p, ~p",
-           [Identity, Cluster, Host, Nodes, Config]),
     [systest_node:make_node(Cluster, N, [{host, Host}, {scope, Identity},
                                          {name, N}|Config]) || N <- Nodes].
 
@@ -279,11 +294,11 @@ start_host(Identity, Cluster,
             Node <- build_nodes(Identity, Cluster, HostConf, Config)].
 
 start_node(Identity, Node) ->
-    ct:pal("Start node: ~p~n", [Node]),
     {ok, NodeRef} = systest_node:start(Node),
-    %% REFACTOR: we *must* ensure that the correct cluster ID is passed here!
-    %%
     systest_watchdog:node_started(Identity, NodeRef),
+    %% NB: the id field of Node will *not* be set (correctly)
+    %% until after the gen_server has started, so an API call
+    %% is necessary rather than using systest_node:get/2
     {?CONFIG(id, systest_node:node_data(NodeRef)), NodeRef}.
 
 verify_host(Host) ->

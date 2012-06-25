@@ -47,8 +47,8 @@
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
 
--exprecs_prefix([operation, "_"]).
--exprecs_fname([prefix, "node_info"]).
+-exprecs_prefix([operation]).
+-exprecs_fname(["record_", prefix]).
 -exprecs_vfname([fname, "__", version]).
 
 -compile({parse_transform, exprecs}).
@@ -101,10 +101,10 @@ start(NodeInfo=#'systest.node_info'{handler=Handler, host=Host,
     code:ensure_loaded(Handler),
 
     Id = case erlang:function_exported(Handler, id, 1) of
-             true  -> set_node_info([{id, Handler:id(NodeInfo)}], NodeInfo);
-             false -> set_node_info([{id, node_id(Host, Name)}], NodeInfo)
+             true  -> set([{id, Handler:id(NodeInfo)}], NodeInfo);
+             false -> set([{id, node_id(Host, Name)}], NodeInfo)
          end,
-    NI = set_node_info([{config,[{node, Id}|BaseConf]}], Id),
+    NI = set([{config,[{node, Id}|BaseConf]}], Id),
 
     gen_server:start_link(?MODULE, [NI], []).
 
@@ -165,7 +165,8 @@ user_data(NodeRef, Data) ->
 
 -spec joined_cluster(node_ref(), pid(), [{atom(), pid()}]) -> 'ok'.
 joined_cluster(NodeRef, ClusterRef, SiblingNodes) ->
-    ok = gen_server:call(NodeRef, {joined, ClusterRef, SiblingNodes}).
+    ok = gen_server:call(NodeRef, {joined, ClusterRef, SiblingNodes},
+                         infinity).
 
 %% NB: this *MUST* run on the client
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
@@ -266,12 +267,19 @@ apply_hook(Hook, Item, {Node, HState}) ->
     case interact(Node, Item, HState) of
         {upgrade, Node2} ->
             {Node2, HState};
+        {store, State} ->
+            StateL = case is_list(State) of
+                         true  -> State;
+                         false -> [State]
+                     end,
+            Existing = get(user, Node),
+            {set([{user, StateL ++ Existing}], Node), HState};
         {write, Loc, Data} ->
             ct:pal("[~p] ~p~n"
                    "argv: ~p~n"
                    "state-update: ~p => ~p~n",
                    [Node#'systest.node_info'.id, Hook, Item, Loc, Data]),
-            {systest_node:set_node_info([{Loc, Data}], Node), HState};
+            {systest_node:set([{Loc, Data}], Node), HState};
         Other ->
             ct:pal("[~p] ~p~n"
                    "argv: ~p~n"
@@ -281,14 +289,21 @@ apply_hook(Hook, Item, {Node, HState}) ->
     end.
 
 on_join(Node, Cluster, Nodes, Hooks) ->
-    {Node2, _} = lists:foldl(fun({M, F}, Acc) ->
+    ct:pal("Node ~p has joined a cluster with ~p~n", [get(id, Node), Nodes]),
+    %% TODO: this is COMPLETELY inconsistent with the rest of the
+    %% hooks handling - this whole area needs some serious tidy up
+    {Node2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
                                  apply_hook(on_join,
-                                            {M, F, [Node, Cluster, Nodes]},
+                                            {Where, M, F,
+                                             [Cluster, Nodes]},
                                             Acc);
-                                ({M, F, A}, Acc) ->
+                                ({Where, M, F, A}, Acc) ->
                                  apply_hook(on_join,
-                                            {M, F, [Node, Cluster, Nodes|A]},
-                                            Acc)
+                                            {Where, M, F,
+                                                [Cluster, Nodes|A]},
+                                            Acc);
+                                (What, Acc) ->
+                                    throw({What, Acc})
                              end, {Node, undefined}, Hooks),
     Node2.
 
@@ -319,7 +334,7 @@ proc_interact({plain_call, M, F, A}, {_Node, Acc}) ->
 proc_interact({call, M, F, A}, {Node, Acc}) ->
     [apply(M, F, [Node|A])|Acc];
 proc_interact({node, Field}, {Node, Acc}) ->
-    [get_node_info(Field, Node)|Acc];
+    [get(Field, Node)|Acc];
 proc_interact(Term, {_, Acc}) ->
     [Term|Acc].
 
@@ -327,14 +342,15 @@ handle_msg(Msg, State) ->
     handle_msg(Msg, State, noreply).
 
 handle_msg(user_data, State=#state{node=Node}, _ReplyTo) ->
-    {reply, get_node_info(user, Node), State};
+    {reply, get(user, Node), State};
 handle_msg({user_data, Data}, State=#state{node=Node}, _ReplyTo) ->
-    {reply, 'ok', State#state{node=set_node_info([{user, Data}], Node)}};
+    {reply, 'ok', State#state{node=set([{user, Data}], Node)}};
 handle_msg(node_info_list, State=#state{node=Node}, _ReplyTo) ->
-    Attrs = systest_node:info_node_info(fields) -- [config],
-    Info = [{K, get_node_info(K, Node)} || K <- Attrs],
+    Attrs = systest_node:info('systest.node_info', fields) -- [config],
+    Info = [{K, get(K, Node)} || K <- Attrs],
     {reply, Info, State};
 handle_msg({joined, Cluster, Nodes}, State=#state{node=Node}, _ReplyTo) ->
+    ct:pal("node on_join info: ~p~n", [Node#'systest.node_info'.on_join]),
     case Node#'systest.node_info'.on_join of
         []    -> {reply, ok, State};
         Hooks -> Node2 = on_join(Node, Cluster, Nodes, Hooks),
@@ -469,20 +485,20 @@ reply(Reply, ReplyTo, State) ->
 
 make_node(Config) ->
     %% NB: new_node_info is an exprecs generated function
-    new_node_info([{scope,      ?REQUIRE(scope, Config)},
-                   {host,       ?REQUIRE(host, Config)},
-                   {name,       ?REQUIRE(name, Config)},
-                   {handler,    lookup("startup.handler",
-                                       Config, systest_cli)},
-                   {link,       lookup("startup.link_to_parent",
-                                       Config, false)},
-                   {user,       ?CONFIG(user, Config, [])},
-                   {flags,      ?CONFIG(flags, Config)},
-                   {apps,       ?CONFIG(applications, Config)},
-                   {on_start,   ?CONFIG(on_start, Config)},
-                   {on_stop,    ?CONFIG(on_stop, Config)},
-                   {on_join,    ?CONFIG(on_join, Config)},
-                   {config,     Config}]).
+    record_fromlist([{scope,      ?REQUIRE(scope, Config)},
+                     {host,       ?REQUIRE(host, Config)},
+                     {name,       ?REQUIRE(name, Config)},
+                     {handler,    lookup("startup.handler",
+                                         Config, systest_cli)},
+                     {link,       lookup("startup.link_to_parent",
+                                         Config, false)},
+                     {user,       ?CONFIG(user, Config, [])},
+                     {flags,      ?CONFIG(flags, Config)},
+                     {apps,       ?CONFIG(applications, Config)},
+                     {on_start,   ?CONFIG(on_start, Config)},
+                     {on_stop,    ?CONFIG(on_stop, Config)},
+                     {on_join,    ?CONFIG(on_join, Config)},
+                     {config,     Config}]).
 
 lookup(Key, Config, Default) ->
     case ?ECONFIG(Key, Config) of
@@ -493,7 +509,6 @@ lookup(Key, Config, Default) ->
 node_config(Cluster, Node) ->
     Nodes = systest_config:get_config({Cluster, nodes}),
     UserData = systest_config:get_config({Cluster, user_data}),
-    ct:pal("Checking for ~p in ~p of ~p~n", [Node, Cluster, Nodes]),
     NodeConf = case ?CONFIG(Node, Nodes, undefined) of
                    undefined               -> [];
                    Refs when is_list(Refs) -> load_config(Refs)
@@ -514,12 +529,15 @@ merge_refs(Ref, Acc) ->
               ?CONFIG(on_start, RefConfig, []),
     OnStop  = ?CONFIG(on_stop, Acc, []) ++
               ?CONFIG(on_stop, RefConfig, []),
+    OnJoin  = ?CONFIG(on_join, Acc, []) ++
+              ?CONFIG(on_join, RefConfig, []),
 
     Base = [ I || I={K, _} <- Acc,
-                  lists:member(K, [on_join, flags, apps, user]) ],
+                  lists:member(K, [flags, apps, user]) ],
     [{startup, Startup},
      {on_start, OnStart},
-     {on_stop, OnStop}|Base].
+     {on_stop, OnStop},
+     {on_join, OnJoin}|Base].
 
 setup(NI, {App, Vars}, HState) ->
     interact(NI, {applicaiton, load, [App]}, HState),

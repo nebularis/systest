@@ -29,7 +29,7 @@
 -define(ENCONFIG(Key, Conf),
                 systest_config:eval(Key, Conf,
                                     [{callback, {node,
-                                     fun systest_node:get_node_info/2}}])).
+                                     fun systest_node:get/2}}])).
 -define(WRITE(Key, Value, Conf),
         lists:keyreplace(Key, 1, Conf, Value)).
 

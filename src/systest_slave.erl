@@ -58,7 +58,7 @@ handle_interaction(_Data, _Node, State) ->
 %%                               {reply, Reply, NewState} |
 %%                               {stop, NewNode, NewState}.
 handle_status(Node, State) ->
-    case net_adm:ping(systest_node:get_node_info(id, Node)) of
+    case net_adm:ping(systest_node:get(id, Node)) of
         pong ->
             {reply, nodeup, State};
         pang ->
@@ -79,7 +79,7 @@ handle_kill(#'systest.node_info'{os_pid=OsPid}, State) ->
 %%                             {rpc_stop, {M,F,A}, NewState} |
 %%                             NewState.
 handle_stop(Node, State) ->
-    slave:stop(systest_node:get_node_info(id, Node)),
+    slave:stop(systest_node:get(id, Node)),
     {stop, Node, State#state{runstate=stopped}}.
 
 %% @doc handles generic messages from the server.

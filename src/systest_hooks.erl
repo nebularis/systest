@@ -63,6 +63,6 @@ proc_interact({call_with_item, M, F, A}, {Item, _Context, Acc}) ->
 proc_interact({call_with_context, M, F, A}, {Item, Context, Acc}) ->
     [apply(M, F, [Item, Context|A])|Acc];
 proc_interact({node, Field}, {Item, _Context, Acc}) ->
-    [systest_node:get_node_info(Field, Item)|Acc];
+    [systest_node:get(Field, Item)|Acc];
 proc_interact(Term, {_, _, Acc}) ->
     [Term|Acc].

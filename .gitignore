@@ -5,4 +5,4 @@ ebin
 *.beam
 logs
 .eunit
-priv/bin/systest-0.4.0-SNAPSHOT
+priv/bin/systes*

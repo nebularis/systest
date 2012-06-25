@@ -218,6 +218,8 @@ init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
                                                {NI3, HState}, Xtra),
                         {ok, State#state{node=NI4}}
             end;
+        {error, Err} ->
+            {stop, Err};
         Error ->
             %% TODO: do NOT rely on callbacks returning a proper gen_server
             %% init compatible response tuple - construct this for them....

@@ -59,7 +59,7 @@ start_link(ScopeId, ClusterId, Config) ->
     start_it(start_link, ScopeId, ClusterId, Config).
 
 start_it(How, ScopeId, ClusterId, Config) ->
-    ct:pal("Processing cluster ~p~n", [ClusterId]),
+    ct:pal("Processing Cluster ~p~n", [ClusterId]),
     case apply(gen_server, How, [{local, ClusterId},
                                  ?MODULE, [ScopeId, ClusterId, Config], []]) of
         {error, noconfig} ->
@@ -95,9 +95,7 @@ list_nodes(ClusterRef) ->
     gen_server:call(ClusterRef, nodes).
 
 print_status(Cluster) ->
-    Status = status(Cluster),
-    ct:pal("node stats: ~p~n", [Status]),
-    ct:pal(lists:flatten([print_status_info(N) || N <- Status])).
+    ct:pal(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
 
 log_status(Cluster) ->
     ct:log(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
@@ -171,10 +169,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 
 clear_pending({'EXIT', Pid, normal},
-              #'systest.cluster'{id      = Identity,
-                                 name    = ClusterName,
-                                 config  = Config,
-                                 nodes   = Nodes,
+              #'systest.cluster'{id = Identity, name = ClusterName,
+                                 config = Config, nodes = Nodes,
                                  pending = Pending}=State) ->
     case [P || {_, {_, DyingPid}, _}=P <- Pending, DyingPid == Pid] of
         [{restart, {Id, Pid}=DeadNode, Client}]=Restart ->
@@ -203,13 +199,12 @@ shutdown(State=#'systest.cluster'{name=Id, nodes=Nodes}, Timeout, ReplyTo) ->
     %% Another thing to note here is that systest_cleaner runs the kill_wait
     %% function in a different process. If we put a selective receive block
     %% here, we might well run into unexpected message ordering that could
-    %% leave us in an inconsistent state or even deadlock on the wrong kind
-    %% of input message.
+    %% leave us in an inconsistent state.
     NodeRefs = [NodeRef || {_, NodeRef} <- Nodes],
     case systest_cleaner:kill_wait(NodeRefs,
                                    fun systest_node:stop/1, Timeout) of
         ok ->
-            ct:pal("stopping cluster...~n"),
+            ct:pal("Stopping Cluster...~n"),
             [systest_watchdog:node_stopped(Id, N) || N <- NodeRefs],
             gen_server:reply(ReplyTo, ok),
             {stop, normal, State};

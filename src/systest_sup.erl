@@ -37,6 +37,9 @@ start_link() ->
 
 init([]) ->
     {ok, { {one_for_one, 5, 10}, [
+        {systest_event_log,
+            {gen_event, start_link, [{local, systest_event_log}]},
+             permanent, 5000, worker, dynamic},
         {systest_config_server,
             {systest_config, start_link, []},
              permanent, 5000, worker, [gen_server]},

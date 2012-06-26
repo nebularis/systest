@@ -22,8 +22,8 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
--define(DEBUG(S, A), ?LOG(debug, S, A)).
--define(INFO(S, A),  ?LOG(info, S, A)).
--define(WARN(S, A),  ?LOG(warn, S, A)).
--define(ERROR(S, A), ?LOG(error, S, A)).
--define(LOG(Fd, S, A), systest_log:log(Fd, S, A)).
+-define(SYSTEM(F, A), ?LOG(system, F, A)).
+-define(CONSOLE(F, A), ?LOG(console, F, A)).
+-define(LOG(F, A), systest_log:log(F, A)).
+-define(LOG(S, F, A), systest_log:log(S, F, A)).
+

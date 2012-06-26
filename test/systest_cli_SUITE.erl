@@ -41,7 +41,7 @@ all() ->
 local_and_global_scope_configuration_handling(Config) ->
     Scope = systest_cli_config_example,
     Cfg = systest_cluster:check_config(Scope, Config),
-    ct:pal("Cfg: ~p~n", [Cfg]),
+    ct:log("Cfg: ~p~n", [Cfg]),
     ok.
 
 starting_and_stopping_nodes(Config) ->

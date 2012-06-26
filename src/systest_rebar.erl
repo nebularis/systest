@@ -37,7 +37,7 @@ systest(Config, _) ->
                         rebar_config:get_global(deps_dir, "deps")),
     code:add_patha(filename:join([rebar_utils:get_cwd(),
                                   DepsDir, "systest", "ebin"])),
-    
+
     net_kernel:start([systest_master, shortnames]),
 
     %% TODO: consider adding a time stamp to the scratch
@@ -74,15 +74,28 @@ systest(Config, _) ->
                                                    SpecOutput, Env),
 
             % maybe_compile(Config),
+            LogBase = filename:join(ScratchDir, "systest-logs"),
+            CtLogs = filename:join(ScratchDir, "ct-logs"),
+
+            rebar_log:log(info, "Log Base = ~s~n", [LogBase]),
+            rebar_log:log(info, "Common Test Logs: ~s~n", [CtLogs]),
+
+            ok = systest_config:set_env(logbase, LogBase),
+            systest_log:start(LogBase),
 
             case ct:run_test([{'spec', FinalSpec},
-                              {logdir, filename:join(ScratchDir, "ct-logs")},
+                              {logdir, CtLogs},
                               {auto_compile, false}]) of
-                {error, Reason}=Err ->
+                {error, Reason} ->
                     error(Reason);
                 Results ->
-                    rebar_log:log(info, "Results: ~p~n", [Results]),
-                    ok
+                    rebar_log:log(debug, "ct results: ~p~n", [Results]),
+                    case application:get_env(systest, failures) of
+                        undefined -> ok;
+                        {ok, 0}   -> ok;
+                        {ok, N} when N > 1 ->
+                            rebar_utils:abort("One or more tests failed!", [])
+                    end
             end
     end.
 

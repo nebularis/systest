@@ -26,6 +26,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -include("systest.hrl").
+-include("log.hrl").
 
 -type config_key() :: atom() | string() | binary().
 -type config()     :: [{config_key(), term()}].
@@ -72,7 +73,7 @@ cluster_config(Scope, Identity) ->
                         search_options([{key_func, fun(X) -> X end}])) of
                 Bad when Bad =:= not_found orelse
                          Bad =:= undefined ->
-                    ct:pal("nothing at ~p.(~p|all)~n", [Scope, Identity]),
+                    ?SYSTEM("nothing at ~p.(~p|all)~n", [Scope, Identity]),
                     {Identity, extract_cluster_config(Identity)};
                 Alias when is_atom(Alias) ->
                     {Alias, extract_cluster_config(Alias)};

@@ -25,6 +25,7 @@
 -module(systest).
 
 -include("systest.hrl").
+-include("log.hrl").
 
 -export([main/1]).
 -export([start/0, reset/0, sigkill/1]).
@@ -81,7 +82,7 @@ trace_off(Config) ->
 %% interactions
 
 sigkill(Pid) ->
-    ct:log("executing kill -9 ~s~n", [Pid]),
+    ?SYSTEM("executing kill -9 ~s~n", [Pid]),
     Result = os:cmd("kill -9 " ++ Pid),
     ct:log(Result).
 

@@ -41,12 +41,12 @@ id(_Opts) ->
 %% @doc Always called before any other callback function. Use this to initiate
 %% any common state.
 init(_Id, _Opts) ->
-    ct:pal("intialising ~p~n", [?MODULE]),
+    ct:log("intialising ~p~n", [?MODULE]),
     {ok, #ctx{}}.
 
 pre_init_per_testcase(TC, Config, State) ->
     Active = ?CONFIG(TC, Config, undefined),
-    ct:pal("active cluster: ~p~n", [Active]),
+    ct:log("active cluster: ~p~n", [Active]),
     {Config, State#ctx{active={TC, Active}}}.
 
 %% NB: this cheecky clause is being used to pass a failing test - there are few
@@ -67,12 +67,12 @@ post_end_per_testcase(TC, Config, Return,
             %% shut down the cluster, so here we assert that this is the case..
             case erlang:is_process_alive(Active) of
                 false ->
-                    ct:pal("cluster process is already dead! pass~n"),
+                    ct:log("cluster process is already dead! pass~n"),
                     {Return, State};
                 true ->
                     case systest_watchdog:exceptions(TC) of
                         [] ->
-                            ct:pal("cluster process is still "
+                            ct:log("cluster process is still "
                                    "alive, with no exception~n"),
                             {Return, State};
                         Ex ->
@@ -83,7 +83,7 @@ post_end_per_testcase(TC, Config, Return,
                     end
             end;
         ClusterPid ->
-            ct:pal("ignoring active cluster ~p~n", [ClusterPid]),
+            ct:log("ignoring active cluster ~p~n", [ClusterPid]),
             %% we don't actually *care* about this case, because the user
             %% defined end_per_testcase in the SUITE only shuts down the
             %% cluster for a specific subset of the test cases, and all the
@@ -91,7 +91,7 @@ post_end_per_testcase(TC, Config, Return,
             {Return, State}
     end;
 post_end_per_testcase(TC, _Config, Return, State) ->
-    ct:pal("ignoring testcase ~p~n", [TC]),
+    ct:log("ignoring testcase ~p~n", [TC]),
     {Return, State}.
 
 %% TODO: test group shutdown here....

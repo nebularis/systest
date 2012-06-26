@@ -34,25 +34,90 @@
         ,terminate/2
         ,code_change/3]).
 
+-import(systest_log, [console/2]).
+
+descriptor({Conf, GroupName, _}) ->
+    {GroupName, "test case group"};
+descriptor(Other) ->
+    {Other, "test case"}.
+
 init([]) ->
     {ok, []}.
 
-handle_event(#event{name=tc_done,
-                    data={Suite, end_per_suite, _Result}}, State) ->
-    systest_watchdog:force_stop(Suite),
+handle_event(#event{name=start_info, data={Tests,Suites,_Cases}}, State) ->
+    console("starting test run (~p tests, ~p suites~n", [Tests, Suites]),
+    {ok, State};
+handle_event(#event{name=tc_start, data={Suite,FuncOrGroup}}, State) ->
+    case FuncOrGroup of
+        init_per_suite ->
+            console("starting test suite ~p~n", [Suite]);
+        end_per_suite ->
+            ok;
+        {Conf,GroupName,_GroupProperties} ->
+            case Conf of
+                init_per_group ->
+                    console("starting test case group ~p~n", [GroupName]);
+                end_per_group ->
+                    ok
+            end;
+        Func ->
+            console("starting ~p test case ~p~n", [Suite, Func])
+    end,
     {ok, State};
 handle_event(#event{name=tc_done,
-                    data={_Suite, {end_per_group, Group, _}, _Result}},
-             State) ->
-    systest_watchdog:force_stop(Group),
+                    data={_Suite, FuncOrGroup, Result}}, State) ->
+    {N, Desc} = descriptor(FuncOrGroup),
+    case Result of
+        ok ->
+            console("~s ~p completed successfully~n", [Desc, N]);
+        {skipped, SkipReason} ->
+            case SkipReason of
+                {require_failed, {_, Key}} ->
+                    console("~s ~p failed: "
+                            "required config element ~p missing~n",
+                            [Desc, N, Key]);
+                {failed, {_Suite, init_per_testcase, FailInfo}} ->
+                    failed([N, init_per_testcase], Desc, FailInfo)
+            end;
+        {failed, FailReason} ->
+            failed(N, Desc, FailReason)
+    end,
     {ok, State};
-handle_event(#event{name=tc_done,
-                    data={_Suite, Func, _Result}},
-            State) when is_atom(Func) ->
-    systest_watchdog:force_stop(Func),
+handle_event(#event{name=tc_auto_skip, data={Suite,Func,Reason}}, State) ->
+    console("skipping ~p in ~p: ~p~n", [Func, Suite, Reason]),
     {ok, State};
+handle_event(#event{name=test_stats}=Ev, _State) ->
+    {ok, Ev};
+handle_event(#event{name=test_done}, #event{data={Ok, Failed, Skipped}}=S) ->
+    application:set_env(systest, failures, Failed),
+    {UserSkipped,AutoSkipped} = Skipped,
+    console("test run complete:~n"
+            "~p passed, ~p failed, "
+            "~p skipped (user), ~p skipped (auto)~n",
+            [Ok, Failed, UserSkipped, AutoSkipped]),
+    {ok, S};
 handle_event(_Message, State) ->
     {ok, State}.
+
+failed(What, Desc, FailInfo) when is_list(What) ->
+    failed(list_to_atom(string:join(lists:flatten([
+                io_lib:format("~p", [Thing]) || Thing <- What]), "|")),
+          Desc, FailInfo);
+failed(What, Desc, FailInfo) when is_atom(What) ->
+    console("~s ~p failed: ~s~n", [Desc, What,
+                                   lists:flatten(fail_info(FailInfo))]).
+
+fail_info({error,FailInfo}) ->
+    fail_info(FailInfo);
+fail_info({timetrap_timeout, Value}) ->
+    io_lib:format("timetrap timeout (~p)", [Value]);
+fail_info({failed,{_Suite,end_per_testcase,FailInfo}}) ->
+    io_lib:format("end_per_testcase failure: ~s", [fail_info(FailInfo)]);
+fail_info({RunTimeError,StackTrace}) ->
+    io_lib:format("runtime error: ~p~nstacktrace: ~p",
+                  [RunTimeError, StackTrace]);
+fail_info(Other) ->
+    io_lib:format("~p", [Other]).
 
 %%
 %% @private

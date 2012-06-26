@@ -32,9 +32,9 @@
 
 -export([behaviour_info/1]).
 
--export([start/0, start/1, start/2, start_file/1]).
--export([log/2, log/3]).
--export([write_log/2]).
+-export([start/1, start/3, start_file/2]).
+-export([log/2, log/3, write_log/3]).
+-export([ts/0, console/2]).
 
 -export([init/1,
          handle_event/2,
@@ -43,7 +43,7 @@
          terminate/2,
          code_change/3]).
 
--record(state, {mod, fd}).
+-record(state, {id, handler, fd}).
 
 %%
 %% Public API
@@ -54,68 +54,87 @@ behaviour_info(callbacks) ->
 behaviour_info(_) ->
     undefined.
 
-start() ->
-    start(?MODULE).
+start(LogBase) ->
+    start(fun ct:log/3, ct, systest),
+    start_file(system, filename:join(LogBase, "system.log")).
 
-start_file(Fd) ->
-    start(?MODULE, Fd).
+start_file(Id, Fd) ->
+    start(?MODULE, Id, Fd).
 
-start(CallbackMod, Output) ->
-    {ok, IoDevice} = file:open(Output, [write]),
-    gen_event:add_handler(systest_event_log, ?MODULE, [CallbackMod, IoDevice]).
-
-start(CallbackMod) when is_atom(CallbackMod) ->
-    gen_event:add_handler(systest_event_log, ?MODULE, [CallbackMod]).
-
-%%
-%% systest_log callback API!
-%%
+start(CallbackMod, Id, FilePath) when is_list(FilePath) ->
+    filelib:ensure_dir(FilePath),
+    {ok, IoDevice} = file:open(FilePath, [write]),
+    gen_event:add_handler(systest_event_log, {?MODULE, Id},
+                          [Id, CallbackMod, IoDevice]);
+start(Handler, Id, Where) ->
+    gen_event:add_handler(systest_event_log, {?MODULE, Id},
+                          [Id, Handler, Where]).
 
 log(Scope, Fmt, Args) ->
-    gen_event:notify(systest_event_log, {Scope, Fmt, Args}).
+    gen_event:call(systest_event_log, Scope, {Fmt, Args}).
 
 log(Fmt, Args) ->
     gen_event:notify(systest_event_log, {Fmt, Args}).
 
+console(Msg, Args) ->
+    io:format(user, "[systest] " ++ Msg, Args).
+
+ts() ->
+    Now = now(),
+    {{Year,Month,Day}, {Hour,Min,Sec}} = calendar:now_to_local_time(Now),
+    MilliSec = trunc(element(3, Now)/1000),
+    lists:flatten(io_lib:format("~4.10.0B-~2.10.0B-~2.10.0B "
+                                "~2.10.0B:~2.10.0B:~2.10.0B.~3.10.0B",
+                                [Year,Month,Day,Hour,Min,Sec,MilliSec])).
+
 %%
-%% systest_log callback API!
+%% Private API
 %%
 
-write_log(?MODULE, {Where, What, Args}) ->
-    ct:log(Where, What, Args);
-write_log(?MODULE, {What, Args}) ->
-    ct:log(What, Args);
-write_log(Fd, {_Where, What, Args}) ->
-    file:write(Fd, io_lib:format(What, Args));
-write_log(Fd, {port, Data}) ->
-    file:write(Fd, Data).
+slog(Fd, What, Args) ->
+    write_log(Fd, ts() ++ " - " ++ What, Args).
+
+write_log(Fd, port, Data) ->
+    io:write(Fd, Data);
+write_log(Fd, What, Args) ->
+    io:format(Fd, What, Args).
 
 %%
 %% OTP gen_event API
 %%
 
-init([CallbackMod, IoDevice]) ->
-    {ok, #state{mod=CallbackMod, fd=IoDevice}};
-init([CallbackMod]) ->
-    {ok, #state{mod=CallbackMod}}.
+init([Id, Handler, IoDevice]) ->
+    {ok, #state{id=Id, handler=Handler, fd=IoDevice}}.
 
-handle_event(Event, State=#state{mod=CallbackMod, fd=undefined}) ->
-    CallbackMod:write_log(?MODULE, Event),
+handle_event({Fmt, Args},
+             State=#state{handler=Handler, fd=Fd})
+                    when is_function(Handler, 3) ->
+    Handler(Fd, Fmt, Args),
     {ok, State};
-handle_event(Event, State=#state{mod=CallbackMod, fd=Fd}) ->
-    CallbackMod:write_log(Fd, Event),
+handle_event({Fmt, Args},
+             State=#state{handler=Mod, fd=Fd}) when is_atom(Mod) ->
+    Mod:write_log(Fd, Fmt, Args),
     {ok, State};
 handle_event(_Message, State) ->
     {ok, State}.
 
+handle_call({Fmt, Args},
+            State=#state{handler=Handler, fd=Fd})
+                    when is_function(Handler, 3) ->
+    {ok, Handler(Fd, Fmt, Args), State};
+handle_call({Fmt, Args},
+            State=#state{handler=Mod, fd=Fd}) when is_atom(Mod) ->
+    {ok, Mod:write_log(Fd, Fmt, Args), State};
 handle_call(_, State) ->
     {ok, ignored, State}.
 
 handle_info(_Info, State) ->
     {ok, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{fd=Fd}) when Fd =/= undefined ->
+    file:close(Fd),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+

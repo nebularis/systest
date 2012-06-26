@@ -25,6 +25,7 @@
 -module(systest_node).
 
 -include("systest.hrl").
+-include("log.hrl").
 
 -type node_info() :: #'systest.node_info'{}.
 
@@ -93,7 +94,7 @@ start(Scope, Node, Config) ->
 -spec start(node_info()) -> {'ok', pid()} | {'error', term()}.
 start(NodeInfo=#'systest.node_info'{handler=Handler, host=Host,
                                     name=Name, config=BaseConf}) ->
-    ct:pal("Starting ~p on ~p~n", [Name, Host]),
+    ?LOG("Starting ~p on ~p~n", [Name, Host]),
 
     %% are there hidden traps here, when (for example) we're running
     %% embedded in an archive/escript or similarly esoteric situations?
@@ -122,8 +123,8 @@ kill(NodeRef) ->
 
 -spec sigkill(node_ref()) -> 'ok'.
 sigkill(NodeRef) ->
-    ct:pal("[WARNING] using SIGKILL is *NOT*"
-           " guaranteed to work with all node types!~n"),
+    ?LOG("[WARNING] using SIGKILL is *NOT*"
+         " guaranteed to work with all node types!~n", []),
     gen_server:cast(NodeRef, sigkill).
 
 -spec kill_after(integer(), node_ref()) -> 'ok'.
@@ -175,12 +176,13 @@ shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
         false -> link(Owner),
-                 ct:pal("Waiting for ~p to exit from: ~p~n",
+                 ?LOG("Waiting for ~p to exit from: ~p~n",
                         [Owner, erlang:process_info(self())]),
                  ok = ShutdownOp(Owner),
                  receive
                      {'EXIT', Owner, _Reason} -> ok;
-                     Other                    -> ct:pal("Other ~p~n", [Other])
+                     Other                    -> ?SYSTEM("Received ~p~n",
+                                                         [Other])
                  end
     end.
 
@@ -239,6 +241,7 @@ handle_info(Info, State) ->
 terminate(Reason, #state{node=Node,
                          handler=Mod,
                          handler_state=ModState}) ->
+    ?SYSTEM("~p terminate~n", [Mod]),
     ok = Mod:terminate(Reason, Node, ModState),
     ok.
 
@@ -275,21 +278,21 @@ apply_hook(Hook, Item, {Node, HState}) ->
             Existing = get(user, Node),
             {set([{user, StateL ++ Existing}], Node), HState};
         {write, Loc, Data} ->
-            ct:pal("[~p] ~p~n"
-                   "argv: ~p~n"
-                   "state-update: ~p => ~p~n",
+            ?SYSTEM("[~p] ~p~n"
+                    "argv: ~p~n"
+                    "state-update: ~p => ~p~n",
                    [Node#'systest.node_info'.id, Hook, Item, Loc, Data]),
             {systest_node:set([{Loc, Data}], Node), HState};
         Other ->
-            ct:pal("[~p] ~p~n"
-                   "argv: ~p~n"
-                   "response: ~p~n",
+            ?SYSTEM("[~p] ~p~n"
+                    "argv: ~p~n"
+                    "response: ~p~n",
                     [Node#'systest.node_info'.id, Hook, Item, Other]),
             {Node, HState}
     end.
 
 on_join(Node, Cluster, Nodes, Hooks) ->
-    ct:pal("Node ~p has joined a cluster with ~p~n", [get(id, Node), Nodes]),
+    ?LOG("Node ~p has joined a cluster with ~p~n", [get(id, Node), Nodes]),
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
     {Node2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
@@ -350,7 +353,7 @@ handle_msg(node_info_list, State=#state{node=Node}, _ReplyTo) ->
     Info = [{K, get(K, Node)} || K <- Attrs],
     {reply, Info, State};
 handle_msg({joined, Cluster, Nodes}, State=#state{node=Node}, _ReplyTo) ->
-    ct:pal("node on_join info: ~p~n", [Node#'systest.node_info'.on_join]),
+    ?SYSTEM("node on_join: ~p~n", [Node#'systest.node_info'.on_join]),
     case Node#'systest.node_info'.on_join of
         []    -> {reply, ok, State};
         Hooks -> Node2 = on_join(Node, Cluster, Nodes, Hooks),
@@ -388,7 +391,7 @@ handle_msg(stop, State=#state{node=Node, handler=Mod,
         %% TODO: consider whether this is structured correctly - it *feels*
         %% a little hackish - and perhaps having a supervising process deal
         %% with these 'interactions' would be better
-        Shutdown  -> [ct:pal("~p~n",
+        Shutdown  -> [?SYSTEM("~p~n",
                         [interact(Node, In, ModState)]) || In <- Shutdown]
     end,
     handle_callback(stopping_callback(Mod:handle_stop(Node, ModState)),
@@ -416,7 +419,6 @@ handle_msg({interaction, _},
 handle_msg({interaction, InputData},
             State=#state{node=Node, handler=Mod,
                          handler_state=ModState}, ReplyTo) ->
-    ct:pal("handle_interaction: ~p~n", [InputData]),
     handle_callback(Mod:handle_interaction(InputData,
                                            Node, ModState), State, ReplyTo);
 %% our catch-all, which defers to Mod:handler_state/3 to see if the

@@ -31,6 +31,7 @@
          handle_msg/3, terminate/3]).
 
 -include("systest.hrl").
+-include("log.hrl").
 
 -record(state, { runstate='running' :: atom() }).
 
@@ -98,13 +99,13 @@ handle_msg({nodedown, NodeId}, #'systest.node_info'{id=NodeId},
                    end,
     {stop, ShutdownType, State};
 handle_msg(Info, _Node, State=#state{runstate=RS}) ->
-    ct:log("[~p] Ignoring Info Message:  ~p~n"
-           "State:                       ~p~n",
-           [?MODULE, Info, RS]),
+    ?SYSTEM("[~p] Ignoring Info Message:  ~p~n"
+            "State:                       ~p~n",
+            [?MODULE, Info, RS]),
     State.
 
 terminate(Reason, _Node, _State) ->
-    ct:pal("Terminating due to ~p~n", [Reason]).
+    ?SYSTEM("Terminating due to ~p~n", [Reason]).
 
 %%
 %% Private API

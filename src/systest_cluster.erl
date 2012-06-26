@@ -39,6 +39,7 @@
          handle_info/2, terminate/2, code_change/3]).
 
 -include("systest.hrl").
+-include("log.hrl").
 
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
@@ -67,7 +68,7 @@ start_link(ScopeId, ClusterId, Config) ->
     start_it(start_link, ScopeId, ClusterId, Config).
 
 start_it(How, ScopeId, ClusterId, Config) ->
-    ct:pal("Processing Cluster ~p~n", [ClusterId]),
+    ?SYSTEM("processing cluster ~p~n", [ClusterId]),
     case apply(gen_server, How, [{local, ClusterId},
                                  ?MODULE, [ScopeId, ClusterId, Config], []]) of
         {error, noconfig} ->
@@ -103,10 +104,11 @@ list_nodes(ClusterRef) ->
     gen_server:call(ClusterRef, nodes).
 
 print_status(Cluster) ->
-    ct:pal(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
+    io:format(user, lists:flatten(
+                    [print_status_info(N) || N <- status(Cluster)])).
 
 log_status(Cluster) ->
-    ct:log(lists:flatten([print_status_info(N) || N <- status(Cluster)])).
+    ?LOG(lists:flatten([print_status_info(N) || N <- status(Cluster)]), []).
 
 check_config(Cluster, Config) ->
     with_cluster({Cluster, Cluster}, fun build_nodes/4, Config).
@@ -135,17 +137,17 @@ init([Scope, Id, Config]) ->
                 Cluster=#'systest.cluster'{nodes=Nodes, on_start=Hooks} ->
                     case Hooks of
                         [{on_start, Run}|_] ->
-                            ct:pal("running cluster on_start hooks ~p~n",
-                                   [Run]),
+                            ?SYSTEM("running cluster on_start hooks ~p~n",
+                                 [Run]),
                             [systest_hooks:run(Cluster,
                                                Hook, Cluster) || Hook <- Run];
                         Other ->
-                            ct:pal("ignoring cluster hooks ~p~n", [Other]),
+                            ?SYSTEM("ignoring cluster hooks ~p~n", [Other]),
                             ok
                     end,
                     [begin
                          {_, Ref} = Node,
-                         ct:pal("~p joined_cluster~n", [Node]),
+                         ?SYSTEM("~p joined_cluster~n", [Node]),
                          systest_node:joined_cluster(Ref, Cluster,
                                                      Nodes -- [Node])
                      end || Node <- Nodes],
@@ -235,17 +237,17 @@ shutdown(State=#'systest.cluster'{name=Id, nodes=Nodes}, Timeout, ReplyTo) ->
     case systest_cleaner:kill_wait(NodeRefs,
                                    fun systest_node:stop/1, Timeout) of
         ok ->
-            ct:pal("Stopping Cluster...~n"),
+            ?SYSTEM("Stopping Cluster...~n", []),
             [systest_watchdog:node_stopped(Id, N) || N <- NodeRefs],
             gen_server:reply(ReplyTo, ok),
             {stop, normal, State};
         {error, {killed, StoppedOk}} ->
-            ct:pal("Halt Error: killed~n"),
+            ?SYSTEM("Halt Error: killed~n", []),
             Err = {halt_error, orphans, NodeRefs -- StoppedOk},
             gen_server:reply(ReplyTo, Err),
             {stop, Err, State};
         Other ->
-            ct:pal("Halt Error: ~p~n", [Other]),
+            ?SYSTEM("Halt Error: ~p~n", [Other]),
             gen_server:reply(ReplyTo, {error, Other}),
             {stop, {halt_error, Other}, State}
     end.
@@ -258,7 +260,7 @@ with_cluster({Scope, Identity}, Handler, Config) ->
             {Hosts, Hooks} = lists:splitwith(fun(E) ->
                                                  element(1, E) =/= on_start
                                              end, ClusterConfig),
-            ct:log("Configured hosts: ~p~n", [Hosts]),
+            ?SYSTEM("Configured hosts: ~p~n", [Hosts]),
             Nodes = lists:flatten([Handler(Identity, Alias,
                                            Host, Config) || Host <- Hosts]),
 
@@ -306,7 +308,7 @@ verify_host(Host) ->
         true ->
             ok;
         {false, Reason} ->
-            ct:pal("Unable to contact ~p: ~p~n", [Host, Reason]),
+            ?SYSTEM("Unable to contact ~p: ~p~n", [Host, Reason]),
             throw({host_unavailable, Host})
     end.
 

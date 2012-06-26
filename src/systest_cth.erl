@@ -25,6 +25,7 @@
 -module(systest_cth).
 
 -include("systest.hrl").
+-include("log.hrl").
 -include_lib("common_test/include/ct.hrl").
 
 -export([id/1, init/2]).
@@ -41,6 +42,8 @@
 % -export([on_tc_skip/3]).
 
 -export([terminate/1]).
+
+-import(systest_log, [console/2]).
 
 -record(state, {
     auto_start :: boolean(),
@@ -68,22 +71,25 @@ init(systest, _Opts) ->
 %% @doc Called before init_per_suite is called, this code might start a
 %% cluster, if one is configured for this suite.
 pre_init_per_suite(Suite, Config, State=#state{auto_start=false}) ->
+    console("starting test suite ~p~n", [Suite]),
     {Config, State#state{suite=Suite}};
 pre_init_per_suite(Suite, Config, State) ->
-    ct:pal("pre_init_per_suite: maybe start ~p", [Suite]),
+    console("starting test suite ~p~n", [Suite]),
+    ?LOG("pre processing ~p~n", [Suite]),
     %% TODO: handle init_per_suite use of cluster aliases
     {systest:start_suite(Suite, systest:trace_on(Suite, Config)),
                     State#state{suite=Suite}}.
 
 post_end_per_suite(Suite, Config, Result, State) ->
     %% TODO: check and see whether there *is* actually an active cluster
+    console("test suite ~p complete~n", [Suite]),
+    ?LOG("post processing ~p~n", [Suite]),
     case ?CONFIG(systest_utils:strip_suite_suffix(Suite), Config, undefined) of
         undefined ->
-            ct:pal("no configured suite to stop~n");
+            ?LOG("no configured suite to stop~n", []);
         ClusterPid ->
-            ct:pal("stopping ~p~n", [ClusterPid]),
-            ct:pal("stopped ~p~n",
-                   [systest_cluster:stop(ClusterPid)])
+            ?LOG("stopping ~p~n", [ClusterPid]),
+            ?LOG("stopped: ~p~n", [systest_cluster:stop(ClusterPid)])
     end,
     systest:trace_off(Config),
     {Result, State}.
@@ -106,24 +112,23 @@ post_end_per_group(Group, Config, Result, State) ->
 pre_init_per_testcase(TC, Config, State=#state{auto_start=false}) ->
     {systest:trace_on(TC, Config), State};
 pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
-    ct:pal("~p handling pre_init_per_testcase [~p]~n", [?MODULE, TC]),
     {systest:start(Suite, TC, Config), State}.
 
 post_end_per_testcase(TC, Config, Return, State) ->
     %% TODO: handle {save_config, Config} return values in st:stop
-    ct:pal("processing post_end_per_testcase: ~p: ~p~n", [TC, Config]),
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
             systest:trace_off(Config),
             {Return, State};
         ClusterPid ->
+            ?LOG("post processing ~p~n", [TC]),
             case erlang:is_process_alive(ClusterPid) of
                 true ->
-                    ct:pal("stopping ~p~n", [ClusterPid]),
-                    ct:pal("stopped ~p~n",
-                           [systest_cluster:stop(ClusterPid)]);
+                    ?LOG("stopping ~p~n", [ClusterPid]),
+                    ?LOG("stopped ~p~n", [systest_cluster:stop(ClusterPid)]);
                 false ->
-                    ct:pal("cluster ~p is already down~n", [ClusterPid])
+                    ?LOG("cluster ~p is not running - nothing to do.~n",
+                         [ClusterPid])
             end,
             systest:trace_off(Config),
             {Return, State}

@@ -31,6 +31,9 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("../include/systest.hrl").
+
+-include("../include/log.hrl").
+
 -compile(export_all).
 
 %%
@@ -67,10 +70,10 @@ init_per_testcase(_TC, Config) ->
     Config.
 
 end_per_testcase(TC=init_per_tc_manages_shutdown, Config) ->
-    ct:pal("explicitly killing cluster ~p~n", [TC]),
+    ?LOG("explicitly killing cluster ~p~n", [TC]),
     Pid = ?CONFIG(active, Config),
     systest:stop(Pid),
-    ct:pal("explicit stop of ~p has returned (live=~p)~n",
+    ?LOG("explicit stop of ~p has returned (live=~p)~n",
            [Pid, erlang:is_process_alive(Pid)]),
     ok;
 end_per_testcase(_TC, _Config) ->
@@ -122,7 +125,6 @@ after_end_per_tc_automation() ->
 after_end_per_tc_automation(Config) ->
     {end_per_tc_automation, SavedConfig} = ?config(saved_config, Config),
     ClusterPid = ?CONFIG(previous_active, SavedConfig),
-    ct:pal("is end_per_tc_automation still alive!?...~n"),
     ?assertEqual(false, erlang:is_process_alive(ClusterPid)).
 
 trapping_nodedown_messages(Config) ->

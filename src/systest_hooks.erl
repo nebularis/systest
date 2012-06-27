@@ -66,3 +66,4 @@ proc_interact({node, Field}, {Item, _Context, Acc}) ->
     [systest_node:get(Field, Item)|Acc];
 proc_interact(Term, {_, _, Acc}) ->
     [Term|Acc].
+

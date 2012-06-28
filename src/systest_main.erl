@@ -49,7 +49,7 @@ run(Args) ->
                            end;
                    Cmds -> Cmds ++ [systest]
                end,
-    maybe_write_headers(Commands, Config),
+    maybe_export(Commands, Config),
     rebar_config:set_global(skip_deps, "true"),
     rebar_core:process_commands(Commands, Config).
 
@@ -75,7 +75,7 @@ do_export({File, Bin}, Config) ->
     rebar_utils:ensure_dir(Path),
     file:write_file(Path, Bin).
 
-maybe_write_headers(Commands, Config) ->
+maybe_export(Commands, Config) ->
     case lists:member(compile, Commands) of
         false -> ok;
         true  -> export(Config)

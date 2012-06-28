@@ -69,6 +69,7 @@
     id          :: atom(),                      %% set by the handler!
     os_pid      :: string(),                    %% set by the handler!
     owner       :: pid() | port(),              %% set by the handler!
+    cover       :: term(),
     config      :: systest_config:config()
 }).
 

@@ -197,11 +197,20 @@ status_check(Node) when is_atom(Node) ->
 %% OTP gen_server API
 %%
 
-init([NodeInfo=#'systest.node_info'{handler=Callback}]) ->
+init([NodeInfo=#'systest.node_info'{handler=Callback, cover=Cover}]) ->
     process_flag(trap_exit, true),
 
     case catch( apply(Callback, init, [NodeInfo]) ) of
         {ok, NI2, HState} when is_record(NI2, 'systest.node_info') ->
+
+            %% NB: look at branch 'cover' for details
+            %% of how this will eventually look
+            case Cover of
+                true ->
+                    cover:start(get(id, NI2));
+                _ ->
+                    ok
+            end,
 
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#'systest.node_info'.apps of
@@ -391,15 +400,18 @@ handle_msg(stop, State=#state{node=Node, handler=Mod,
         Shutdown  -> [ct:pal("~p~n",
                         [interact(Node, In, ModState)]) || In <- Shutdown]
     end,
-    handle_callback(stopping_callback(Mod:handle_stop(Node, ModState)),
+    handle_callback(stopping_callback(Mod, handle_stop, Node,
+                                      [Node, ModState]),
                     State#state{activity_state=stopped}, ReplyTo);
 handle_msg(kill, State=#state{node=Node, handler=Mod,
                               handler_state=ModState}, ReplyTo) ->
-    handle_callback(stopping_callback(Mod:handle_kill(Node, ModState)),
+    handle_callback(stopping_callback(Mod, handle_kill, Node,
+                                      [Node, ModState]),
                     State#state{activity_state=killed}, ReplyTo);
 handle_msg(sigkill, State=#state{node=Node, handler=Mod,
                                  handler_state=ModState}, ReplyTo) ->
-    handle_callback(stopping_callback(Mod:handle_msg(sigkill, Node, ModState)),
+    handle_callback(stopping_callback(Mod, handle_msg, Node,
+                                      [sigkill, Node, ModState]),
                     State#state{activity_state=killed}, ReplyTo);
 handle_msg(status, State=#state{activity_state=stopped}, _ReplyTo) ->
     {reply, {stopping, stopped}, State};
@@ -426,8 +438,14 @@ handle_msg(Msg, State=#state{node=Node, handler=Mod,
                              handler_state=ModState}, ReplyTo) ->
     handle_callback(Mod:handle_msg(Msg, Node, ModState), State, ReplyTo).
 
-stopping_callback(Result) ->
-    case Result of
+stopping_callback(Mod, Func, Node, Args) ->
+    case get(cover, Node) of
+        true ->
+            cover:stop(get(id, Node));
+        _ ->
+            ok
+    end,
+    case apply(Mod, Func, Args) of
         {stop, NewNode, NewModState} ->
             {stopped, NewNode, NewModState};
         Other ->
@@ -498,6 +516,7 @@ make_node(Config) ->
                      {on_start,   ?CONFIG(on_start, Config)},
                      {on_stop,    ?CONFIG(on_stop, Config)},
                      {on_join,    ?CONFIG(on_join, Config)},
+                     {cover,      lookup("startup.cover", Config, off)},
                      {config,     Config}]).
 
 lookup(Key, Config, Default) ->

@@ -28,7 +28,7 @@
 
 -export([is_epmd_contactable/2, temp_dir/0, make_node/1, make_node/2]).
 -export([proplist_format/1, strip_suite_suffix/1, hostname/1]).
--export([node_id_and_hostname/1]).
+-export([node_id_and_hostname/1, find/2, timestamp/0]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
 
@@ -64,6 +64,20 @@ proplist_format(L) ->
                    end,
              io_lib:format("    ~p: " ++ Fmt, [K, V])
          end || {K, V} <- L]).
+
+%% @doc recursive search in Dir for files matching Regex
+find(Dir, Regex) ->
+    filelib:fold_files(Dir, Regex, true,
+                       fun(F, Acc) -> [F | Acc] end, []).
+
+timestamp() ->
+    Now = now(),
+    {{Year,Month,Day}, {Hour,Min,Sec}} = calendar:now_to_local_time(Now),
+    string:join([lists:flatten(io_lib:format("~4.10.0B", [Year]))|
+                [begin
+                     lists:flatten(io_lib:format("~2.10.0B", [X]))
+                 end || X <- [Day,Month,Hour,Min,Sec]]], "-").
+
 %%
 %% @doc returns the atom 'true' if epmd running on Host is visible
 %% from the calling node, otherwise {false, Reason::term()}.

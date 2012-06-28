@@ -37,7 +37,7 @@ systest(Config, _) ->
                         rebar_config:get_global(deps_dir, "deps")),
     code:add_patha(filename:join([rebar_utils:get_cwd(),
                                   DepsDir, "systest", "ebin"])),
-    
+
     net_kernel:start([systest_master, shortnames]),
 
     %% TODO: consider adding a time stamp to the scratch
@@ -73,12 +73,19 @@ systest(Config, _) ->
             {ok, FinalSpec} = process_config_files(ScratchDir,
                                                    SpecOutput, Env),
 
-            % maybe_compile(Config),
+            CoverBase = filename:join(ScratchDir, "cover"),
+            {ok, Export} = start_cover(CoverBase, Config),
+            rebar_log:log(debug, "cover:modules() = ~p~n", [cover:modules()]),
 
-            case ct:run_test([{'spec', FinalSpec},
-                              {logdir, filename:join(ScratchDir, "ct-logs")},
-                              {auto_compile, false}]) of
-                {error, Reason}=Err ->
+            Result = ct:run_test([{'spec', FinalSpec},
+                                  {logdir,
+                                       filename:join(ScratchDir, "ct-logs")},
+                                  {auto_compile, false}]),
+
+            report_cover(CoverBase, Export),
+
+            case Result of
+                {error, Reason} ->
                     error(Reason);
                 Results ->
                     rebar_log:log(info, "Results: ~p~n", [Results]),
@@ -86,30 +93,85 @@ systest(Config, _) ->
             end
     end.
 
-maybe_compile(Config) ->
-    rebar_log:log(debug, "~p~n", [Config]),
-    code:add_paths(["lib", "lib/systest", "lib/systest.ebin"]),
-    rebar_erlc_compiler:doterl_compile(compiler_config(Config), "test-ebin"),
-    code:add_patha(filename:join(rebar_utils:get_cwd(), "test-ebin")),
-    {ok, Beams} = file:list_dir("test-ebin"),
-    [ code:ensure_loaded(list_to_atom(
-                filename:basename(F, ".beam"))) || F <- Beams ].
+report_cover(Dir, Export) ->
+    Mods = cover:modules(),
+    rebar_log:log(info, "starting coverage analysis on ~p...~n",
+                  [Mods]),
+    ok = filelib:ensure_dir(filename:join(Dir, "foo")),
+    lists:foreach(fun (F) -> file:delete(F) end,
+                  filelib:wildcard(filename:join(Dir, "*.html"))),
+    % {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
+    {CT, NCT} =
+        lists:foldl(
+            fun (M,{CovTot, NotCovTot}) ->
+                rebar_log:log(debug, "cover analysing ~p~n", [M]),
+                case cover:analyze(M, module) of
+                    {ok, {M, {Cov, NotCov}}} ->
+                        ok = report_coverage_percentage(user, Cov, NotCov, M),
+                        case analyse_to_file(M, Dir) of
+                            {error, Reason} ->
+                                rebar_log:log(warn,
+                                              "unable to generate html"
+                                              " coverage report for ~p: ~p~n",
+                                              [M, Reason]);
+                            _ ->
+                                ok
+                        end,
+                        {CovTot+Cov, NotCovTot+NotCov};
+                    Error ->
+                        throw(Error)
+                end
+            end, {0, 0}, Mods),
+    ok = report_coverage_percentage(user, CT, NCT, 'TOTAL'),
+    timer:sleep(1000),
+    % ok = file:close(SummaryFile),
+    ok = cover:export(Export),
+    cover:reset(),
+    ok.
 
-compiler_config(Config) ->
-    ErlOpts = rebar_config:get_local(Config, erl_opts, []),
-    TestOpts = {src_dirs, ["test"]},
-    case lists:keyfind(src_dirs, 1, ErlOpts) of
-        false ->
-            rebar_config:set(Config, erl_opts, [TestOpts|ErlOpts]);
-        {src_dirs, Dirs} ->
-            case lists:member("test", Dirs) of
-                true->
-                    Config;
-                false ->
-                    Opts = lists:keydelete(src_dirs, 1, ErlOpts),
-                    rebar_config:set(Config, erl_opts, [TestOpts|Opts])
-            end
-    end.
+analyse_to_file(Mod, Dir) ->
+    cover:analyze_to_file(Mod,
+            filename:join(Dir, atom_to_list(Mod) ++ ".html"), [html]).
+
+report_coverage_percentage(File, Cov, NotCov, Mod) ->
+    io:format(File, "~6.2f ~p~n",
+              [if
+                   Cov+NotCov > 0 -> 100.0*Cov/(Cov+NotCov);
+                   true -> 100.0
+               end,
+               Mod]).
+
+start_cover(CoverBase, Config) ->
+    cover:start(),
+
+    CoverData = filename:join(CoverBase, "data"),
+    ImportData = systest_utils:find(CoverData, ".*\\.cover\$"),
+    SearchDirs = rebar_config:get_local(Config, cover_dirs, ["ebin"]),
+    Cwd = rebar_utils:get_cwd(),
+    Dirs = [case filename:pathtype(Dir) of
+                relative -> filename:join(Cwd, Dir);
+                absolute -> Dir
+            end || Dir <- SearchDirs],
+
+    [begin
+         rebar_log:log(info, "cover compiling modules in ~s~n", [D]),
+         Results = cover:compile_beam_directory(D),
+         case [R || R <- Results, element(1, R) =:= error] of
+             []     -> [rebar_log:log(debug, "compiled ~p~n", [M]) ||
+                                M <- Results];
+             Errors -> error(Errors)
+         end
+     end || D <- Dirs],
+
+    [begin
+         rebar_log:log(info, "importing cover data from ~s~n", [F]),
+         ok = cover:import(F)
+     end || F <- ImportData],
+
+    CoverFile = "systest-" ++ systest_utils:timestamp() ++ ".cover",
+    Export = filename:join(CoverData, CoverFile),
+    filelib:ensure_dir(Export),
+    {ok, Export}.
 
 process_config_files(ScratchDir, TempSpec, Env) ->
     {ok, Terms} = file:consult(TempSpec),

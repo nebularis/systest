@@ -82,7 +82,7 @@ systest(Config, _) ->
                                        filename:join(ScratchDir, "ct-logs")},
                                   {auto_compile, false}]),
 
-            report_cover(CoverBase, Export),
+            report_cover(CoverBase, Export, Config),
 
             case Result of
                 {error, Reason} ->
@@ -93,21 +93,26 @@ systest(Config, _) ->
             end
     end.
 
-report_cover(Dir, Export) ->
+report_cover(Dir, Export, Config) ->
     Mods = cover:modules(),
-    rebar_log:log(info, "starting coverage analysis on ~p...~n",
-                  [Mods]),
+    Summary = case rebar_config:get_local(Config, cover_summary, user) of
+                  console -> user;
+                  user    -> user;
+                  File    -> Path = filename:join(rebar_utils:get_cwd(), File),
+                             {ok, Fd} = file:open(Path, [write]),
+                             Fd
+              end,
     ok = filelib:ensure_dir(filename:join(Dir, "foo")),
     lists:foreach(fun (F) -> file:delete(F) end,
                   filelib:wildcard(filename:join(Dir, "*.html"))),
-    % {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
     {CT, NCT} =
         lists:foldl(
             fun (M,{CovTot, NotCovTot}) ->
                 rebar_log:log(debug, "cover analysing ~p~n", [M]),
                 case cover:analyze(M, module) of
                     {ok, {M, {Cov, NotCov}}} ->
-                        ok = report_coverage_percentage(user, Cov, NotCov, M),
+                        ok = report_coverage_percentage(Summary,
+                                                        Cov, NotCov, M),
                         case analyse_to_file(M, Dir) of
                             {error, Reason} ->
                                 rebar_log:log(warn,

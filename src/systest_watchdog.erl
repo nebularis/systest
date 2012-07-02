@@ -60,7 +60,7 @@ reset() ->
 force_stop(Id) ->
     case gen_server:call(?MODULE, {force_stop, Id}) of
         {error, regname, Id} ->
-            ct:pal("ignoring stop for deceased cluster ~p~n", [Id]);
+            ct:log("ignoring stop for deceased cluster ~p~n", [Id]);
         Ok ->
             Ok
     end.
@@ -109,11 +109,11 @@ handle_call({force_stop, ClusterId}, _From,
             State=#state{cluster_table=CT}) ->
     case ets:lookup(CT, ClusterId) of
         [] ->
-            ct:pal("~p not found in ~p~n", [ClusterId, ets:tab2list(CT)]),
+            ct:log("~p not found in ~p~n", [ClusterId, ets:tab2list(CT)]),
             {reply, {error, regname, ClusterId}, State};
         [{ClusterId, Pid}] ->
             systest_cluster:stop(Pid),
-            ct:pal("force stop complete~n"),
+            ct:log("force stop complete~n"),
             {reply, ok, State}
     end;
 handle_call({exceptions, ClusterId}, _From,
@@ -139,7 +139,7 @@ handle_info({'EXIT', Pid, Reason},
                          exception_table=ET}) ->
     case ets:match_object(CT, {'_', Pid}) of
         [{ClusterId, _}=Cluster] ->
-            ct:pal("watchdog handling cluster (process) down"
+            ct:log("watchdog handling cluster (process) down"
                    " event for ~p~n", [ClusterId]),
 
             case Reason of
@@ -159,7 +159,7 @@ handle_info({'EXIT', Pid, Reason},
             handle_down(Cluster, NT),
             ets:delete(CT, ClusterId);
         [[]] ->
-            ct:pal("cluster down even unhandled: no id for "
+            ct:log("cluster down even unhandled: no id for "
                    "~p in ~p~n", [Pid, ets:tab2list(CT)]),
             ok
     end,
@@ -178,7 +178,7 @@ code_change(_OldVsn, State, _Extra) ->
 report_orphans(_, [], _) ->
     ok;
 report_orphans({ClusterId, _}, Nodes, ET) ->
-    ct:pal("watchdog detected orphaned nodes of dead cluster ~p: ~p~n",
+    ct:log("watchdog detected orphaned nodes of dead cluster ~p: ~p~n",
            [ClusterId, Nodes]),
     ets:insert(ET, [{ClusterId, orphan, N} || N <- Nodes]).
 
@@ -189,7 +189,7 @@ handle_down(Cluster, NodeTable) ->
     kill_wait(find_nodes(NodeTable, Cluster)).
 
 kill_wait([]) ->
-    ct:pal("no nodes to kill~n");
+    ct:log("no nodes to kill~n");
 kill_wait(Nodes) ->
     systest_cleaner:kill_wait(Nodes, fun systest_node:kill/1).
 

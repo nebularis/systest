@@ -65,11 +65,11 @@ trace_writer(Trace, Fd) ->
 debug(TestCase, Config) ->
     case load_trace_configuration({ct, TestCase}, Config) of
         {TraceName, {enabled, TraceTargets}} ->
-            ct:pal("tracing enabled for ~p: ~p~n",
+            ct:log("tracing enabled for ~p: ~p~n",
                    [TestCase, TraceTargets]),
             update_config(Config, TraceName, TraceTargets);
         ?TRACE_DISABLED ->
-            ct:pal("tracing disabled for ~p~n", [TestCase]),
+            ct:log("tracing disabled for ~p~n", [TestCase]),
             Config
     end.
 
@@ -170,7 +170,7 @@ setup_tracer() ->
     setup_tracer(TraceType, TracerConfig).
 
 setup_tracer(process, _) ->
-    ct:pal(default, "Setting up standard tracer on ~p.~n", [self()]),
+    ct:log("Setting up standard tracer on ~p.~n", [self()]),
     dbg:tracer();
 setup_tracer(port, TracerConfig) ->
     PortKind = proplists:get_value(port_kind, TracerConfig, ip),
@@ -187,5 +187,5 @@ setup_port_tracer(file, error) ->
     ct:fail("Cannot determine default file name for port tracing. Please "
             "set the {filename, FN} tuple in your config file properly.");
 setup_port_tracer(PortType, PortSpec) ->
-    ct:pal(io:format("Configuring ~p tracer on ~p.~n", [PortType, PortSpec])),
+    io:format(user, "Configuring ~p tracer on ~p.~n", [PortType, PortSpec]),
     dbg:tracer(port, dbg:trace_port(PortType, PortSpec)).

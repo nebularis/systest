@@ -104,7 +104,7 @@ handle_msg(Info, _Node, State=#state{runstate=RS}) ->
     State.
 
 terminate(Reason, _Node, _State) ->
-    ct:pal("Terminating due to ~p~n", [Reason]).
+    ct:log("Terminating due to ~p~n", [Reason]).
 
 %%
 %% Private API

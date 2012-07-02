@@ -117,8 +117,7 @@ init(Node=#'systest.node_info'{config=Config}) ->
                              start_command=StartCmd,
                              stop_command=StopCmd,
                              state=running},
-                    ct:pal(info,
-                           "External Process Handler ~p::~p"
+                    ct:log("External Process Handler ~p::~p"
                            " Started at ~p~n", [Scope, Id, self()]),
                     {ok, N2, Sh}
                 end);
@@ -167,7 +166,7 @@ handle_kill(#'systest.node_info'{os_pid=OsPid},
     systest:sigkill(OsPid),
     Sh#sh{state=killed};
 handle_kill(_Node, Sh=#sh{port=Port, detached=false, state=running}) ->
-    ct:pal("kill instruction received - terminating port ~p~n", [Port]),
+    ct:log("kill instruction received - terminating port ~p~n", [Port]),
     Port ! {self(), close},
     Sh#sh{state=killed}.
 
@@ -177,7 +176,7 @@ handle_kill(_Node, Sh=#sh{port=Port, detached=false, state=running}) ->
 %%                             {rpc_stop, {M,F,A}, NewState} |
 %%                             NewState.
 handle_stop(Node, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
-    ct:pal("running shutdown hooks for ~p",
+    ct:log("running shutdown hooks for ~p",
            [systest_node:get(id, Node)]),
     run_shutdown_hook(SC, Sh);
 %% TODO: could this be core node behaviour?
@@ -208,11 +207,11 @@ handle_msg({Port, {data, {_, Line}}}, _Node,
     Sh;
 handle_msg({Port, {exit_status, 0}}, _Node,
             Sh=#sh{port=Port, start_command=#exec{command=Cmd}}) ->
-    ct:pal("Program ~s exited normally (status 0)~n", [Cmd]),
+    ct:log("Program ~s exited normally (status 0)~n", [Cmd]),
     {stop, normal, Sh#sh{state=stopped}};
 handle_msg({Port, {exit_status, Exit}=Rc}, Node,
              Sh=#sh{port=Port, state=State}) ->
-    ct:pal("Node ~p shut down with error/status code ~p~n",
+    ct:log("Node ~p shut down with error/status code ~p~n",
                       [Node#'systest.node_info'.id, Exit]),
     ShutdownType = case State of
                        killed -> normal;
@@ -222,7 +221,7 @@ handle_msg({Port, {exit_status, Exit}=Rc}, Node,
 handle_msg({Port, closed}, Node, Sh=#sh{port=Port,
                                         state=killed,
                                         detached=false}) ->
-    ct:pal("~p (attached) closed~n", [Port]),
+    ct:log("~p (attached) closed~n", [Port]),
     case Sh#sh.rpc_enabled of
         true ->
             %% to account for a potential timing issue when the calling test
@@ -236,13 +235,13 @@ handle_msg({Port, closed}, Node, Sh=#sh{port=Port,
     end,
     {stop, normal, Sh};
 handle_msg({Port, closed}, _Node, Sh=#sh{port=Port}) ->
-    ct:pal("~p closed~n", [Port]),
+    ct:log("~p closed~n", [Port]),
     {stop, {port_closed, Port}, Sh};
 handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Node, Sh=#sh{shutdown_port=Pid,
                                                        detached=Detached,
                                                        state=killed,
                                                        log=Fd}) ->
-    ct:pal("Termination Port completed ok~n"),
+    ct:log("Termination Port completed ok~n"),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     case Detached of
         true  -> {stop, normal, Sh};
@@ -250,7 +249,7 @@ handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Node, Sh=#sh{shutdown_port=Pid,
     end;
 handle_msg({'EXIT', Pid, {error, Rc, StopAcc}},
            _Node, Sh=#sh{shutdown_port=Pid, log=Fd}) ->
-    ct:pal("Termination Port stopped abnormally (status ~p)~n", [Rc]),
+    ct:log("Termination Port stopped abnormally (status ~p)~n", [Rc]),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     {stop, termination_port_error, Sh};
 handle_msg(Info, _Node, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
@@ -263,7 +262,7 @@ handle_msg(Info, _Node, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
 
 %% @doc gives the handler a chance to clean up prior to being fully stopped.
 terminate(Reason, _Node, #sh{port=Port, log=Fd}) ->
-    ct:pal("Terminating due to ~p~n", [Reason]),
+    ct:log("Terminating due to ~p~n", [Reason]),
     %% TODO: verify that we're not *leaking* ports if we fail to close them
     case Fd of
         user -> ok;
@@ -295,7 +294,7 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
                                {"console", user}
                        end,
 
-    ct:pal("Reading OS process id for ~p from ~p~n"
+    ct:log("Reading OS process id for ~p from ~p~n"
            "RPC Enabled: ~p~n"
            "StdIO Log: ~s~n",
            [Id, Port, RpcEnabled, LogName]),
@@ -356,7 +355,7 @@ open_port(#exec{command=ExecutableCommand,
     RunEnv = [{env, Env}],
     LaunchOpts = [exit_status, hide, stderr_to_stdout,
                   use_stdio, {line, 16384}] ++ RunEnv,
-    ct:pal("Spawning executable~n"
+    ct:log("Spawning executable~n"
            "Command:         ~s~n"
            "Detached:        ~p~n"
            "Args:            ~p~n"

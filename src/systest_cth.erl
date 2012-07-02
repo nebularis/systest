@@ -70,7 +70,7 @@ init(systest, _Opts) ->
 pre_init_per_suite(Suite, Config, State=#state{auto_start=false}) ->
     {Config, State#state{suite=Suite}};
 pre_init_per_suite(Suite, Config, State) ->
-    ct:pal("pre_init_per_suite: maybe start ~p", [Suite]),
+    ct:log("pre_init_per_suite: maybe start ~p", [Suite]),
     %% TODO: handle init_per_suite use of cluster aliases
     {systest:start_suite(Suite, systest:trace_on(Suite, Config)),
                     State#state{suite=Suite}}.
@@ -79,10 +79,10 @@ post_end_per_suite(Suite, Config, Result, State) ->
     %% TODO: check and see whether there *is* actually an active cluster
     case ?CONFIG(systest_utils:strip_suite_suffix(Suite), Config, undefined) of
         undefined ->
-            ct:pal("no configured suite to stop~n");
+            ct:log("no configured suite to stop~n");
         ClusterPid ->
-            ct:pal("stopping ~p~n", [ClusterPid]),
-            ct:pal("stopped ~p~n",
+            ct:log("stopping ~p~n", [ClusterPid]),
+            ct:log("stopped ~p~n",
                    [systest_cluster:stop(ClusterPid)])
     end,
     systest:trace_off(Config),
@@ -106,12 +106,12 @@ post_end_per_group(Group, Config, Result, State) ->
 pre_init_per_testcase(TC, Config, State=#state{auto_start=false}) ->
     {systest:trace_on(TC, Config), State};
 pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
-    ct:pal("~p handling pre_init_per_testcase [~p]~n", [?MODULE, TC]),
+    ct:log("~p handling pre_init_per_testcase [~p]~n", [?MODULE, TC]),
     {systest:start(Suite, TC, Config), State}.
 
 post_end_per_testcase(TC, Config, Return, State) ->
     %% TODO: handle {save_config, Config} return values in st:stop
-    ct:pal("processing post_end_per_testcase: ~p: ~p~n", [TC, Config]),
+    ct:log("processing post_end_per_testcase: ~p: ~p~n", [TC, Config]),
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
             systest:trace_off(Config),
@@ -119,11 +119,11 @@ post_end_per_testcase(TC, Config, Return, State) ->
         ClusterPid ->
             case erlang:is_process_alive(ClusterPid) of
                 true ->
-                    ct:pal("stopping ~p~n", [ClusterPid]),
-                    ct:pal("stopped ~p~n",
+                    ct:log("stopping ~p~n", [ClusterPid]),
+                    ct:log("stopped ~p~n",
                            [systest_cluster:stop(ClusterPid)]);
                 false ->
-                    ct:pal("cluster ~p is already down~n", [ClusterPid])
+                    ct:log("cluster ~p is already down~n", [ClusterPid])
             end,
             systest:trace_off(Config),
             {Return, State}

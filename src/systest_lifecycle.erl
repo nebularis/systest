@@ -40,7 +40,7 @@
 
 -include("systest.hrl").
 
--record(lifecycle, {id, descendants, hooks}).
+-record(lifecycle, {foobar}).
 
 %%
 %% Public API
@@ -56,24 +56,25 @@ starting(What, Scope, Data) ->
 %% gen_fsm API
 %%
 
-init([Id, Data]) ->
-    {ok, started, #lifecycle{id=Id,
-                             hooks=Data,
-                             descendants=[]}}.
 init(_) ->
     {ok, preparing, #lifecycle{}}.
 
-handle_event({starting, What, Context, Data},
-             State, Fsm=#lifecycle{top=self(), descendants=[]}) ->
+%%
+%% @hidden
+%%
+%% NB: BranchPoint  = enter | leave
+%%     Type         = StateName (e.g., starting | stopping)
+%%     Context      = object type (cluster, node, etc)
+%%
+handle_event({BranchPoint, Context, Context, Data},
+             State, Fsm=#lifecycle{descendants=[]}) ->
     NextState = starting_state_name(What),
     upgrade(Context, Data),
     {next_state, NextState, Fsm};
-handle_event({starting, What, Context, Data},
+handle_event({starting, What, Context, Data}=Ev,
              State, Fsm=#lifecycle{descendants=Desc}) ->
-
-
-starting_cluster({upgrade, Context, Data}, Fsm) ->
-    {next_state, starting_cluster, start_child(Fsm, Context, Data)}.
+    [send(Pid, Ev) || Pid <- Desc],
+    {next_state, State, Fsm}.
 
 handle_sync_event({Tag, EventName}, _From, StateName, StateData) ->
     {reply, ok, StateName, StateData}.
@@ -90,8 +91,8 @@ code_change(OldVsn, StateName, StateData, Extra) ->
 send(Pid, Event) ->
     ok = gen_fsm:send_event(Pid, Event).
 
-start_child(Fsm=#lifecycle{descendants=Desc}, Context, Data) ->
-    {ok, Pid} = gen_fsm:start_link(?MODULE, [Context, Data], []),
+start_child(Fsm=#lifecycle{top=Top, descendants=Desc}, Context, Data) ->
+    {ok, Pid} = gen_fsm:start_link(?MODULE, [Top, Context, Data], []),
     Fsm#lifecycle{descendants=[Pid|Desc]}.
 
 upgrade(Context, Data) ->

@@ -94,6 +94,7 @@ systest(Config, _) ->
     end.
 
 report_cover(Dir, Export, Config) ->
+    rebar_log:log(info, "Code Coverage Results:~n", []),
     Mods = cover:modules(),
     Summary = case rebar_config:get_local(Config, cover_summary, user) of
                   console -> user;

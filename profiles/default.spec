@@ -1,6 +1,6 @@
 
 {config, "{{ base_dir }}/resources/systest_cli.config"}.
-% {config, "{{ base_dir }}/resources/systest_nodes.config"}.
+{config, "{{ base_dir }}/resources/systest_nodes.config"}.
 {config, "{{ base_dir }}/resources/systest_supervision.config"}.
 
 {alias, test, "{{ base_dir }}/ebin"}.

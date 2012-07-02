@@ -8,6 +8,7 @@
 {suites, test, all}.
 % {cases, test, systest_node_SUITE, restarting_nodes}.
 
+{event_handler, systest_event}.
 {ct_hooks, [cth_log_redirect,
             {systest_supervision_cth, [], 0},
             {systest_cth, [], 1000}]}.

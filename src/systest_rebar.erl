@@ -95,7 +95,6 @@ systest(Config, _) ->
 
 report_cover(Dir, Export, Config) ->
     rebar_log:log(info, "Code Coverage Results:~n", []),
-    Mods = cover:modules(),
     Summary = case rebar_config:get_local(Config, cover_summary, user) of
                   console -> user;
                   user    -> user;
@@ -127,7 +126,7 @@ report_cover(Dir, Export, Config) ->
                     Error ->
                         throw(Error)
                 end
-            end, {0, 0}, Mods),
+            end, {0, 0}, lists:sort(cover:modules())),
     ok = report_coverage_percentage(user, CT, NCT, 'TOTAL'),
     timer:sleep(1000),
     % ok = file:close(SummaryFile),

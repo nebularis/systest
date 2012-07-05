@@ -112,10 +112,11 @@ pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
 post_end_per_testcase(TC, Config, Return, State) ->
     %% TODO: handle {save_config, Config} return values in st:stop
     ct:log("processing post_end_per_testcase: ~p: ~p~n", [TC, Config]),
+    Result = check_exceptions(TC, Return),
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
             systest:trace_off(Config),
-            {Return, State};
+            {Result, State};
         ClusterPid ->
             case erlang:is_process_alive(ClusterPid) of
                 true ->
@@ -126,8 +127,29 @@ post_end_per_testcase(TC, Config, Return, State) ->
                     ct:log("cluster ~p is already down~n", [ClusterPid])
             end,
             systest:trace_off(Config),
-            {Return, State}
+            {Result, State}
     end.
 
 terminate(_State) ->
     ok.
+
+check_exceptions(ClusterId, Return) ->
+    case systest_watchdog:exceptions(ClusterId) of
+        [] ->
+            Return;
+        Ex ->
+            systest_event:console("Test Scope ~p Failed!~n",
+                                  [ClusterId]),
+            
+            [begin
+                systest_event:console("~p: ~p~n",
+                                      [ClusterId, Reason])
+             end || {_, _, Reason} <- Ex],
+            
+            Failures = case Ex of
+                           [E] -> E;
+                           _   -> Ex
+                       end,
+            {fail, {Return, Ex}}
+    end.
+

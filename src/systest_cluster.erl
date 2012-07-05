@@ -255,19 +255,23 @@ with_cluster({Scope, Identity}, Handler, Config) ->
         {_, noconfig} ->
             noconfig;
         {Alias, ClusterConfig} ->
-            {Hosts, Hooks} = lists:splitwith(fun(E) ->
-                                                 element(1, E) =/= on_start
-                                             end, ClusterConfig),
-            ct:log("Configured hosts: ~p~n", [Hosts]),
-            Nodes = lists:flatten([Handler(Identity, Alias,
-                                           Host, Config) || Host <- Hosts]),
+            try
+                {Hosts, Hooks} = lists:splitwith(fun(E) ->
+                                                     element(1, E) =/= on_start
+                                                 end, ClusterConfig),
+                ct:log("Configured hosts: ~p~n", [Hosts]),
+                Nodes = lists:flatten([Handler(Identity, Alias,
+                                               Host, Config) || Host <- Hosts]),
 
-            #'systest.cluster'{id = Identity,
-                               scope = Scope,
-                               name = Alias,
-                               nodes = Nodes,
-                               config = Config,
-                               on_start = Hooks}
+                #'systest.cluster'{id = Identity,
+                                   scope = Scope,
+                                   name = Alias,
+                                   nodes = Nodes,
+                                   config = Config,
+                                   on_start = Hooks}
+            catch _:Failed ->
+                ct:abort_current_testcase(Failed)
+            end
     end.
 
 %% TODO: make a Handler:status call to get detailed information back...

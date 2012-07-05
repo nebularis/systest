@@ -42,9 +42,10 @@ suite() -> [{timetrap, {seconds, 200}}].
 all() ->
     [suite_nodes_should_be_up_and_running,
      end_per_tc_can_manage_shutdown,
-     should_fail,
+     should_fail_bad_config,
      {group, inter_testcase_cleanup},
-     trapping_nodedown_messages].
+     trapping_nodedown_messages,
+     cluster_start_scripts_badly_configured].
 
 groups() ->
     [{inter_testcase_cleanup, [sequence],
@@ -80,14 +81,25 @@ end_per_testcase(_TC, _Config) ->
 %% Test Case Definitions
 %%
 
-should_fail() ->
+should_fail_bad_config() ->
     [{userdata, [{doc, "this testcase should never run, being simply "
                        "a place-holder for an init_per_testcase that "
                        "we expect to fail.\n"
                        "The validation of this failure is performed in "
                        "the systest_supervision_cth common test hook!"}]}].
 
-should_fail(_) ->
+should_fail_bad_config(_) ->
+    ok.
+
+
+cluster_start_scripts_badly_configured() ->
+    [{userdata, [{doc, "this testcase should never run, being simply "
+                       "a place-holder for an init_per_testcase that "
+                       "we expect to fail.\n"
+                       "The validation of this failure is performed in "
+                       "the systest_supervision_cth common test hook!"}]}].
+
+cluster_start_scripts_badly_configured(_) ->
     ok.
 
 suite_nodes_should_be_up_and_running(_Config) ->

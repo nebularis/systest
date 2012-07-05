@@ -82,7 +82,9 @@ handle_event(#event{name=tc_done,
                     failed([N, init_per_testcase], Desc, FailInfo)
             end;
         {failed, FailReason} ->
-            failed(N, Desc, FailReason)
+            failed(N, Desc, FailReason);
+        {framework_error, Other} ->
+            failed(N, Desc, Other)
     end,
     {ok, State};
 handle_event(#event{name=tc_auto_skip, data={Suite,Func,Reason}}, State) ->

@@ -45,4 +45,3 @@ copy_rebar_badness(Base, Mod) ->
     Src = filename:join([Base, "deps", "rebar", "ebin", Mod]),
     Dest = filename:join([Base, "ebin", Mod]),
     file:copy(Src, Dest).
-

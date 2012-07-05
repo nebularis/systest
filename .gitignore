@@ -6,3 +6,4 @@ ebin
 logs
 .eunit
 priv/bin/systes*
+doc

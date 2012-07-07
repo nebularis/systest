@@ -32,6 +32,11 @@
 
 systest(Config, _) ->
     systest:start(),
+
+    %% because sometimes, code that is accessed from an escript archive doesn't
+    %% get handled in a particularly useful way by the code server.... :/
+    rebar_log:log(debug, "~p~n", [code:ensure_loaded(systest_utils)]),
+    
     % code:add_pathz(filename:dirname(filename:absname(code:which(systest)))),
     DepsDir = rebar_config:get_local(Config, deps_dir,
                         rebar_config:get_global(deps_dir, "deps")),

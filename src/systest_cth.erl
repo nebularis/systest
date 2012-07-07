@@ -138,7 +138,7 @@ check_exceptions(ClusterId, Return) ->
         [] ->
             Return;
         Ex ->
-            systest_event:console("Test Scope ~p Failed!~n",
+            systest_event:console("test instance ~p failed!~n",
                                   [ClusterId]),
             
             [begin

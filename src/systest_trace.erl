@@ -187,5 +187,5 @@ setup_port_tracer(file, error) ->
     ct:fail("Cannot determine default file name for port tracing. Please "
             "set the {filename, FN} tuple in your config file properly.");
 setup_port_tracer(PortType, PortSpec) ->
-    io:format(user, "Configuring ~p tracer on ~p.~n", [PortType, PortSpec]),
+    systest_event:console("configuring ~p tracer on ~p.~n", [PortType, PortSpec]),
     dbg:tracer(port, dbg:trace_port(PortType, PortSpec)).

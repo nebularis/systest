@@ -44,8 +44,7 @@ all() ->
      end_per_tc_can_manage_shutdown,
      should_fail_bad_config,
      {group, inter_testcase_cleanup},
-     trapping_nodedown_messages,
-     cluster_start_scripts_badly_configured].
+     trapping_nodedown_messages].
 
 groups() ->
     [{inter_testcase_cleanup, [sequence],
@@ -68,10 +67,10 @@ init_per_testcase(_TC, Config) ->
     Config.
 
 end_per_testcase(TC=init_per_tc_manages_shutdown, Config) ->
-    ct:pal("explicitly killing cluster ~p~n", [TC]),
+    systest_event:console("explicitly killing cluster ~p~n", [TC]),
     Pid = ?CONFIG(active, Config),
     systest:stop(Pid),
-    ct:pal("explicit stop of ~p has returned (live=~p)~n",
+    systest_event:console("explicit stop of ~p has returned (live=~p)~n",
            [Pid, erlang:is_process_alive(Pid)]),
     ok;
 end_per_testcase(_TC, _Config) ->
@@ -89,17 +88,6 @@ should_fail_bad_config() ->
                        "the systest_supervision_cth common test hook!"}]}].
 
 should_fail_bad_config(_) ->
-    ok.
-
-
-cluster_start_scripts_badly_configured() ->
-    [{userdata, [{doc, "this testcase should never run, being simply "
-                       "a place-holder for an init_per_testcase that "
-                       "we expect to fail.\n"
-                       "The validation of this failure is performed in "
-                       "the systest_supervision_cth common test hook!"}]}].
-
-cluster_start_scripts_badly_configured(_) ->
     ok.
 
 suite_nodes_should_be_up_and_running(_Config) ->
@@ -134,7 +122,7 @@ after_end_per_tc_automation() ->
 after_end_per_tc_automation(Config) ->
     {end_per_tc_automation, SavedConfig} = ?config(saved_config, Config),
     ClusterPid = ?CONFIG(previous_active, SavedConfig),
-    ct:pal("is end_per_tc_automation still alive!?...~n"),
+    ct:log("is end_per_tc_automation still alive!?...~n"),
     ?assertEqual(false, erlang:is_process_alive(ClusterPid)).
 
 trapping_nodedown_messages(Config) ->

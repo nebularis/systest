@@ -41,14 +41,14 @@ descriptor(Other) ->
     {Other, "test case"}.
 
 console(Msg, Args) ->
-    io:format(user, "[systest] " ++ Msg, Args).
+    io:format(user, "[SYSTEST]  " ++ Msg, Args).
 
 init([]) ->
     {ok, []}.
 
-handle_event(#event{name=start_info, data={Tests,Suites,_Cases}}, State) ->
-    console("starting test run (~p tests, ~p suites~n", [Tests, Suites]),
-    {ok, State};
+%handle_event(#event{name=start_info, data={Tests,Suites,_Cases}}, State) ->
+    % console("starting test run ~p tests, ~p suites~n", [Tests, Suites]),
+%    {ok, State};
 handle_event(#event{name=tc_start, data={Suite,FuncOrGroup}}, State) ->
     case FuncOrGroup of
         init_per_suite ->

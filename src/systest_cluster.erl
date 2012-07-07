@@ -76,7 +76,7 @@ start_it(How, ScopeId, ClusterId, Config) ->
             Config2 = systest_config:ensure_value(ClusterId, Pid, Config),
             systest_config:replace_value(active, Pid, Config2);
         {error, _Other}=Err ->
-            throw(Err)
+            Err
     end.
 
 stop(ClusterRef) ->
@@ -130,8 +130,6 @@ init([Scope, Id, Config]) ->
     case systest_watchdog:cluster_started(Id, self()) of
         ok ->
             case with_cluster({Scope, Id}, fun start_host/4, Config) of
-                noconfig ->
-                    {stop, noconfig};
                 Cluster=#'systest.cluster'{nodes=Nodes, on_start=Hooks} ->
                     case Hooks of
                         [{on_start, Run}|_] ->
@@ -149,7 +147,9 @@ init([Scope, Id, Config]) ->
                          systest_node:joined_cluster(Ref, Cluster,
                                                      Nodes -- [Node])
                      end || Node <- Nodes],
-                    {ok, Cluster}
+                    {ok, Cluster};
+                Error ->
+                    {stop, Error}
             end;
         {error, clash} ->
             {stop, name_in_use}

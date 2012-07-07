@@ -62,11 +62,6 @@
 
 -include("systest.hrl").
 
--ifdef(TEST).
-%% TODO: deprecate this in favour of systest_config:eval/2
--export([convert_flags/4]).
--endif.
-
 %%
 %% systest_node API
 %%

@@ -45,6 +45,7 @@ main(Args) ->
 %% application startup
 
 start() ->
+    error_logger:tty(false),
     application:start(?MODULE).
 
 reset() ->
@@ -60,10 +61,20 @@ stop_scope(Scope) when is_atom(Scope) ->
     systest_watchdog:force_stop(Scope).
 
 start(Scope, Config) ->
-    systest_cluster:start(Scope, Config).
+    case systest_cluster:start(Scope, Config) of
+        {error, _}=Err ->
+            {fail, {cluster_start, Err}};
+        Other ->
+            Other
+    end.
 
 start(Scope, Identify, Config) ->
-    systest_cluster:start(Scope, Identify, trace_on(Identify, Config)).
+    case systest_cluster:start(Scope, Identify, trace_on(Identify, Config)) of
+        {error, _}=Err ->
+            {fail, {cluster_start, Err}};
+        Other ->
+            Other
+    end.
 
 stop(Scope) when is_pid(Scope) ->
     systest_cluster:stop(Scope).

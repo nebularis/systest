@@ -25,14 +25,6 @@ REBAR=$(shell which rebar)
 SOURCE_DIR=src
 TEST_DIR=test
 EBIN_DIR=ebin
-INCLUDES=$(wildcard $(INCLUDE_DIR)/*.hrl)
-SOURCES=$(wildcard $(SOURCE_DIR)/*.erl) 
-TEST_SOURCES=$(wildcard $(TEST_DIR)/*.erl)
-BIN_FILE=priv/bin/systest
-
-MAIN_TARGETS=$(patsubst $(SOURCE_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(SOURCES))
-TEST_TARGETS=$(patsubst $(TEST_DIR)/%.erl, $(EBIN_DIR)/%.beam, $(TEST_SOURCES))
-
 DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- proplists:get_value(deps, element(2, file:consult("rebar.config")))], halt(0).').
 
 ## rules start here
@@ -42,7 +34,7 @@ REBAR=bin/rebar/rebar
 endif
 
 .PHONY: all
-all: clean test
+all: escriptize
 
 .PHONY: info
 info:
@@ -59,26 +51,25 @@ dist-clean: clean
 	rm -drf deps
 	rm -drf bin
 
-$(DEPS): $(REBAR)
-	$(REBAR) get-deps -v $(LOGLEVEL)
+compile: $(REBAR)
+	$(REBAR) get-deps compile -v $(LOGLEVEL)
 
-$(MAIN_TARGETS): $(SOURCES) $(INCLUDES)
-	$(REBAR) compile -v $(LOGLEVEL)
+.PHONY: test-compile
+test-compile:
+	$(REBAR) skip_deps=true -C test.config get-deps compile -v $(LOGLEVEL)
 
-$(TEST_TARGETS): $(TEST_SOURCES)
-	$(REBAR) skip_deps=true -C test.config compile -v $(LOGLEVEL)
-
-$(BIN_FILE): info
-	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true clean compile escriptize -v $(LOGLEVEL)
+.PHONY: escriptize
+escriptize: compile
+	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true escriptize -v $(LOGLEVEL)
 
 .PHONY: test
 test: test-default test-error-handling
 
 .PHONY: test-dependencies
-test-dependencies: info $(MAIN_TARGETS) $(TEST_TARGETS)
+test-dependencies: test-compile escriptize
 
 .PHONY: test-default
-test-default: $(BIN_FILE) test-dependencies
+test-default: test-dependencies
 	ERL_FLAGS="-pa ebin" SYSTEST_PROFILE="$@" priv/bin/systest
 
 .PHONY: test-error-handling

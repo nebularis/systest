@@ -270,7 +270,7 @@ with_cluster({Scope, Identity}, Handler, Config) ->
                                    config = Config,
                                    on_start = Hooks}
             catch _:Failed ->
-                ct:abort_current_testcase(Failed)
+                Failed
             end
     end.
 

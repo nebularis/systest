@@ -46,7 +46,8 @@ restarting_nodes(Config) ->
     [begin
          ?assertEqual(pong, net_adm:ping(Id)),
          {ok, {Id, Pid}} = systest_cluster:restart_node(Cluster, Ref),
-         ?assertEqual(true, erlang:is_process_alive(Pid))
+         ?assertEqual(true, erlang:is_process_alive(Pid)),
+         ?assertEqual(pong, net_adm:ping(Id))
      end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
     ok.
 

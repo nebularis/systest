@@ -40,54 +40,54 @@ all() ->
 
 local_and_global_scope_configuration_handling(Config) ->
     Scope = systest_cli_config_example,
-    Cfg = systest_cluster:check_config(Scope, Config),
+    Cfg = systest_sut:check_config(Scope, Config),
     ok.
 
-starting_and_stopping_nodes(Config) ->
+starting_and_stopping_procs(Config) ->
     process_flag(trap_exit, true),
-    Cluster = systest:active_cluster(Config),
-    systest_cluster:print_status(Cluster),
+    Sut = systest:active_sut(Config),
+    systest_sut:print_status(Sut),
     [begin
-         ?assertEqual(nodeup, systest_node:status(Ref)),
-         ?assertEqual(pong,   net_adm:ping(Id)),
+         ?assertEqual(up,   systest_proc:status(Ref)),
+         ?assertEqual(pong, net_adm:ping(Id)),
 
-         ok = systest_node:stop_and_wait(Ref),
+         ok = systest_proc:stop_and_wait(Ref),
          ?assertEqual(pang, net_adm:ping(Id))
-     end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
+     end || {Id, Ref} <- systest:procs(Sut)],
     ok.
 
-killing_nodes(Config) ->
+killing_procs(Config) ->
     process_flag(trap_exit, true),
-    Cluster = systest:active_cluster(Config),
-    systest_cluster:print_status(Cluster),
+    Sut = systest:active_sut(Config),
+    systest_sut:print_status(Sut),
     [begin
-         ?assertEqual(nodeup, systest_node:status(Ref)),
-         ok = systest_node:kill_and_wait(Ref),
+         ?assertEqual(up, systest_proc:status(Ref)),
+         ok = systest_proc:kill_and_wait(Ref),
 
          ?assertEqual(pang, net_adm:ping(Id))
-     end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
+     end || {Id, Ref} <- systest:procs(Sut)],
     ok.
 
-sigkill_on_nodes(Config) ->
+sigkill_on_procs(Config) ->
     process_flag(trap_exit, true),
-    Cluster = systest:active_cluster(Config),
-    systest_cluster:print_status(Cluster),
+    Sut = systest:active_sut(Config),
+    systest_sut:print_status(Sut),
     [begin
-         ?assertEqual(nodeup, systest_node:status(Ref)),
-         ok = systest_node:shutdown_and_wait(Ref,
-                                             fun systest_node:'kill -9'/1),
+         ?assertEqual(up, systest_proc:status(Ref)),
+         ok = systest_proc:shutdown_and_wait(Ref,
+                                             fun systest_proc:'kill -9'/1),
          ?assertEqual(false, erlang:is_process_alive(Ref))
-     end || {_, Ref} <- systest:cluster_nodes(Cluster)],
+     end || {_, Ref} <- systest:procs(Sut)],
     ok.
 
 handling_detached_processes(Config) ->
     process_flag(trap_exit, true),
-    Cluster = systest:active_cluster(Config),
-    systest_cluster:print_status(Cluster),
+    Sut = systest:active_sut(Config),
+    systest_sut:print_status(Sut),
     [begin
-         ?assertEqual(nodeup, systest_node:status(Ref)),
-         ok = systest_node:kill_and_wait(Ref),
+         ?assertEqual(up, systest_proc:status(Ref)),
+         ok = systest_proc:kill_and_wait(Ref),
 
          ?assertEqual(pang, net_adm:ping(Id))
-     end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
+     end || {Id, Ref} <- systest:procs(Sut)],
     ok.

@@ -46,7 +46,7 @@ init(_Id, _Opts) ->
 
 pre_init_per_testcase(TC, [{_,_}|_]=Config, State) ->
     Active = ?CONFIG(TC, Config, undefined),
-    ct:log("active cluster: ~p~n", [Active]),
+    ct:log("active sut: ~p~n", [Active]),
     {Config, State#ctx{active={TC, Active}}};
 pre_init_per_testcase(TC, Config, State) ->
     {Config, State}.
@@ -62,19 +62,19 @@ post_end_per_testcase(should_fail_bad_config, Config,
 post_end_per_testcase(TC, Config, Return,
                       State=#ctx{active={TC, Active}}) when is_pid(Active) ->
     %% the end_per_testcase implementation in the SUITE *should* have shut down
-    %% the cluster, so here we simply assert that this is the case...
+    %% the sut, so here we simply assert that this is the case...
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
             %% the end_per_testcase implementation in the SUITE *should* have
-            %% shut down the cluster, so here we assert that this is the case..
+            %% shut down the sut, so here we assert that this is the case..
             case erlang:is_process_alive(Active) of
                 false ->
-                    ct:log("cluster process is already dead! pass~n"),
+                    ct:log("sut process is already dead! pass~n"),
                     {Return, State};
                 true ->
                     case systest_watchdog:exceptions(TC) of
                         [] ->
-                            ct:log("cluster process is still "
+                            ct:log("sut process is still "
                                    "alive, with no exception~n"),
                             {Return, State};
                         Ex ->
@@ -84,11 +84,11 @@ post_end_per_testcase(TC, Config, Return,
                             {{fail, ErrMsg}, State}
                     end
             end;
-        ClusterPid ->
-            ct:log("ignoring active cluster ~p~n", [ClusterPid]),
+        SutPid ->
+            ct:log("ignoring active sut ~p~n", [SutPid]),
             %% we don't actually *care* about this case, because the user
             %% defined end_per_testcase in the SUITE only shuts down the
-            %% cluster for a specific subset of the test cases, and all the
+            %% sut for a specific subset of the test cases, and all the
             %% others will be handled by the default systest ct-hook.
             {Return, State}
     end;

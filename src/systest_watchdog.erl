@@ -30,14 +30,14 @@
         [{read_concurrency, true},
          {write_concurrency, false}]).
 
--record(state, {cluster_table, node_table, exception_table}).
+-record(state, {sut_table, proc_table, exception_table}).
 
 -behaviour(gen_server).
 
 %% API Exports
 
--export([start/0, cluster_started/2, exceptions/1, reset/0,
-         node_started/2, node_stopped/2, force_stop/1]).
+-export([start/0, sut_started/2, exceptions/1, reset/0,
+         proc_started/2, proc_stopped/2, force_stop/1]).
 
 -export([clear_exceptions/0]).
 
@@ -53,8 +53,8 @@
 start() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-cluster_started(Id, Pid) ->
-    gen_server:call(?MODULE, {cluster_started, Id, Pid}).
+sut_started(Id, Pid) ->
+    gen_server:call(?MODULE, {sut_started, Id, Pid}).
 
 reset() ->
     gen_server:call(?MODULE, reset).
@@ -62,31 +62,31 @@ reset() ->
 force_stop(Id) ->
     case gen_server:call(?MODULE, {force_stop, Id}) of
         {error, regname, Id} ->
-            ct:log("ignoring stop for deceased cluster ~p~n", [Id]);
+            ct:log("ignoring stop for deceased SUT ~p~n", [Id]);
         Ok ->
             Ok
     end.
 
-node_started(Cid, Pid) ->
-    %% NB: we do *not* link to nodes, as the cluster *should*
-    %% in theory be responsible for cleaning up its own nodes
+proc_started(Cid, Pid) ->
+    %% NB: we do *not* link to procs, as the sut *should*
+    %% in theory be responsible for cleaning up its own procs
     %%
-    %% NB: if we blocked on accessing the node_table, we would
+    %% NB: if we blocked on accessing the proc_table, we would
     %% very likely deadlock the system - just when automated
     %% cleanup is meant to be leaving a clean environment behind
-    case ets:insert_new(node_table, {{Cid, Pid}}) of
-        false -> {error, duplicate_node};
+    case ets:insert_new(proc_table, {{Cid, Pid}}) of
+        false -> {error, duplicate_proc};
         true  -> ok
     end.
 
-node_stopped(Cid, Pid) ->
-    %% NB: if we blocked on accessing the node_table, we would
+proc_stopped(Cid, Pid) ->
+    %% NB: if we blocked on accessing the proc_table, we would
     %% very likely deadlock the system - just when automated
     %% cleanup is meant to be leaving a clean environment behind
-    ets:delete(node_table, {Cid, Pid}).
+    ets:delete(proc_table, {Cid, Pid}).
 
-exceptions(ClusterId) ->
-    gen_server:call(?MODULE, {exceptions, ClusterId}).
+exceptions(SutId) ->
+    gen_server:call(?MODULE, {exceptions, SutId}).
 
 clear_exceptions() ->
     gen_server:call(?MODULE, clear_exceptions).
@@ -97,41 +97,41 @@ clear_exceptions() ->
 
 init([]) ->
     process_flag(trap_exit, true),
-    CT = ets:new(cluster_table,   [ordered_set, private|?ETS_OPTS]),
-    NT = ets:new(node_table,      [ordered_set, named_table,
+    CT = ets:new(sut_table,   [ordered_set, private|?ETS_OPTS]),
+    NT = ets:new(proc_table,      [ordered_set, named_table,
                                    public|?ETS_OPTS]),
     OT = ets:new(exception_table, [duplicate_bag, private|?ETS_OPTS]),
-    {ok, #state{cluster_table=CT, node_table=NT, exception_table=OT}}.
+    {ok, #state{sut_table=CT, proc_table=NT, exception_table=OT}}.
 
-handle_call(reset, _From, State=#state{cluster_table=CT,
-                                       node_table=NT,
+handle_call(reset, _From, State=#state{sut_table=CT,
+                                       proc_table=NT,
                                        exception_table=ET}) ->
     CPids = [CPid || {_, CPid} <- ets:tab2list(CT)],
     systest_cleaner:kill_wait(CPids, fun(P) -> erlang:exit(P, reset) end),
     [ets:delete_all_objects(T) || T <- [ET, NT, CT]],
     {reply, ok, State};
-handle_call({force_stop, ClusterId}, _From,
-            State=#state{cluster_table=CT}) ->
-    case ets:lookup(CT, ClusterId) of
+handle_call({force_stop, SutId}, _From,
+            State=#state{sut_table=CT}) ->
+    case ets:lookup(CT, SutId) of
         [] ->
-            ct:log("~p not found in ~p~n", [ClusterId, ets:tab2list(CT)]),
-            {reply, {error, regname, ClusterId}, State};
-        [{ClusterId, Pid}] ->
-            systest_cluster:stop(Pid),
+            ct:log("~p not found in ~p~n", [SutId, ets:tab2list(CT)]),
+            {reply, {error, regname, SutId}, State};
+        [{SutId, Pid}] ->
+            systest_sut:stop(Pid),
             ct:log("force stop complete~n"),
             {reply, ok, State}
     end;
-handle_call({exceptions, ClusterId}, _From,
+handle_call({exceptions, SutId}, _From,
             State=#state{exception_table=ET}) ->
-    {reply, ets:match_object(ET, {ClusterId, '_', '_'}), State};
+    {reply, ets:match_object(ET, {SutId, '_', '_'}), State};
 handle_call(clear_exceptions, _From, State=#state{exception_table=ET}) ->
     {reply, ets:delete_all_objects(ET), State};
-handle_call({cluster_started, ClusterId, ClusterPid},
-            _From, State=#state{cluster_table=CT}) ->
-    case ets:insert_new(CT, {ClusterId, ClusterPid}) of
-        true  -> %% NB: we link to cluster pids so that we
+handle_call({sut_started, SutId, SutPid},
+            _From, State=#state{sut_table=CT}) ->
+    case ets:insert_new(CT, {SutId, SutPid}) of
+        true  -> %% NB: we link to sut pids so that we
                  %% can be sure to know when and why they exit
-                 link(ClusterPid),
+                 link(SutPid),
                  {reply, ok, State};
         false -> {reply, {error, clash}, State}
     end;
@@ -142,33 +142,33 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({'EXIT', Pid, Reason},
-            State=#state{cluster_table=CT, node_table=NT,
+            State=#state{sut_table=CT, proc_table=NT,
                          exception_table=ET}) ->
     case ets:match_object(CT, {'_', Pid}) of
-        [{ClusterId, _}=Cluster] ->
-            ct:log("watchdog handling cluster (process) down"
-                   " event for ~p~n", [ClusterId]),
+        [{SutId, _}=Sut] ->
+            ct:log("watchdog handling sut (process) down"
+                   " event for ~p~n", [SutId]),
 
             case Reason of
                 normal ->
-                    %% the cluster has exited normally - any nodes left
+                    %% the sut has exited normally - any procs left
                     %% alive are not supposed to be (they're orphans) and
                     %% so we report these as errors
-                    Nodes = find_nodes(NT, Cluster),
-                    report_orphans(Cluster, Nodes, ET);
+                    Procs = find_procs(NT, Sut),
+                    report_orphans(Sut, Procs, ET);
                 noconfig ->
                     ok;
                 _Other ->
-                    %% the cluster has crashed (reason /= normal)
-                    ets:insert(ET, [{ClusterId, crashed, Reason}])
+                    %% the sut has crashed (reason /= normal)
+                    ets:insert(ET, [{SutId, crashed, Reason}])
                     %% we want common_test to fail the current scope!!!
                     % ct:abort_current_testcase(Reason)
             end,
 
-            handle_down(Cluster, NT),
-            ets:delete(CT, ClusterId);
+            handle_down(Sut, NT),
+            ets:delete(CT, SutId);
         [[]] ->
-            ct:log("cluster down even unhandled: no id for "
+            ct:log("sut down even unhandled: no id for "
                    "~p in ~p~n", [Pid, ets:tab2list(CT)]),
             ok
     end,
@@ -186,19 +186,19 @@ code_change(_OldVsn, State, _Extra) ->
 
 report_orphans(_, [], _) ->
     ok;
-report_orphans({ClusterId, _}, Nodes, ET) ->
-    ct:log("watchdog detected orphaned nodes of dead cluster ~p: ~p~n",
-           [ClusterId, Nodes]),
-    ets:insert(ET, [{ClusterId, orphan, N} || N <- Nodes]).
+report_orphans({SutId, _}, Procs, ET) ->
+    ct:log("watchdog detected orphaned procs of dead sut ~p: ~p~n",
+           [SutId, Procs]),
+    ets:insert(ET, [{SutId, orphan, N} || N <- Procs]).
 
-find_nodes(NodeTable, {ClusterId, _}) ->
-    [P || {{_, P}} <- ets:match_object(NodeTable, {{ClusterId, '_'}})].
+find_procs(ProcTable, {SutId, _}) ->
+    [P || {{_, P}} <- ets:match_object(ProcTable, {{SutId, '_'}})].
 
-handle_down(Cluster, NodeTable) ->
-    kill_wait(find_nodes(NodeTable, Cluster)).
+handle_down(Sut, ProcTable) ->
+    kill_wait(find_procs(ProcTable, Sut)).
 
 kill_wait([]) ->
-    ct:log("no nodes to kill~n");
-kill_wait(Nodes) ->
-    systest_cleaner:kill_wait(Nodes, fun systest_node:kill/1).
+    ct:log("no procs to kill~n");
+kill_wait(Procs) ->
+    systest_cleaner:kill_wait(Procs, fun systest_proc:kill/1).
 

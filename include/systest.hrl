@@ -28,8 +28,8 @@
 -define(ECONFIG(Key, Conf), systest_config:eval(Key, Conf)).
 -define(ENCONFIG(Key, Conf),
                 systest_config:eval(Key, Conf,
-                                    [{callback, {node,
-                                     fun systest_node:get/2}}])).
+                                    [{callback, {proc,
+                                     fun systest_proc:get/2}}])).
 -define(WRITE(Key, Value, Conf),
         lists:keyreplace(Key, 1, Conf, Value)).
 
@@ -40,7 +40,7 @@
 -type value()            :: string() | binary().
 -type attribute()        :: atom().
 -type setenv_flags()     :: {'environment', [{name(), value()}]} |
-                            {'node', attribute()}.
+                            {'proc', attribute()}.
 -type vmflags()          :: string().
 -type program()          :: {'program', string()} |
                             {'args', [{name(), value()}]}.
@@ -51,33 +51,33 @@
 
 %% TODO: deprecate the 'apps' field (merge into flags?)
 
--record('systest.node_info', {
-    scope       :: atom(),                  %% usually the cluster id...
-    host        :: atom(),                  %% configured when we 'make' this
-    name        :: atom(),                  %% configured when we 'make' this
-    handler     :: module(),                %% backing module
-    link        :: boolean(),               %% use start_link, or just start?
-    user        :: term(),                  %% user-defined data
-    private     :: term(),                  %% handler data...
+-record(proc, {
+    scope       :: atom(),                      %% usually the sut id...
+    host        :: atom(),                      %% host name
+    name        :: atom(),                      %% identifying (name)
+    handler     :: module(),                    %% backing module
+    link        :: boolean(),                   %% use start_link, or just start
+    user        :: term(),                      %% user-defined data
+    private     :: term(),                      %% handler data...
     %% TODO: this spec is *clearly* inadequate for the types we consume!
     flags       :: vmflags() | script_flags(),  %% used for 'all sorts',
-                                                %% depending on the handler...
+                                                %% depending on the handler
     apps        :: [application_info()],        %% mainly used by slave
     on_start    :: hook(),                      %% startup hooks
     on_stop     :: hook(),                      %% shutdown hooks
-    on_join     :: hook(),                      %% joining (cluster) hooks
-    id          :: atom(),                      %% set by the handler!
-    os_pid      :: string(),                    %% set by the handler!
-    owner       :: pid() | port(),              %% set by the handler!
-    cover       :: term(),
+    on_join     :: hook(),                      %% joining (sut) hooks
+    id          :: atom(),                      %% set by the handler
+    os_pid      :: string(),                    %% set by the handler
+    owner       :: pid() | port(),              %% set by the handler
+    cover       :: term(),                      %% use code coverage
     config      :: systest_config:config()
 }).
 
--record('systest.cluster', {
+-record(sut, {
     id              :: atom(),
     scope           :: atom(),
     name            :: atom(),
-    nodes           :: [pid()],
+    procs           :: [pid()],
     config          :: systest_config:config(),
     on_start        :: [hook()],
     pending = []    :: [{term(), atom()}]

@@ -76,9 +76,9 @@ parameterised_eval_test_() ->
 
 cli_flags_test_() ->
     [begin
-         Node = #'systest.node_info'{id=cli},
+         Node = #proc{id=cli},
          Flags = [{start, [{program, "priv/start"},
-                           {node, id},
+                           {proc, id},
                            {environment, "LOGDIR"}]}],
          Config = [{"logdir", "/tmp/logs"}],
          {setup, fun() ->

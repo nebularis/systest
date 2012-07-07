@@ -33,7 +33,7 @@
 -export_type([config_key/0, config/0]).
 
 -export([read/2, read/3, require/2]).
--export([eval/2, eval/3, cluster_config/2]).
+-export([eval/2, eval/3, sut_config/2]).
 -export([replace_value/3, ensure_value/3]).
 -export([get_config/1, get_config/3, merge_config/2]).
 -export([get_env/0, get_env/1, set_env/2]).
@@ -62,10 +62,10 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-cluster_config(Scope, Identity) ->
+sut_config(Scope, Identity) ->
     case is_configured_explicitly(Identity) of
         true ->
-            {Identity, extract_cluster_config(Identity)};
+            {Identity, extract_sut_config(Identity)};
         false ->
             case search({Identity, 'all'},
                         ct:get_config(Scope, []),
@@ -73,16 +73,16 @@ cluster_config(Scope, Identity) ->
                 Bad when Bad =:= not_found orelse
                          Bad =:= undefined ->
                     ct:log("nothing at ~p.(~p|all)~n", [Scope, Identity]),
-                    {Identity, extract_cluster_config(Identity)};
+                    {Identity, extract_sut_config(Identity)};
                 Alias when is_atom(Alias) ->
-                    {Alias, extract_cluster_config(Alias)};
+                    {Alias, extract_sut_config(Alias)};
                 Other ->
                     throw(Other)
             end
     end.
 
-extract_cluster_config(Identity) ->
-    case ct:get_config({Identity, cluster}, noconfig) of
+extract_sut_config(Identity) ->
+    case ct:get_config({Identity, sut}, noconfig) of
         noconfig ->
             noconfig;
         Cfg ->
@@ -90,7 +90,7 @@ extract_cluster_config(Identity) ->
     end.
 
 is_configured_explicitly(Identity) ->
-    case ct:require({Identity, cluster}) of
+    case ct:require({Identity, sut}) of
         ok         -> true;
         {error, _} -> false
     end.

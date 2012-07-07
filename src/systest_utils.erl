@@ -28,11 +28,11 @@
 
 -export([is_epmd_contactable/2, temp_dir/0, make_node/1, make_node/2]).
 -export([proplist_format/1, strip_suite_suffix/1, hostname/1]).
--export([node_id_and_hostname/1, find/2, timestamp/0]).
+-export([proc_id_and_hostname/1, find/2, timestamp/0]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
 
-%% @doc make a valid node shortname from Name,
+%% @doc make a valid erlang node shortname from Name,
 %% using the current (local) hostname
 make_node(Name) ->
     {ok, Hostname} = inet:gethostname(),
@@ -43,11 +43,11 @@ make_node(Name, Host) ->
     list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
 
 hostname(NodeName) ->
-    element(2, node_id_and_hostname(NodeName)).
+    element(2, proc_id_and_hostname(NodeName)).
 
-node_id_and_hostname(NodeId) ->
+proc_id_and_hostname(ProcId) ->
     list_to_tuple(lists:map(fun erlang:list_to_atom/1,
-                            string:tokens(atom_to_list(NodeId), "@"))).
+                            string:tokens(atom_to_list(ProcId), "@"))).
 
 %% @doc strip the "_SUITE" suffic from a ct test suite name
 strip_suite_suffix(Suite) ->

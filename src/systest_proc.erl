@@ -22,24 +22,24 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
--module(systest_node).
+-module(systest_proc).
 
 -include("systest.hrl").
 
--type node_info() :: #'systest.node_info'{}.
+-type proc_info() :: #proc{}.
 
--export_type([node_info/0]).
+-export_type([proc_info/0]).
 
 -export([behaviour_info/1]).
--export([make_node/3]).
+-export([make_proc/3]).
 -export([interact/2]).
--export([node_id/2, node_data/1]).
+-export([proc_id/2, proc_data/1]).
 -export([user_data/1, user_data/2]).
 -export([start/1, start/3, stop/1, kill/1]).
 -export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
 -export([sigkill/1, kill_after/2, kill_after/3]).
 -export([shutdown_and_wait/2, status/1]).
--export([joined_cluster/3]).
+-export([joined_sut/3]).
 -export([status_check/1]).
 
 %% OTP gen_server Exports
@@ -52,14 +52,14 @@
 -exprecs_vfname([fname, "__", version]).
 
 -compile({parse_transform, exprecs}).
--export_records(['systest.node_info']).
+-export_records([proc]).
 
--type node_ref() :: pid().
--type activity_state() :: 'running' | 'stopped' | 'killed' | 'nodedown'.
+-type proc_ref() :: pid().
+-type activity_state() :: 'running' | 'stopped' | 'killed' | 'down'.
 
 %% our own internal state is separate from that of any handler...
 -record(state, {
-    node            :: node_info(),
+    proc            :: proc_info(),
     handler         :: module(),
     handler_state   :: term(),
     activity_state  :: activity_state()
@@ -81,91 +81,91 @@ behaviour_info(callbacks) ->
 behaviour_info(_) ->
     undefined.
 
--spec make_node(atom(), atom(), systest_config:config()) -> node_info().
-make_node(Scope, Node, Config) ->
-    make_node([{ct, Config}] ++ Config ++ node_config(Scope, Node)).
+-spec make_proc(atom(), atom(), systest_config:config()) -> proc_info().
+make_proc(Scope, Proc, Config) ->
+    make_proc([{ct, Config}] ++ Config ++ proc_config(Scope, Proc)).
 
 -spec start(atom(), atom(),
             list(tuple(atom(), term()))) -> {'ok', pid()} | {'error', term()}.
-start(Scope, Node, Config) ->
-    start(make_node(Scope, Node, Config)).
+start(Scope, Proc, Config) ->
+    start(make_proc(Scope, Proc, Config)).
 
--spec start(node_info()) -> {'ok', pid()} | {'error', term()}.
-start(NodeInfo=#'systest.node_info'{handler=Handler, host=Host,
-                                    name=Name, config=BaseConf}) ->
+-spec start(proc_info()) -> {'ok', pid()} | {'error', term()}.
+start(ProcInfo=#proc{handler=Handler, host=Host,
+                     name=Name, config=BaseConf}) ->
     ct:log("Starting ~p on ~p~n", [Name, Host]),
 
     %% are there hidden traps here, when (for example) we're running
     %% embedded in an archive/escript or similarly esoteric situations?
-    %% TODO: perhaps catch(Handler:id(NodeInfo)) would be safer!?
+    %% TODO: perhaps catch(Handler:id(ProcInfo)) would be safer!?
     code:ensure_loaded(Handler),
 
     Id = case erlang:function_exported(Handler, id, 1) of
-             true  -> set([{id, Handler:id(NodeInfo)}], NodeInfo);
-             false -> set([{id, node_id(Host, Name)}], NodeInfo)
+             true  -> set([{id, Handler:id(ProcInfo)}], ProcInfo);
+             false -> set([{id, proc_id(Host, Name)}], ProcInfo)
          end,
-    NI = set([{config,[{node, Id}|BaseConf]}], Id),
+    NI = set([{config,[{proc, Id}|BaseConf]}], Id),
 
     gen_server:start_link(?MODULE, [NI], []).
 
--spec stop(node_ref()) -> ok.
-stop(NodeRef) ->
-    gen_server:cast(NodeRef, stop).
+-spec stop(proc_ref()) -> ok.
+stop(ProcRef) ->
+    gen_server:cast(ProcRef, stop).
 
--spec kill(node_ref()) -> ok.
-kill(NodeRef) ->
-    gen_server:cast(NodeRef, kill).
+-spec kill(proc_ref()) -> ok.
+kill(ProcRef) ->
+    gen_server:cast(ProcRef, kill).
 
--spec('kill -9'/1 :: (node_ref()) -> 'ok').
-'kill -9'(NodeRef) ->
-    sigkill(NodeRef).
+-spec('kill -9'/1 :: (proc_ref()) -> 'ok').
+'kill -9'(ProcRef) ->
+    sigkill(ProcRef).
 
--spec sigkill(node_ref()) -> 'ok'.
-sigkill(NodeRef) ->
+-spec sigkill(proc_ref()) -> 'ok'.
+sigkill(ProcRef) ->
     ct:log("[WARNING] using SIGKILL is *NOT*"
-           " guaranteed to work with all node types!~n"),
-    gen_server:cast(NodeRef, sigkill).
+           " guaranteed to work with all proc types!~n"),
+    gen_server:cast(ProcRef, sigkill).
 
--spec kill_after(integer(), node_ref()) -> 'ok'.
-kill_after(TimeoutMs, NodeRef) ->
-    kill_after(TimeoutMs, NodeRef, kill).
+-spec kill_after(integer(), proc_ref()) -> 'ok'.
+kill_after(TimeoutMs, ProcRef) ->
+    kill_after(TimeoutMs, ProcRef, kill).
 
--spec kill_after(integer(), node_ref(), atom()) -> 'ok'.
-kill_after(TimeoutMs, NodeRef, Killer) ->
-    {ok, _TRef} = timer:apply_after(TimeoutMs, ?MODULE, Killer, [NodeRef]),
+-spec kill_after(integer(), proc_ref(), atom()) -> 'ok'.
+kill_after(TimeoutMs, ProcRef, Killer) ->
+    {ok, _TRef} = timer:apply_after(TimeoutMs, ?MODULE, Killer, [ProcRef]),
     ok.
 
--spec stop_and_wait(node_ref()) -> 'ok'.
-stop_and_wait(NodeRef) ->
-    shutdown_and_wait(NodeRef, fun stop/1).
+-spec stop_and_wait(proc_ref()) -> 'ok'.
+stop_and_wait(ProcRef) ->
+    shutdown_and_wait(ProcRef, fun stop/1).
 
--spec kill_and_wait(node_ref()) -> 'ok'.
-kill_and_wait(NodeRef) ->
-    shutdown_and_wait(NodeRef, fun kill/1).
+-spec kill_and_wait(proc_ref()) -> 'ok'.
+kill_and_wait(ProcRef) ->
+    shutdown_and_wait(ProcRef, fun kill/1).
 
--spec status(node_ref()) -> 'nodeup' | {'nodedown', term()}.
-status(NodeRef) ->
-    safe_call(NodeRef, status, {nodedown, noproc}).
+-spec status(proc_ref()) -> 'up' | {'down', term()}.
+status(ProcRef) ->
+    safe_call(ProcRef, status, {down, noproc}).
 
--spec interact(node_ref(), term()) -> term().
-interact(NodeRef, InputData) ->
-    gen_server:call(NodeRef, {interaction, InputData}).
+-spec interact(proc_ref(), term()) -> term().
+interact(ProcRef, InputData) ->
+    gen_server:call(ProcRef, {interaction, InputData}).
 
--spec node_data(node_ref()) -> [{atom(), term()}].
-node_data(NodeRef) ->
-    safe_call(NodeRef, node_info_list, [{owner, NodeRef}]).
+-spec proc_data(proc_ref()) -> [{atom(), term()}].
+proc_data(ProcRef) ->
+    safe_call(ProcRef, proc_info_list, [{owner, ProcRef}]).
 
--spec user_data(node_ref()) -> [{atom(), term()}].
-user_data(NodeRef) ->
-    gen_server:call(NodeRef, user_data).
+-spec user_data(proc_ref()) -> [{atom(), term()}].
+user_data(ProcRef) ->
+    gen_server:call(ProcRef, user_data).
 
--spec user_data(node_ref(), term()) -> 'ok'.
-user_data(NodeRef, Data) ->
-    gen_server:call(NodeRef, {user_data, Data}).
+-spec user_data(proc_ref(), term()) -> 'ok'.
+user_data(ProcRef, Data) ->
+    gen_server:call(ProcRef, {user_data, Data}).
 
--spec joined_cluster(node_ref(), pid(), [{atom(), pid()}]) -> 'ok'.
-joined_cluster(NodeRef, ClusterRef, SiblingNodes) ->
-    ok = gen_server:call(NodeRef, {joined, ClusterRef, SiblingNodes},
+-spec joined_sut(proc_ref(), pid(), [{atom(), pid()}]) -> 'ok'.
+joined_sut(ProcRef, SutRef, SiblingProcs) ->
+    ok = gen_server:call(ProcRef, {joined, SutRef, SiblingProcs},
                          infinity).
 
 %% NB: this *MUST* run on the client
@@ -189,19 +189,19 @@ shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
 %%
 status_check(Node) when is_atom(Node) ->
     case net_adm:ping(Node) of
-        pong  -> nodeup;
-        Other -> {nodedown, Other}
+        pong  -> up;
+        Other -> {down, Other}
     end.
 
 %%
 %% OTP gen_server API
 %%
 
-init([NodeInfo=#'systest.node_info'{handler=Callback, cover=Cover}]) ->
+init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
     process_flag(trap_exit, true),
 
-    case catch( apply(Callback, init, [NodeInfo]) ) of
-        {ok, NI2, HState} when is_record(NI2, 'systest.node_info') ->
+    case catch( apply(Callback, init, [ProcInfo]) ) of
+        {ok, NI2, HState} when is_record(NI2, proc) ->
 
             %% NB: look at branch 'cover' for details
             %% of how this will eventually look
@@ -213,20 +213,20 @@ init([NodeInfo=#'systest.node_info'{handler=Callback, cover=Cover}]) ->
             end,
 
             %% TODO: validate that these succeed and shutdown when they don't
-            case NI2#'systest.node_info'.apps of
+            case NI2#proc.apps of
                 []   -> ok;
                 Apps -> [setup(NI2, App, HState) || App <- Apps]
             end,
 
-            NI3 = NI2#'systest.node_info'{owner=self()},
-            State = #state{node=NI3, handler=Callback, handler_state=HState},
+            NI3 = NI2#proc{owner=self()},
+            State = #state{proc=NI3, handler=Callback, handler_state=HState},
 
             %% TODO: validate that these succeed and shutdown when they don't
-            case NI2#'systest.node_info'.on_start of
+            case NI2#proc.on_start of
                 []   -> {ok, State};
                 Xtra -> {NI4, _} = lists:foldl(fun apply_startup/2,
                                                {NI3, HState}, Xtra),
-                        {ok, State#state{node=NI4}}
+                        {ok, State#state{proc=NI4}}
             end;
         {error, Err} ->
             {stop, Err};
@@ -245,10 +245,10 @@ handle_cast(Msg, State) ->
 handle_info(Info, State) ->
     handle_msg(Info, State).
 
-terminate(Reason, #state{node=Node,
+terminate(Reason, #state{proc=Proc,
                          handler=Mod,
                          handler_state=ModState}) ->
-    ok = Mod:terminate(Reason, Node, ModState),
+    ok = Mod:terminate(Reason, Proc, ModState),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -258,69 +258,69 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private API
 %%
 
-safe_call(NodeRef, Msg, Default) ->
+safe_call(ProcRef, Msg, Default) ->
     try
-        gen_server:call(NodeRef, Msg)
+        gen_server:call(ProcRef, Msg)
     catch
-        _:{noproc,{gen_server,call,[NodeRef, Msg]}} ->
+        _:{noproc,{gen_server,call,[ProcRef, Msg]}} ->
             Default
     end.
 
-node_id(Host, Name) ->
+proc_id(Host, Name) ->
     list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
 
-apply_startup(Item, NodeState) ->
-    apply_hook(on_start, Item, NodeState).
+apply_startup(Item, ProcState) ->
+    apply_hook(on_start, Item, ProcState).
 
-apply_hook(Hook, Item, {Node, HState}) ->
-    case interact(Node, Item, HState) of
-        {upgrade, Node2} ->
-            {Node2, HState};
+apply_hook(Hook, Item, {Proc, HState}) ->
+    case interact(Proc, Item, HState) of
+        {upgrade, Proc2} ->
+            {Proc2, HState};
         {store, State} ->
             StateL = case is_list(State) of
                          true  -> State;
                          false -> [State]
                      end,
-            Existing = get(user, Node),
-            {set([{user, StateL ++ Existing}], Node), HState};
+            Existing = get(user, Proc),
+            {set([{user, StateL ++ Existing}], Proc), HState};
         {write, Loc, Data} ->
             ct:log("[~p] ~p~n"
                    "argv: ~p~n"
                    "state-update: ~p => ~p~n",
-                   [Node#'systest.node_info'.id, Hook, Item, Loc, Data]),
-            {systest_node:set([{Loc, Data}], Node), HState};
+                   [Proc#proc.id, Hook, Item, Loc, Data]),
+            {systest_proc:set([{Loc, Data}], Proc), HState};
         Other ->
             ct:log("[~p] ~p~n"
                    "argv: ~p~n"
                    "response: ~p~n",
-                    [Node#'systest.node_info'.id, Hook, Item, Other]),
-            {Node, HState}
+                    [Proc#proc.id, Hook, Item, Other]),
+            {Proc, HState}
     end.
 
-on_join(Node, Cluster, Nodes, Hooks) ->
-    ct:log("Node ~p has joined a cluster with ~p~n", [get(id, Node), Nodes]),
+on_join(Proc, Sut, Procs, Hooks) ->
+    ct:log("Proc ~p has joined a SUT with ~p~n", [get(id, Proc), Procs]),
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
-    {Node2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
+    {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
                                  apply_hook(on_join,
                                             {Where, M, F,
-                                             [Cluster, Nodes]},
+                                             [Sut, Procs]},
                                             Acc);
                                 ({Where, M, F, A}, Acc) ->
                                  apply_hook(on_join,
                                             {Where, M, F,
-                                                [Cluster, Nodes|A]},
+                                                [Sut, Procs|A]},
                                             Acc);
                                 (What, Acc) ->
                                     throw({What, Acc})
-                             end, {Node, undefined}, Hooks),
-    Node2.
+                             end, {Proc, undefined}, Hooks),
+    Proc2.
 
 %% TODO: migrate this to systest_hooks....
 
-interact(Node=#'systest.node_info'{id=NodeId},
+interact(Proc=#proc{id=NodeId},
          {eval, Where, Mod, Func, Args}, _HState) ->
-    Argv = lists:reverse(lists:foldl(fun proc_interact/2, {Node, []}, Args)),
+    Argv = lists:reverse(lists:foldl(fun proc_interact/2, {Proc, []}, Args)),
     case Where of
         local ->
             apply(Mod, Func, Argv);
@@ -329,57 +329,58 @@ interact(Node=#'systest.node_info'{id=NodeId},
         Id when is_atom(Id) ->
             rpc:call(Id, Mod, Func, Argv)
     end;
-interact(Node, {local, Mod, Func, Args}, _) ->
-    apply(Mod, Func, [Node|Args]);
-interact(Node=#'systest.node_info'{id=Id}, {remote, Mod, Func, Args}, _) ->
-    rpc:call(Id, Mod, Func, [Node|Args]);
-interact(#'systest.node_info'{id=Node}, {Mod, Func, Args}, _) ->
+interact(Proc, {local, Mod, Func, Args}, _) ->
+    apply(Mod, Func, [Proc|Args]);
+interact(Proc=#proc{id=Id}, {remote, Mod, Func, Args}, _) ->
+    rpc:call(Id, Mod, Func, [Proc|Args]);
+interact(#proc{id=Node}, {Mod, Func, Args}, _) ->
     rpc:call(Node, Mod, Func, Args);
-interact(NI=#'systest.node_info'{handler=Handler}, Inputs, HState) ->
+interact(NI=#proc{handler=Handler}, Inputs, HState) ->
     Handler:handle_interaction(Inputs, NI, HState).
 
-proc_interact({plain_call, M, F, A}, {_Node, Acc}) ->
+proc_interact({plain_call, M, F, A}, {_Proc, Acc}) ->
     [apply(M, F, A)|Acc];
-proc_interact({call, M, F, A}, {Node, Acc}) ->
-    [apply(M, F, [Node|A])|Acc];
-proc_interact({node, Field}, {Node, Acc}) ->
-    [get(Field, Node)|Acc];
+proc_interact({call, M, F, A}, {Proc, Acc}) ->
+    [apply(M, F, [Proc|A])|Acc];
+proc_interact({proc, Field}, {Proc, Acc}) ->
+    [get(Field, Proc)|Acc];
 proc_interact(Term, {_, Acc}) ->
     [Term|Acc].
 
 handle_msg(Msg, State) ->
     handle_msg(Msg, State, noreply).
 
-handle_msg(user_data, State=#state{node=Node}, _ReplyTo) ->
-    {reply, get(user, Node), State};
-handle_msg({user_data, Data}, State=#state{node=Node}, _ReplyTo) ->
-    {reply, 'ok', State#state{node=set([{user, Data}], Node)}};
-handle_msg(node_info_list, State=#state{node=Node}, _ReplyTo) ->
-    Attrs = systest_node:info('systest.node_info', fields) -- [config],
-    Info = [{K, get(K, Node)} || K <- Attrs],
+handle_msg(user_data, State=#state{proc=Proc}, _ReplyTo) ->
+    {reply, get(user, Proc), State};
+handle_msg({user_data, Data}, State=#state{proc=Proc}, _ReplyTo) ->
+    {reply, 'ok', State#state{proc=set([{user, Data}], Proc)}};
+handle_msg(proc_info_list, State=#state{proc=Proc}, _ReplyTo) ->
+    Attrs = systest_proc:info('proc', fields) -- [config],
+    Info = [{K, get(K, Proc)} || K <- Attrs],
     {reply, Info, State};
-handle_msg({joined, Cluster, Nodes}, State=#state{node=Node}, _ReplyTo) ->
-    ct:log("node on_join info: ~p~n", [Node#'systest.node_info'.on_join]),
-    case Node#'systest.node_info'.on_join of
+handle_msg({joined, Sut, Procs}, State=#state{proc=Proc}, _ReplyTo) ->
+    ct:log("proc on_join info: ~p~n", [Proc#proc.on_join]),
+    case Proc#proc.on_join of
         []    -> {reply, ok, State};
-        Hooks -> Node2 = on_join(Node, Cluster, Nodes, Hooks),
-                 {reply, ok, State#state{node=Node2}}
+        Hooks -> Proc2 = on_join(Proc, Sut, Procs, Hooks),
+                 {reply, ok, State#state{proc=Proc2}}
     end;
-%% nodedown notifications
+%% down notifications
 handle_msg({nodedown, NodeId},
            SvrState=#state{activity_state=State,
-                           node=#'systest.node_info'{id=NodeId}},
-           _ReplyTo) ->
+                           proc=#proc{id=ProcID}},
+           _ReplyTo) when NodeId == ProcID ->
     ShutdownType = case State of
                        killed  -> normal;
                        stopped -> normal;
-                       _       -> nodedown
+                       _       -> down
                    end,
     {stop, ShutdownType, SvrState};
 handle_msg({nodedown, NodeId},
            State=#state{activity_state=running,
-                        node=#'systest.node_info'{id=NodeId}}, _ReplyTo) ->
-    {stop, nodedown, State#state{activity_state=nodedown}};
+                        proc=#proc{id=ProcID}},
+                        _ReplyTo) when NodeId == ProcID ->
+    {stop, down, State#state{activity_state=down}};
 %% instructions from clients
 handle_msg(stop, State=#state{activity_state=stopped}, _) ->
     {noreply, State};
@@ -390,98 +391,98 @@ handle_msg(stop, State=#state{activity_state=killed}, _) ->
 %% TODO: consider whether this should be disallowed, or ignored
 % handle_msg(kill, State=#state{activity_state=stopped}, _) ->
 %    {noreply, State};
-handle_msg(stop, State=#state{node=Node, handler=Mod,
+handle_msg(stop, State=#state{proc=Proc, handler=Mod,
                               handler_state=ModState}, ReplyTo) ->
-    case Node#'systest.node_info'.on_stop of
+    case Proc#proc.on_stop of
         [] -> ok;
         %% TODO: consider whether this is structured correctly - it *feels*
         %% a little hackish - and perhaps having a supervising process deal
         %% with these 'interactions' would be better
         Shutdown  -> [ct:log("~p~n",
-                        [interact(Node, In, ModState)]) || In <- Shutdown]
+                        [interact(Proc, In, ModState)]) || In <- Shutdown]
     end,
-    handle_callback(stopping_callback(Mod, handle_stop, Node,
-                                      [Node, ModState]),
+    handle_callback(stopping_callback(Mod, handle_stop, Proc,
+                                      [Proc, ModState]),
                     State#state{activity_state=stopped}, ReplyTo);
-handle_msg(kill, State=#state{node=Node, handler=Mod,
+handle_msg(kill, State=#state{proc=Proc, handler=Mod,
                               handler_state=ModState}, ReplyTo) ->
-    handle_callback(stopping_callback(Mod, handle_kill, Node,
-                                      [Node, ModState]),
+    handle_callback(stopping_callback(Mod, handle_kill, Proc,
+                                      [Proc, ModState]),
                     State#state{activity_state=killed}, ReplyTo);
-handle_msg(sigkill, State=#state{node=Node, handler=Mod,
+handle_msg(sigkill, State=#state{proc=Proc, handler=Mod,
                                  handler_state=ModState}, ReplyTo) ->
-    handle_callback(stopping_callback(Mod, handle_msg, Node,
-                                      [sigkill, Node, ModState]),
+    handle_callback(stopping_callback(Mod, handle_msg, Proc,
+                                      [sigkill, Proc, ModState]),
                     State#state{activity_state=killed}, ReplyTo);
 handle_msg(status, State=#state{activity_state=stopped}, _ReplyTo) ->
     {reply, {stopping, stopped}, State};
 handle_msg(status, State=#state{activity_state=killed}, _ReplyTo) ->
     {reply, {stopped, killed}, State};
-handle_msg(status, State=#state{node=Node, handler=Mod,
+handle_msg(status, State=#state{proc=Proc, handler=Mod,
                                 handler_state=ModState}, ReplyTo) ->
-    handle_callback(Mod:handle_status(Node, ModState), State, ReplyTo);
+    handle_callback(Mod:handle_status(Proc, ModState), State, ReplyTo);
 handle_msg({interaction, _},
            State=#state{activity_state=ActivityState}, _)
                 when ActivityState =:= killed orelse
                      ActivityState =:= stopped ->
     {reply, {error, stopping}, State};
 handle_msg({interaction, InputData},
-            State=#state{node=Node, handler=Mod,
+            State=#state{proc=Proc, handler=Mod,
                          handler_state=ModState}, ReplyTo) ->
     ct:log("handle_interaction: ~p~n", [InputData]),
     handle_callback(Mod:handle_interaction(InputData,
-                                           Node, ModState), State, ReplyTo);
+                                           Proc, ModState), State, ReplyTo);
 %% our catch-all, which defers to Mod:handler_state/3 to see if the
 %% callback module knows what to do with Msg or not - this also allows the
 %% handler an opportunity to decide how to deal with unexpected messages
-handle_msg(Msg, State=#state{node=Node, handler=Mod,
+handle_msg(Msg, State=#state{proc=Proc, handler=Mod,
                              handler_state=ModState}, ReplyTo) ->
-    handle_callback(Mod:handle_msg(Msg, Node, ModState), State, ReplyTo).
+    handle_callback(Mod:handle_msg(Msg, Proc, ModState), State, ReplyTo).
 
-stopping_callback(Mod, Func, Node, Args) ->
-    case get(cover, Node) of
+stopping_callback(Mod, Func, Proc, Args) ->
+    case get(cover, Proc) of
         true ->
-            cover:stop(get(id, Node));
+            cover:stop(get(id, Proc));
         _ ->
             ok
     end,
     case apply(Mod, Func, Args) of
-        {stop, NewNode, NewModState} ->
-            {stopped, NewNode, NewModState};
+        {stop, NewProc, NewModState} ->
+            {stopped, NewProc, NewModState};
         Other ->
             Other
     end.
 
 handle_callback(CallbackResult,
-                State=#state{node=Node,
+                State=#state{proc=Proc,
                              handler=Mod}, ReplyTo) ->
     try
         case CallbackResult of
             {rpc_stop, Halt, NewState} ->
                 apply(rpc, call,
-                      [Node#'systest.node_info'.id|tuple_to_list(Halt)]),
+                      [Proc#proc.id|tuple_to_list(Halt)]),
                 {noreply, State#state{handler_state=NewState}};
-            {stopped, NewNode, NewState} ->
+            {stopped, NewProc, NewState} ->
                 %% NB: this is an immediate stop in response to the 'stop'
                 %% instruction, so *nothing* is wrong at this point
-                {stop, normal, #state{node=NewNode,
+                {stop, normal, #state{proc=NewProc,
                                       handler=Mod,
                                       handler_state=NewState,
                                       activity_state=stopped}};
             {stop, Reason, NewState} ->
                 {stop, Reason, State#state{handler_state=NewState}};
-            {stop, Reason, NewNode, NewState} ->
-                {stop, Reason, State#state{node=NewNode,
+            {stop, Reason, NewProc, NewState} ->
+                {stop, Reason, State#state{proc=NewProc,
                                            handler_state=NewState}};
-            {reply, Reply, NewNode, NewState}
-                    when is_record(NewNode, 'systest.node_info') ->
-                reply(Reply, ReplyTo, State#state{node=NewNode,
+            {reply, Reply, NewProc, NewState}
+                    when is_record(NewProc, proc) ->
+                reply(Reply, ReplyTo, State#state{proc=NewProc,
                                                   handler_state=NewState});
             {reply, Reply, NewState} ->
                 reply(Reply, ReplyTo, State#state{handler_state=NewState});
-            {NewNode, NewState}
-                    when is_record(NewNode, 'systest.node_info') ->
-                {noreply, State#state{node=NewNode,
+            {NewProc, NewState}
+                    when is_record(NewProc, proc) ->
+                {noreply, State#state{proc=NewProc,
                                       handler_state=NewState}};
             NewState ->
                 {noreply, State#state{handler_state=NewState}}
@@ -499,10 +500,10 @@ reply(Reply, ReplyTo, State) ->
     gen_server:reply(ReplyTo, Reply),
     {noreply, State}.
 
-%% node making and configuration handling
+%% proc making and configuration handling
 
-make_node(Config) ->
-    %% NB: new_node_info is an exprecs generated function
+make_proc(Config) ->
+    %% NB: new_proc_info is an exprecs generated function
     record_fromlist([{scope,      ?REQUIRE(scope, Config)},
                      {host,       ?REQUIRE(host, Config)},
                      {name,       ?REQUIRE(name, Config)},
@@ -525,14 +526,14 @@ lookup(Key, Config, Default) ->
         Value     -> Value
     end.
 
-node_config(Cluster, Node) ->
-    Nodes = systest_config:get_config({Cluster, nodes}),
-    UserData = systest_config:get_config({Cluster, user_data}),
-    NodeConf = case ?CONFIG(Node, Nodes, undefined) of
+proc_config(Sut, Proc) ->
+    Procs = systest_config:get_config({Sut, parts}),
+    UserData = systest_config:get_config({Sut, user_data}),
+    ProcConf = case ?CONFIG(Proc, Procs, undefined) of
                    undefined               -> [];
                    Refs when is_list(Refs) -> load_config(Refs)
                end,
-    [{user, ?CONFIG(Node, UserData, [])}|NodeConf].
+    [{user, ?CONFIG(Proc, UserData, [])}|ProcConf].
 
 load_config(Refs) ->
     lists:foldl(fun merge_refs/2, [], Refs).

@@ -1,11 +1,11 @@
 
 {config, "{{ base_dir }}/resources/systest_cli.config"}.
-{config, "{{ base_dir }}/resources/systest_nodes.config"}.
+{config, "{{ base_dir }}/resources/systest_procs.config"}.
 {config, "{{ base_dir }}/resources/systest_supervision.config"}.
 
 {alias, test, "{{ base_dir }}/ebin"}.
 {suites, test, [systest_cli_SUITE,
-                systest_node_SUITE,
+                systest_proc_SUITE,
                 systest_supervision_SUITE]}.
 
 {event_handler, systest_event}.

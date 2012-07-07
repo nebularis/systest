@@ -39,8 +39,8 @@
 
 pre_init_per_testcase(TC, Config, State) ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
-        {{fail,{cluster_start,{error,_}}},_}=Err ->
-            systest_event:console("ignoring expected cluster start failure~n",[]),
+        {{fail,{sut_start,{error,_}}},_}=Err ->
+            systest_event:console("ignoring expected sut start failure~n",[]),
             systest_watchdog:clear_exceptions(),
             {Config, State};
         Other ->

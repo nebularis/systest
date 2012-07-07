@@ -24,7 +24,7 @@
 %% ----------------------------------------------------------------------------
 -module(systest_slave).
 
--behaviour(systest_node).
+-behaviour(systest_proc).
 
 -export([init/1, handle_stop/2, handle_kill/2]).
 -export([handle_status/2, handle_interaction/3,
@@ -35,75 +35,74 @@
 -record(state, { runstate='running' :: atom() }).
 
 %%
-%% systest_node API
+%% systest_proc API
 %%
 
-init(NI=#'systest.node_info'{host=Host, name=Name, flags=VmArgs}) ->
+init(NI=#proc{host=Host, name=Name, flags=VmArgs}) ->
     on_start(NI, slave:start_link(Host, Name, ?CONFIG(start, VmArgs, ""))).
 
-%% @doc handles interactions with the node.
-%% handle_interaction(Data, Node, State) -> {reply, Reply, NewNode, NewState} |
+%% @doc handles interactions with the proc.
+%% handle_interaction(Data, Proc, State) -> {reply, Reply, NewProc, NewState} |
 %%                                          {reply, Reply, NewState} |
-%%                                          {stop, Reason, NewNode, NewState} |
+%%                                          {stop, Reason, NewProc, NewState} |
 %%                                          {stop, Reason, NewState} |
-%%                                          {NewNode, NewState} |
+%%                                          {NewProc, NewState} |
 %%                                          NewState.
-handle_interaction({M, F, Argv}, #'systest.node_info'{id=Id}, State) ->
+handle_interaction({M, F, Argv}, #proc{id=Id}, State) ->
     {reply, rpc:call(Id, M, F, Argv), State};
-handle_interaction(_Data, _Node, State) ->
+handle_interaction(_Data, _Proc, State) ->
     {reply, ignored, State}.
 
 %% @doc handles a status request from the server.
-%% handle_status(Node, State) -> {reply, Reply, NewNode, NewState} |
+%% handle_status(Proc, State) -> {reply, Reply, NewProc, NewState} |
 %%                               {reply, Reply, NewState} |
-%%                               {stop, NewNode, NewState}.
-handle_status(Node, State) ->
-    case net_adm:ping(systest_node:get(id, Node)) of
+%%                               {stop, NewProc, NewState}.
+handle_status(Proc, State) ->
+    case net_adm:ping(systest_proc:get(id, Proc)) of
         pong ->
-            {reply, nodeup, State};
+            {reply, up, State};
         pang ->
-            {reply, nodedown, State#state{runstate=rpc_down}}
+            {reply, down, State#state{runstate=rpc_down}}
     end.
 
 %% @doc handles a kill instruction from the server.
-%% handle_kill(Node, State) -> {NewNode, NewState} |
-%%                             {stop, NewNode, NewState} |
+%% handle_kill(Proc, State) -> {NewProc, NewState} |
+%%                             {stop, NewProc, NewState} |
 %%                             NewState.
-handle_kill(#'systest.node_info'{os_pid=OsPid}, State) ->
+handle_kill(#proc{os_pid=OsPid}, State) ->
     systest:sigkill(OsPid),
     State#state{runstate=killed}.
 
 %% @doc handles a stop instruction from the server.
-%% handle_stop(Node, State) -> {NewNode, NewNode} |
-%%                             {stop, NewNode, NewState} |
+%% handle_stop(Proc, State) -> {NewProc, NewState} |
+%%                             {stop, NewProc, NewState} |
 %%                             {rpc_stop, {M,F,A}, NewState} |
 %%                             NewState.
-handle_stop(Node, State) ->
-    slave:stop(systest_node:get(id, Node)),
-    {stop, Node, State#state{runstate=stopped}}.
+handle_stop(Proc, State) ->
+    slave:stop(systest_proc:get(id, Proc)),
+    {stop, Proc, State#state{runstate=stopped}}.
 
 %% @doc handles generic messages from the server.
-%% handle_msg(Msg, Node, State) -> {reply, Reply, NewNode, NewState} |
+%% handle_msg(Msg, Proc, State) -> {reply, Reply, NewProc, NewState} |
 %%                                 {reply, Reply, NewState} |
-%%                                 {stop, Reason, NewNode, NewState} |
+%%                                 {stop, Reason, NewProc, NewState} |
 %%                                 {stop, Reason, NewState} |
-%%                                 {NewNode, NewState} |
+%%                                 {NewProc, NewState} |
 %%                                 NewState.
-handle_msg({nodedown, NodeId}, #'systest.node_info'{id=NodeId},
-           State=#state{runstate=RS}) ->
+handle_msg({nodedown, NodeId}, #proc{id=NodeId}, State=#state{runstate=RS}) ->
     ShutdownType = case RS of
                        killed  -> normal;
                        stopped -> normal;
-                       _       -> nodedown
+                       _       -> down
                    end,
     {stop, ShutdownType, State};
-handle_msg(Info, _Node, State=#state{runstate=RS}) ->
+handle_msg(Info, _Proc, State=#state{runstate=RS}) ->
     ct:log("[~p] Ignoring Info Message:  ~p~n"
            "State:                       ~p~n",
            [?MODULE, Info, RS]),
     State.
 
-terminate(Reason, _Node, _State) ->
+terminate(Reason, _Proc, _State) ->
     ct:log("Terminating due to ~p~n", [Reason]).
 
 %%
@@ -113,7 +112,7 @@ terminate(Reason, _Node, _State) ->
 on_start(NI, {ok, Node}) ->
     OsPid = rpc:call(Node, os, getpid, []),
     erlang:monitor_node(Node, true),
-    NI2 = NI#'systest.node_info'{os_pid=OsPid, id=Node},
+    NI2 = NI#proc{os_pid=OsPid, id=Node},
     {ok, NI2, #state{runstate=running}};
 on_start(_, Error) ->
     Error.

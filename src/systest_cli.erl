@@ -29,7 +29,7 @@
 %% ----------------------------------------------------------------------------
 -module(systest_cli).
 
--behaviour(systest_node).
+-behaviour(systest_proc).
 
 %% TODO: migrate to ?SYSTEST_LOG
 
@@ -63,18 +63,18 @@
 -include("systest.hrl").
 
 %%
-%% systest_node API
+%% systest_proc API
 %%
 
-init(Node=#'systest.node_info'{config=Config}) ->
+init(Proc=#proc{config=Config}) ->
 
     %% TODO: don't carry all the config around all the time -
-    %% e.g., append the {node, NI} tuple only when needed
+    %% e.g., append the {proc, NI} tuple only when needed
 
-    Scope = systest_node:get(scope, Node),
-    Id = systest_node:get(id, Node),
-    Config = systest_node:get(config, Node),
-    Flags = systest_node:get(flags, Node),
+    Scope = systest_proc:get(scope, Proc),
+    Id = systest_proc:get(id, Proc),
+    Config = systest_proc:get(config, Proc),
+    Flags = systest_proc:get(flags, Proc),
 
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
@@ -95,15 +95,15 @@ init(Node=#'systest.node_info'{config=Config}) ->
 
             on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config,
                 fun(Port2, Pid, LogFd) ->
-                    %% NB: as not all kinds of nodes can be contacted
+                    %% NB: as not all kinds of procs can be contacted
                     %% via rpc, we have to do this manually here....
                     if RpcEnabled =:= true -> erlang:monitor_node(Id, true);
                                       true -> ok
                     end,
 
-                    N2 = Node#'systest.node_info'{os_pid=Pid,
+                    N2 = Proc#proc{os_pid=Pid,
                                     user=[{env, Env}|
-                                          Node#'systest.node_info'.user]},
+                                          Proc#proc.user]},
                     Sh = #sh{pid=Pid,
                              port=Port2,
                              detached=Detached,
@@ -120,100 +120,99 @@ init(Node=#'systest.node_info'{config=Config}) ->
             StopError
     end.
 
-%% @doc handles interactions with the node.
-%% handle_interaction(Data, Node, State) -> {reply, Reply, NewNode, NewState} |
+%% @doc handles interactions with the proc.
+%% handle_interaction(Data, Proc, State) -> {reply, Reply, NewProc, NewState} |
 %%                                          {reply, Reply, NewState} |
-%%                                          {stop, Reason, NewNode, NewState} |
+%%                                          {stop, Reason, NewProc, NewState} |
 %%                                          {stop, Reason, NewState} |
-%%                                          {NewNode, NewState} |
+%%                                          {NewProc, NewState} |
 %%                                          NewState.
 %%
 handle_interaction({M, F, Argv},
-                   #'systest.node_info'{id=Id}, Sh=#sh{rpc_enabled=true}) ->
+                   #proc{id=Id}, Sh=#sh{rpc_enabled=true}) ->
     {reply, rpc:call(Id, M, F, Argv), Sh};
-handle_interaction(_Data, _Node, Sh=#sh{port=detached}) ->
+handle_interaction(_Data, _Proc, Sh=#sh{port=detached}) ->
     {stop, {error, detached}, Sh};
-handle_interaction(Data, _Node, Sh=#sh{port=Port}) ->
+handle_interaction(Data, _Proc, Sh=#sh{port=Port}) ->
     port_command(Port, Data, [nosuspend]),
     {reply, ok, Sh}.
 
 %% @doc handles a status request from the server.
-%% handle_status(Node, State) -> {reply, Reply, NewNode, NewState} |
+%% handle_status(Proc, State) -> {reply, Reply, NewProc, NewState} |
 %%                               {reply, Reply, NewState} |
-%%                               {stop, NewNode, NewState}.
-handle_status(Node, Sh=#sh{rpc_enabled=true}) ->
-    {reply, systest_node:status_check(Node#'systest.node_info'.id), Sh};
-handle_status(_Node, Sh=#sh{rpc_enabled=false, state=ProgramState}) ->
+%%                               {stop, NewProc, NewState}.
+handle_status(Proc, Sh=#sh{rpc_enabled=true}) ->
+    {reply, systest_proc:status_check(Proc#proc.id), Sh};
+handle_status(_Proc, Sh=#sh{rpc_enabled=false, state=ProgramState}) ->
     %% TODO: this is wrong - we should spawn and use gen_server:reply
     %%       especially in light of the potential delay in running ./stop
     case ProgramState of
-        running -> {reply, nodeup, Sh};
-        stopped -> {reply, {nodedown, stopped}, Sh};
+        running -> {reply, up, Sh};
+        stopped -> {reply, {down, stopped}, Sh};
         Other   -> {reply, Other, Sh}
     end.
 
 %% @doc handles a kill instruction from the server.
-%% handle_kill(Node, State) -> {NewNode, NewState} |
-%%                             {stop, NewNode, NewState} |
+%% handle_kill(Proc, State) -> {NewProc, NewState} |
+%%                             {stop, NewProc, NewState} |
 %%                             NewState.
-handle_kill(#'systest.node_info'{os_pid=OsPid},
+handle_kill(#proc{os_pid=OsPid},
             Sh=#sh{detached=true, state=running}) ->
     systest:sigkill(OsPid),
     Sh#sh{state=killed};
-handle_kill(_Node, Sh=#sh{port=Port, detached=false, state=running}) ->
+handle_kill(_Proc, Sh=#sh{port=Port, detached=false, state=running}) ->
     ct:log("kill instruction received - terminating port ~p~n", [Port]),
     Port ! {self(), close},
     Sh#sh{state=killed}.
 
 %% @doc handles a stop instruction from the server.
-%% handle_stop(Node, State) -> {NewNode, NewNode} |
-%%                             {stop, NewNode, NewState} |
+%% handle_stop(Proc, State) -> {NewProc, NewProc} |
+%%                             {stop, NewProc, NewState} |
 %%                             {rpc_stop, {M,F,A}, NewState} |
 %%                             NewState.
-handle_stop(Node, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
+handle_stop(Proc, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
     ct:log("running shutdown hooks for ~p",
-           [systest_node:get(id, Node)]),
+           [systest_proc:get(id, Proc)]),
     run_shutdown_hook(SC, Sh);
-%% TODO: could this be core node behaviour?
-handle_stop(_Node, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->
-    %% TODO: this rpc/call logic should move into systest_node
+%% TODO: could this be core proc behaviour?
+handle_stop(_Proc, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->
+    %% TODO: this rpc/call logic should move into systest_proc
     Halt = case Shutdown of
                default -> {init, stop, []};
                Custom  -> Custom
            end,
-    % apply(rpc, call, [Node#'systest.node_info'.id|tuple_to_list(Halt)]),
+    % apply(rpc, call, [Proc#proc.id|tuple_to_list(Halt)]),
     {rpc_stop, Halt, Sh#sh{state=stopped}}.
 %% TODO: when rpc_enabled=false and shutdown is undefined???
 
 %% @doc handles generic messages from the server.
-%% handle_msg(Msg, Node, State) -> {reply, Reply, NewNode, NewState} |
+%% handle_msg(Msg, Proc, State) -> {reply, Reply, NewProc, NewState} |
 %%                                 {reply, Reply, NewState} |
-%%                                 {stop, Reason, NewNode, NewState} |
+%%                                 {stop, Reason, NewProc, NewState} |
 %%                                 {stop, Reason, NewState} |
-%%                                 {NewNode, NewState} |
+%%                                 {NewProc, NewState} |
 %%                                 NewState.
-handle_msg(sigkill, #'systest.node_info'{os_pid=OsPid},
-           Sh=#sh{state=running}) ->
+handle_msg(sigkill, #proc{os_pid=OsPid}, Sh=#sh{state=running}) ->
     systest:sigkill(OsPid),
     Sh#sh{state=killed};
-handle_msg({Port, {data, {_, Line}}}, _Node,
+handle_msg({Port, {data, {_, Line}}}, _Proc,
             Sh=#sh{port=Port, log=LogFd}) ->
     io:format(LogFd, "~s~n", [Line]),
     Sh;
-handle_msg({Port, {exit_status, 0}}, _Node,
+handle_msg({Port, {exit_status, 0}}, _Proc,
             Sh=#sh{port=Port, start_command=#exec{command=Cmd}}) ->
     ct:log("Program ~s exited normally (status 0)~n", [Cmd]),
     {stop, normal, Sh#sh{state=stopped}};
-handle_msg({Port, {exit_status, Exit}=Rc}, Node,
+handle_msg({Port, {exit_status, Exit}=Rc}, Proc,
              Sh=#sh{port=Port, state=State}) ->
-    ct:log("Node ~p shut down with error/status code ~p~n",
-                      [Node#'systest.node_info'.id, Exit]),
+    ct:log("Proc ~p shut down with error/status code ~p~n",
+                      [Proc#proc.id, Exit]),
     ShutdownType = case State of
                        killed -> normal;
                        _      -> Rc
                    end,
     {stop, ShutdownType, Sh#sh{state=stopped}};
-handle_msg({Port, closed}, Node, Sh=#sh{port=Port,
+handle_msg({Port, closed}, Proc, Sh=#sh{port=Port,
                                         state=killed,
                                         detached=false}) ->
     ct:log("~p (attached) closed~n", [Port]),
@@ -223,16 +222,16 @@ handle_msg({Port, closed}, Node, Sh=#sh{port=Port,
             %% execution process is sitting in `kill_and_wait` - we force a
             %% call to net_adm:ping/1, which gives the net_kernel time to get
             %% its knickers in order before proceeding....
-            Id = systest_node:get(id, Node),
-            systest_node:status_check(Id);
+            Id = systest_proc:get(id, Proc),
+            systest_proc:status_check(Id);
         false ->
             ok
     end,
     {stop, normal, Sh};
-handle_msg({Port, closed}, _Node, Sh=#sh{port=Port}) ->
+handle_msg({Port, closed}, _Proc, Sh=#sh{port=Port}) ->
     ct:log("~p closed~n", [Port]),
     {stop, {port_closed, Port}, Sh};
-handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Node, Sh=#sh{shutdown_port=Pid,
+handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc, Sh=#sh{shutdown_port=Pid,
                                                        detached=Detached,
                                                        state=killed,
                                                        log=Fd}) ->
@@ -243,11 +242,11 @@ handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Node, Sh=#sh{shutdown_port=Pid,
         false -> Sh
     end;
 handle_msg({'EXIT', Pid, {error, Rc, StopAcc}},
-           _Node, Sh=#sh{shutdown_port=Pid, log=Fd}) ->
+           _Proc, Sh=#sh{shutdown_port=Pid, log=Fd}) ->
     ct:log("Termination Port stopped abnormally (status ~p)~n", [Rc]),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     {stop, termination_port_error, Sh};
-handle_msg(Info, _Node, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
+handle_msg(Info, _Proc, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
     ct:log("Ignoring Info Message:  ~p~n"
            "State:                  ~p~n"
            "Port:                   ~p~n"
@@ -256,7 +255,7 @@ handle_msg(Info, _Node, Sh=#sh{state=St, port=P, shutdown_port=SP}) ->
     Sh.
 
 %% @doc gives the handler a chance to clean up prior to being fully stopped.
-terminate(Reason, _Node, #sh{port=Port, log=Fd}) ->
+terminate(Reason, _Proc, #sh{port=Port, log=Fd}) ->
     ct:log("Terminating due to ~p~n", [Reason]),
     %% TODO: verify that we're not *leaking* ports if we fail to close them
     case Fd of
@@ -313,7 +312,7 @@ make_exec(FG, Detached, RpcEnabled, Config) ->
     FlagsGroup = atom_to_list(FG),
     %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
     Cmd = systest_config:eval("flags." ++ FlagsGroup ++ ".program", Config,
-                    [{callback, {node, fun systest_node:get/2}},
+                    [{callback, {proc, fun systest_proc:get/2}},
                      {return, value}]),
     Env = case ?ENCONFIG("flags." ++ FlagsGroup ++ ".environment", Config) of
               not_found -> [];
@@ -384,39 +383,39 @@ shutdown_loop(Port, Acc) ->
 output(Items) ->
     string:join(Items, "\n").
 
-read_pid(NodeId, Port, Detached, RpcEnabled, Fd) ->
+read_pid(ProcId, Port, Detached, RpcEnabled, Fd) ->
     case RpcEnabled of
         true ->
-            case rpc:call(NodeId, os, getpid, []) of
+            case rpc:call(ProcId, os, getpid, []) of
                 {badrpc, _Reason} ->
                     receive
                         {Port, {exit_status, 0}} ->
                             case Detached of
-                                %% NB: with detached nodes, the 'launcher' will
-                                %% exit leaving the node up and running, so we
+                                %% NB: with detached procs, the 'launcher' will
+                                %% exit leaving the proc up and running, so we
                                 %% now need to sit in a loop until we can rpc
-                                true  -> read_pid(NodeId, Port,
+                                true  -> read_pid(ProcId, Port,
                                                   Detached, RpcEnabled, Fd);
                                 false -> {error, no_pid}
                             end;
                         {Port, {exit_status, Rc}} ->
                             {error, {stopped, Rc}};
                         {Port, {data, {_, Line}}} ->
-                            io:format(Fd, "[~p] ~s~n", [NodeId, Line]),
+                            io:format(Fd, "[~p] ~s~n", [ProcId, Line]),
                             %% NB: the 'launch' process has sent us a pid, but
-                            %% that's meaningless for detached nodes until we
+                            %% that's meaningless for detached procs until we
                             %% can successfully rpc to get the actual pid.
                             case Detached of
-                                true  -> wait_for_nodeup(NodeId);
+                                true  -> wait_for_up(ProcId);
                                 false -> ok
                             end,
-                            read_pid(NodeId, Port, Detached, RpcEnabled, Fd);
+                            read_pid(ProcId, Port, Detached, RpcEnabled, Fd);
                         Other ->
-                            io:format(Fd, "[~p] ~p~n", [NodeId, Other]),
-                            read_pid(NodeId, Port, Detached, RpcEnabled, Fd)
+                            io:format(Fd, "[~p] ~p~n", [ProcId, Other]),
+                            read_pid(ProcId, Port, Detached, RpcEnabled, Fd)
                     after 5000 ->
                         ct:log("timeout waiting for os pid... re-trying~n"),
-                        read_pid(NodeId, Port, Detached, RpcEnabled, Fd)
+                        read_pid(ProcId, Port, Detached, RpcEnabled, Fd)
                     end;
                 Pid ->
                     case Detached of
@@ -433,10 +432,10 @@ read_pid(NodeId, Port, Detached, RpcEnabled, Fd) ->
             end
     end.
 
-wait_for_nodeup(NodeId) ->
+wait_for_up(NodeId) ->
     case net_kernel:connect(NodeId) of
         true    -> ok;
-        _       -> erlang:yield(), wait_for_nodeup(NodeId)
+        _       -> erlang:yield(), wait_for_up(NodeId)
     end.
 
 %% command processing
@@ -482,7 +481,7 @@ expand_env_variable(InStr, VarName, RawVarValue) ->
             re:replace(InStr, RegEx, [VarValue, "\\2"], ReOpts)
     end.
 
-%% node configuration/setup
+%% proc configuration/setup
 
 default_log_dir(Config) ->
     ?CONFIG(scratch_dir, Config, systest_utils:temp_dir()).

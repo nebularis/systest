@@ -62,12 +62,11 @@ init_per_testcase(should_fail_bad_config, Config) ->
     Pid = ?CONFIG(active, Config),
     true = erlang:is_process_alive(Pid),
     systest:start(should_fail_bad_config, Config);
-    % throw(duplicate_cluster_created);
 init_per_testcase(_TC, Config) ->
     Config.
 
 end_per_testcase(TC=init_per_tc_manages_shutdown, Config) ->
-    systest_event:console("explicitly killing cluster ~p~n", [TC]),
+    systest_event:console("explicitly killing sut ~p~n", [TC]),
     Pid = ?CONFIG(active, Config),
     systest:stop(Pid),
     systest_event:console("explicit stop of ~p has returned (live=~p)~n",
@@ -96,18 +95,18 @@ suite_nodes_should_be_up_and_running(_Config) ->
     ok.
 
 end_per_tc_can_manage_shutdown(Config) ->
-    systest_cluster:print_status(?CONFIG(active, Config)),
+    systest_sut:print_status(?CONFIG(active, Config)),
     ok.
 
 end_per_tc_automation(Config) ->
     %% this is a *deliberately* oversimplified test case, which
     %% exists simply to verify that the 'end_per_tc_automation'
-    %% test cluster *was* up here, and will *not* be later on
+    %% test sut *was* up here, and will *not* be later on
     Pid = ?CONFIG(active, Config),
-    Status = systest_cluster:status(Pid),
-    ?assertMatch([{_, 'nodeup'},
-                  {_, 'nodeup'},
-                  {_, 'nodeup'}], Status),
+    Status = systest_sut:status(Pid),
+    ?assertMatch([{_, 'up'},
+                  {_, 'up'},
+                  {_, 'up'}], Status),
     %% common test makes us declare inter-test dependencies
     %% specifically, accepting that they're impossible to remove
     %% in some cases - this test (of how two test cases in a
@@ -116,19 +115,19 @@ end_per_tc_automation(Config) ->
 
 after_end_per_tc_automation() ->
     [{userdata,[{doc, "Runs after end_per_tc_automation, ensuring that the"
-                      " cluster set up during that test has been"
+                      " sut set up during that test has been"
                       " automatically torn down by our ct_hooks."}]}].
 
 after_end_per_tc_automation(Config) ->
     {end_per_tc_automation, SavedConfig} = ?config(saved_config, Config),
-    ClusterPid = ?CONFIG(previous_active, SavedConfig),
+    SutPid = ?CONFIG(previous_active, SavedConfig),
     ct:log("is end_per_tc_automation still alive!?...~n"),
-    ?assertEqual(false, erlang:is_process_alive(ClusterPid)).
+    ?assertEqual(false, erlang:is_process_alive(SutPid)).
 
 trapping_nodedown_messages(Config) ->
     process_flag(trap_exit, true),
     Pid = ?CONFIG(active, Config),
-    {_, NodeRef} = hd(systest:cluster_nodes(Pid)),
-    systest_node:stop_and_wait(NodeRef),
-    ?assertEqual({nodedown, noproc}, systest_node:status(NodeRef)),
-    systest_cluster:print_status(Pid).  %% just to make sure it doesn't crash!
+    {_, ProcRef} = hd(systest:procs(Pid)),
+    systest_proc:stop_and_wait(ProcRef),
+    ?assertEqual({down, noproc}, systest_proc:status(ProcRef)),
+    systest_sut:print_status(Pid).  %% just to make sure it doesn't crash!

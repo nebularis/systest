@@ -29,8 +29,8 @@
 -export([main/1]).
 -export([start/0, reset/0, sigkill/1]).
 -export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
--export([active_cluster/1, clusters/1, cluster_nodes/1]).
--export([cluster_config/1]).
+-export([active_sut/1, suts/1, procs/1]).
+-export([sut_config/1]).
 -export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
 
@@ -61,23 +61,23 @@ stop_scope(Scope) when is_atom(Scope) ->
     systest_watchdog:force_stop(Scope).
 
 start(Scope, Config) ->
-    case systest_cluster:start(Scope, Config) of
+    case systest_sut:start(Scope, Config) of
         {error, _}=Err ->
-            {fail, {cluster_start, Err}};
+            {fail, {sut_start, Err}};
         Other ->
             Other
     end.
 
 start(Scope, Identify, Config) ->
-    case systest_cluster:start(Scope, Identify, trace_on(Identify, Config)) of
+    case systest_sut:start(Scope, Identify, trace_on(Identify, Config)) of
         {error, _}=Err ->
-            {fail, {cluster_start, Err}};
+            {fail, {sut_start, Err}};
         Other ->
             Other
     end.
 
 stop(Scope) when is_pid(Scope) ->
-    systest_cluster:stop(Scope).
+    systest_sut:stop(Scope).
 
 %% tracing/debugging
 
@@ -96,8 +96,8 @@ sigkill(Pid) ->
     Result = os:cmd("kill -9 " ++ Pid),
     ct:log(Result).
 
-interact(Node, Inputs) ->
-    systest_node:interact(Node, Inputs).
+interact(Proc, Inputs) ->
+    systest_proc:interact(Proc, Inputs).
 
 write_pid_file() ->
     application:load(?MODULE),
@@ -120,15 +120,15 @@ write_pid_file(Name, {dir, Dir}) ->
 
 %% config handling
 
-active_cluster(Config) ->
+active_sut(Config) ->
     ?REQUIRE(active, Config).
 
-clusters(Config) ->
+suts(Config) ->
     systest_config:read(?MODULE, Config).
 
-cluster_nodes(ClusterRef) ->
-    systest_cluster:list_nodes(ClusterRef).
+procs(SutRef) ->
+    systest_sut:procs(SutRef).
 
-cluster_config(Scope) ->
-    ct:get_config({Scope, cluster}).
+sut_config(Scope) ->
+    ct:get_config({Scope, sut}).
 

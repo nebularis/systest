@@ -27,7 +27,7 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
--module(systest_node_SUITE).
+-module(systest_proc_SUITE).
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("../include/systest.hrl").
@@ -40,14 +40,14 @@
 all() ->
     systest_suite:export_all(?MODULE).
 
-restarting_nodes(Config) ->
+restarting_procs(Config) ->
     process_flag(trap_exit, true),
-    Cluster = systest:active_cluster(Config),
+    Sut = systest:active_sut(Config),
     [begin
          ?assertEqual(pong, net_adm:ping(Id)),
-         {ok, {Id, Pid}} = systest_cluster:restart_node(Cluster, Ref),
+         {ok, {Id, Pid}} = systest_sut:restart_proc(Sut, Ref),
          ?assertEqual(true, erlang:is_process_alive(Pid)),
          ?assertEqual(pong, net_adm:ping(Id))
-     end || {Id, Ref} <- systest:cluster_nodes(Cluster)],
+     end || {Id, Ref} <- systest:procs(Sut)],
     ok.
 

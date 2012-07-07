@@ -101,4 +101,3 @@ post_end_per_testcase(TC, _Config, Return, State) ->
 
 terminate(_State) ->
     ok.
-

@@ -221,7 +221,6 @@ clear_pending({'EXIT', Pid, normal},
             State
     end.
 
-
 shutdown(State=#'systest.cluster'{name=Id, nodes=Nodes}, Timeout, ReplyTo) ->
     %% NB: unlike systest_node:shutdown_and_wait/2, this does not have to
     %% block and quite deliberately so - we want 'timed' shutdown when a

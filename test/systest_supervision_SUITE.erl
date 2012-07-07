@@ -58,11 +58,11 @@ end_per_suite(_Config) ->
     ok.
 
 %% NB: this clause is *deliberately* used to trigger a failure...
-init_per_testcase(should_fail, Config) ->
+init_per_testcase(should_fail_bad_config, Config) ->
     Pid = ?CONFIG(active, Config),
     true = erlang:is_process_alive(Pid),
-    systest:start(should_fail, Config),
-    throw(duplicate_cluster_created);
+    systest:start(should_fail_bad_config, Config);
+    % throw(duplicate_cluster_created);
 init_per_testcase(_TC, Config) ->
     Config.
 

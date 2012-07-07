@@ -39,6 +39,8 @@
 -export([start/0, cluster_started/2, exceptions/1, reset/0,
          node_started/2, node_stopped/2, force_stop/1]).
 
+-export([clear_exceptions/0]).
+
 %% OTP gen_server Exports
 
 -export([init/1, handle_call/3, handle_cast/2,
@@ -86,6 +88,9 @@ node_stopped(Cid, Pid) ->
 exceptions(ClusterId) ->
     gen_server:call(?MODULE, {exceptions, ClusterId}).
 
+clear_exceptions() ->
+    gen_server:call(?MODULE, clear_exceptions).
+
 %%
 %% OTP gen_server API
 %%
@@ -119,6 +124,8 @@ handle_call({force_stop, ClusterId}, _From,
 handle_call({exceptions, ClusterId}, _From,
             State=#state{exception_table=ET}) ->
     {reply, ets:match_object(ET, {ClusterId, '_', '_'}), State};
+handle_call(clear_exceptions, _From, State=#state{exception_table=ET}) ->
+    {reply, ets:delete_all_objects(ET), State};
 handle_call({cluster_started, ClusterId, ClusterPid},
             _From, State=#state{cluster_table=CT}) ->
     case ets:insert_new(CT, {ClusterId, ClusterPid}) of

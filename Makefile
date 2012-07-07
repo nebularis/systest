@@ -20,7 +20,7 @@
 ## FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 ## IN THE SOFTWARE.
 ## ----------------------------------------------------------------------------
-LOGLEVEL ?= 2
+LOGLEVEL ?= 0
 REBAR=$(shell which rebar)
 SOURCE_DIR=src
 TEST_DIR=test
@@ -42,7 +42,13 @@ REBAR=bin/rebar/rebar
 endif
 
 .PHONY: all
-all: clean $(BIN_FILE)
+all: clean test
+
+.PHONY: info
+info:
+	$(info SysTest $(shell git describe --abbrev=0))
+	$(info $(shell rebar -V))
+	$(info 3rd Party Dependencies: ${DEPS})
 
 .PHONY: clean
 clean:
@@ -62,12 +68,23 @@ $(MAIN_TARGETS): $(SOURCES) $(INCLUDES)
 $(TEST_TARGETS): $(TEST_SOURCES)
 	$(REBAR) skip_deps=true -C test.config compile -v $(LOGLEVEL)
 
-$(BIN_FILE): test
-	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true escriptize -v $(LOGLEVEL)
+$(BIN_FILE): info
+	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true clean compile escriptize -v $(LOGLEVEL)
 
 .PHONY: test
-test: $(MAIN_TARGETS) $(TEST_TARGETS)
-	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true systest -v $(LOGLEVEL)
+test: test-default test-error-handling
+
+.PHONY: test-dependencies
+test-dependencies: info $(MAIN_TARGETS) $(TEST_TARGETS)
+
+.PHONY: test-default
+test-default: $(BIN_FILE) test-dependencies
+	ERL_FLAGS="-pa ebin" SYSTEST_PROFILE="$@" priv/bin/systest
+
+.PHONY: test-error-handling
+test-error-handling: test-dependencies
+	ERL_FLAGS="-pa ebin" SYSTEST_PROFILE="$@" \
+		$(REBAR) skip_deps=true systest -v $(LOGLEVEL)
 
 bin/%:
 	mkdir -p deps
@@ -75,4 +92,3 @@ bin/%:
 	git clone -b systest https://github.com/hyperthunk/$*.git deps/$*
 	PATH="bin:${PATH}" $(MAKE) -C deps/$*
 	cp deps/$*/$* bin/$*
-

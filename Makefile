@@ -54,16 +54,21 @@ dist-clean: clean
 compile: $(REBAR)
 	$(REBAR) get-deps compile -v $(LOGLEVEL)
 
-.PHONY: test-compile
-test-compile:
-	$(REBAR) skip_deps=true -C test.config get-deps compile -v $(LOGLEVEL)
-
 .PHONY: escriptize
 escriptize: compile
 	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true escriptize -v $(LOGLEVEL)
 
+.PHONY: eunit
+eunit: test-compile
+	rm -rf .eunit
+	$(REBAR) skip_deps=true -C test.config eunit -v $(LOGLEVEL)
+
+.PHONY: test-compile
+test-compile: $(REBAR)
+	$(REBAR) skip_deps=true -C test.config get-deps compile -v $(LOGLEVEL)
+
 .PHONY: test
-test: test-default test-error-handling
+test: eunit test-default test-error-handling
 
 .PHONY: test-dependencies
 test-dependencies: test-compile escriptize

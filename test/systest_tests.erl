@@ -47,7 +47,7 @@ parameterised_eval_test_() ->
                       systest_config:eval("node.on_start.local",
                                           Config, [{return, path}])),
         {setup, fun() ->
-                    systest:start(),
+                    ok = systest:start(),
                     systest_config:set_env("BASE_DIR", "/var/tmp/foobar")
                 end,
          ?_assertMatch("/var/tmp/foobar/scripts/start-hopper",
@@ -76,20 +76,6 @@ parameterised_eval_test_() ->
 
 cli_flags_test_() ->
     [begin
-         Node = #proc{id=cli},
-         Flags = [{start, [{program, "priv/start"},
-                           {proc, id},
-                           {environment, "LOGDIR"}]}],
-         Config = [{"logdir", "/tmp/logs"}],
-         {setup, fun() ->
-                     systest:start(),
-                     systest_config:set_env("LOGDIR", "/tmp/logs")
-                 end,
-            ?_assertEqual({[{"LOGDIR", "/tmp/logs"}],["cli"],"priv/start"},
-                           systest_cli:convert_flags(start, Node,
-                                                     Flags, Config))}
-     end,
-     begin
          GF = [{program,"resources/test/start"},
                {node,id},
                {environment,"LOGDIR"}],

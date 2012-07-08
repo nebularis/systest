@@ -39,8 +39,9 @@
 
 pre_init_per_testcase(TC, Config, State) ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
-        {{fail,{sut_start,{error,_}}},_}=Err ->
-            systest_event:console("ignoring expected sut start failure~n",[]),
+        {{fail,{sut_start,{error, What}}},_}=Err ->
+            systest_event:console("ignoring expected sut start failure ~p~n",
+                                  [What]),
             systest_watchdog:clear_exceptions(),
             {Config, State};
         Other ->

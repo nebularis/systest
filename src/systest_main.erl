@@ -37,7 +37,10 @@ run(["export"]) ->
     ok;
 run(Args) ->
     Options = parse_args(Args),
+    application:load(systest),
     BaseConfig = init_rebar(Options),
+
+    print_banner(),
 
     MainConfig = rebar_config:get_local(BaseConfig, plugins, []),
     Config = rebar_config:set(BaseConfig, plugins, [systest_rebar|MainConfig]),
@@ -52,6 +55,14 @@ run(Args) ->
     maybe_export(Commands, Config),
     rebar_config:set_global(skip_deps, "true"),
     rebar_core:process_commands(Commands, Config).
+
+print_banner() ->
+    %% Urgh - could there be an uglier way!?
+    %% TODO: refactor this...
+    AppVsn = element(3, hd(application:loaded_applications())),
+    {ok, Banner} = application:get_env(systest, banner),
+    io:format("~s~n"
+              "Version ~s~n", [Banner, AppVsn]).
 
 export(Config) ->
     [export_entry(F, Config) || F <- get(escript_files)].
@@ -104,7 +115,14 @@ init_rebar(Options) ->
 
     {ok, Files} = rebar_utils:escript_foldl(
                     fun(Name, _, GetBin, Acc) ->
-                            [{Name, GetBin()} | Acc]
+                        Bin = GetBin(),
+                        case lists:suffix("banner.txt", Name) of
+                            true ->
+                                application:set_env(systest, banner, Bin);
+                            false ->
+                                ok
+                        end,
+                        [{Name, Bin} | Acc]
                     end,
                     [], rebar_config:get_global(escript, undefined)),
     erlang:put(escript_files, Files),

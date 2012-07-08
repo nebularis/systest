@@ -43,7 +43,7 @@ systest(Config, _) ->
     code:add_patha(filename:join([rebar_utils:get_cwd(),
                                   DepsDir, "systest", "ebin"])),
 
-    net_kernel:start([systest_master, shortnames]),
+    {ok, _} = net_kernel:start([systest_master, shortnames]),
 
     %% TODO: consider adding a time stamp to the scratch
     %%       dir like common test does

@@ -126,8 +126,15 @@ init_rebar(Options) ->
                     end,
                     [], rebar_config:get_global(escript, undefined)),
     erlang:put(escript_files, Files),
+    
+    %% TODO: STOP USING REBAR LIKE THIS!!!!!!
+    %% NB: see branch 'runner'
 
-    base_config().
+    BaseConfig = base_config(),
+    %% Keep track of how many operations we do, so we can detect bad commands
+    BaseConfig1 = rebar_config:set_xconf(BaseConfig, operations, 0),
+    %% Initialize vsn cache
+    BaseConfig2 = rebar_config:set_xconf(BaseConfig1, vsn_cache, dict:new()).
 
 base_config() ->
     base_config(["systest.config", "rebar.config"]).

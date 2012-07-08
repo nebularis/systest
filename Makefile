@@ -29,17 +29,17 @@ DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- pro
 
 ## rules start here
 
-ifeq ($(REBAR), '')
-REBAR=bin/rebar/rebar
+ifndef $(REBAR)
+REBAR=bin/rebar
 endif
 
 .PHONY: all
 all: escriptize
 
 .PHONY: info
-info:
+info: $(REBAR)
 	$(info SysTest $(shell git describe --abbrev=0))
-	$(info $(shell rebar -V))
+	$(info $(shell $(REBAR) -V))
 	$(info 3rd Party Dependencies: ${DEPS})
 
 .PHONY: clean

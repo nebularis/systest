@@ -527,7 +527,7 @@ lookup(Key, Config, Default) ->
     end.
 
 proc_config(Sut, Proc) ->
-    Procs = systest_config:get_config({Sut, parts}),
+    Procs = systest_config:get_config({Sut, processes}),
     UserData = systest_config:get_config({Sut, user_data}),
     ProcConf = case ?CONFIG(Proc, Procs, undefined) of
                    undefined               -> [];

@@ -46,14 +46,16 @@
 suite() -> [{timetrap, {minutes, 2}}].
 
 all() ->
-    [sut_start_scripts_badly_configured].
+    [sut_start_scripts_badly_configured,
+     failing_sut_on_start_hook].
 
 %%
 %% Test Case Definitions
 %%
 
 sut_start_scripts_badly_configured() ->
-    [{userdata, [{doc, "this testcase should never run, being simply "
+    [{userdata, [{doc, "Attempts to start a cli node for a non-existent script."
+                       "This testcase should never run, being simply "
                        "a place-holder for an init_per_testcase that "
                        "we expect to fail.\n"
                        "The validation of this failure is performed in "
@@ -61,3 +63,15 @@ sut_start_scripts_badly_configured() ->
 
 sut_start_scripts_badly_configured(_) ->
     ok.
+
+failing_sut_on_start_hook() ->
+    [{userdata, [{doc, "Fires off a deliberately failing sut on_start hook."
+                       "This testcase should never run, being simply "
+                       "a place-holder for an init_per_testcase that "
+                       "we expect to fail.\n"
+                       "The validation of this failure is performed in "
+                       "the systest_supervision_cth common test hook!"}]}].
+
+failing_sut_on_start_hook(_) ->
+    ok.
+

@@ -28,32 +28,39 @@
 
 -export([run/3]).
 
--type arg()  :: {'proc', atom()} |
-                {'call', module(), function(), [term()]} |
-                {'call_with_item', module(), function(), [term()]} |
+-type arg()  :: {'proc', atom()}                                      |
+                {'call', module(), function(), [term()]}              |
+                {'call_with_item', module(), function(), [term()]}    |
                 {'call_with_context', module(), function(), [term()]} |
                 term().
 
--type systest_hook() :: {'eval', atom(), module(), function(), [arg()]}     |
-                        {'remote', atom(), module(), function(), [arg()]}   |
-                        {'local', module(), function(), [arg()]}            |
-                        {module(), function(), [term()]}                    |
+-type systest_hook() :: {'eval', atom(), module(), function(), [arg()]}   |
+                        {'remote', atom(), module(), function(), [arg()]} |
+                        {'local', module(), function(), [arg()]}          |
+                        {module(), function(), [term()]}                  |
                         string().
 
 %% TODO: think about the return type for this...
 
 -spec run(Item::term(), Hook::systest_hook(), Context::term()) -> any().
-run(Item, {eval, Where, Mod, Func, Args}, Context) ->
+run(Item, Hook, Context) ->
+    try 
+        run_it(Item, Hook, Context)
+    catch 
+        _:Error -> throw({hook_failed, Error})
+    end.
+
+run_it(Item, {eval, Where, Mod, Func, Args}, Context) ->
     Argv = lists:reverse(lists:foldl(fun proc_interact/2,
                                      {Item, Context, []}, Args)),
-    run(Item, {Where, Mod, Func, Argv}, Context);
-run(#proc{id=Node}, {Mod, Func, Args}, _) ->
+    run_it(Item, {Where, Mod, Func, Argv}, Context);
+run_it(#proc{id=Node}, {Mod, Func, Args}, _) ->
     rpc:call(Node, Mod, Func, Args);
-run(_Context, {remote, Where, Mod, Func, Args}, _) ->
+run_it(_Context, {remote, Where, Mod, Func, Args}, _) ->
     rpc:call(Where, Mod, Func, Args);
-run(Context, {local, Mod, Func, Args}, _) ->
+run_it(Context, {local, Mod, Func, Args}, _) ->
     apply(Mod, Func, [Context|Args]);
-run(NI=#proc{handler=Handler}, Inputs, HState) ->
+run_it(NI=#proc{handler=Handler}, Inputs, HState) ->
     Handler:handle_interaction(Inputs, NI, HState).
 
 proc_interact({call, M, F, A}, {_Item, _Context, Acc}) ->

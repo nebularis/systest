@@ -26,7 +26,7 @@
 %% This module extends the default common test hook (systest_cth) to allow for
 %% expected failing test cases.
 %% ----------------------------------------------------------------------------
--module(systest_verify_cth).
+-module(systest_error_handling_cth).
 
 -extends(systest_cth).
 

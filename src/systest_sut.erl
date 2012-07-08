@@ -131,22 +131,27 @@ init([Scope, Id, Config]) ->
         ok ->
             case with_sut({Scope, Id}, fun start_host/4, Config) of
                 Sut=#sut{procs=Procs, on_start=Hooks} ->
-                    case Hooks of
-                        [{on_start, Run}|_] ->
-                            ct:log("running SUT on_start hooks ~p~n",
-                                   [Run]),
-                            [systest_hooks:run(Sut,
-                                               Hook, Sut) || Hook <- Run];
-                        Other ->
-                            ct:log("ignoring SUT hooks ~p~n", [Other]),
-                            ok
-                    end,
-                    [begin
-                         {_, Ref} = Proc,
-                         ct:log("~p joined_sut~n", [Proc]),
-                         systest_proc:joined_sut(Ref, Sut, Procs -- [Proc])
-                     end || Proc <- Procs],
-                    {ok, Sut};
+                    try 
+                        case Hooks of
+                            [{on_start, Run}|_] ->
+                                ct:log("running SUT on_start hooks ~p~n",
+                                       [Run]),
+                                [systest_hooks:run(Sut,
+                                                   Hook, Sut) || Hook <- Run];
+                            Other ->
+                                ct:log("ignoring SUT hooks ~p~n", [Other]),
+                                ok
+                        end,
+                        [begin
+                             {_, Ref} = Proc,
+                             ct:log("~p joined_sut~n", [Proc]),
+                             systest_proc:joined_sut(Ref, Sut, Procs -- [Proc])
+                         end || Proc <- Procs],
+                        {ok, Sut}
+                    catch 
+                        throw:{hook_failed, Reason} -> {stop, Reason};
+                        _:Error                     -> {stop, Error}
+                    end;
                 Error ->
                     {stop, Error}
             end;

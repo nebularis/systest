@@ -177,7 +177,7 @@ handle_kill(_Proc, Sh=#sh{id=Id, port=Port, detached=false, state=running}) ->
 %%                             {rpc_stop, {M,F,A}, NewState} |
 %%                             NewState.
 handle_stop(Proc, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
-    log(framework, "running shutdown hooks for ~p",
+    log(framework, "running shutdown hooks for ~p~n",
         [systest_proc:get(id, Proc)]),
     run_shutdown_hook(SC, Sh);
 %% TODO: could this be core proc behaviour?
@@ -299,9 +299,9 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
                                {"console", user}
                        end,
 
-    log(framework, "Reading OS process id for ~p from ~p~n", [Id, Port]),
-    log(framework, "RPC Enabled: ~p~n", [RpcEnabled]),
-    log(framework, "StdIO Log: ~s~n", [LogName]),
+    log({framework, Id}, "Reading OS process id from ~p~n", [Port]),
+    log({framework, Id}, "RPC Enabled: ~p~n", [RpcEnabled]),
+    log({framework, Id}, "StdIO Log: ~s~n", [LogName]),
 
     case read_pid(Id, Port, Detached, RpcEnabled, LogFd) of
         {error, {stopped, Rc}} ->
@@ -314,7 +314,7 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
 
 log_file(Suffix, Scope, Id, Env, Config) ->
     log_to(Suffix, Scope, Id,
-           ?CONFIG(log_dir, Env, default_log_dir(Config))).
+           ?CONFIG(log_dir, Env, systest_utils:default_log_dir(Config))).
 
 log_to(Suffix, Scope, Id, Dir) ->
     filename:join(Dir, logfile(Scope, Id) ++ Suffix).
@@ -361,7 +361,7 @@ open_port(#exec{command=ExecutableCommand,
     LaunchOpts = [exit_status, hide, stderr_to_stdout,
                   use_stdio, {line, 16384}] ++ RunEnv,
     log(framework, 
-        "Spawning executable [command = \"~s\", detached = ~p, args = ~p]",
+        "Spawning executable [command = \"~s\", detached = ~p, args = ~p]~n",
         [ExecutableCommand, Detached, Args]),
     case Detached of
         false -> erlang:open_port({spawn_executable, ExecutableCommand},
@@ -491,9 +491,6 @@ expand_env_variable(InStr, VarName, RawVarValue) ->
     end.
 
 %% proc configuration/setup
-
-default_log_dir(Config) ->
-    ?CONFIG(scratch_dir, Config, systest_utils:temp_dir()).
 
 logfile(Scope, Id) ->
     atom_to_list(Scope) ++ "-" ++ atom_to_list(Id).

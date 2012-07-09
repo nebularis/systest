@@ -82,7 +82,7 @@ systest(Config, _) ->
             {ok, Export} = start_cover(CoverBase, Config),
             rebar_log:log(debug, "cover:modules() = ~p~n", [cover:modules()]),
 
-            ok = systest_log:start(framework, systest_ct_log, common_test),
+            start_systest_logging(ScratchDir, Config),
 
             Result = ct:run_test([{'spec', FinalSpec},
                                   {logdir,
@@ -104,6 +104,25 @@ systest(Config, _) ->
                     end
             end
     end.
+
+start_systest_logging(ScratchDir, Config) ->
+    ok = systest_log:start(system, systest_ct_log, common_test),
+    ok = systest_log:start(framework, systest_ct_log, common_test),
+    Active = rebar_config:get_local(Config, systest_active_loggers, []),
+    [begin
+        rebar_log:log(debug, "Activating Logging SubSystem ~p~n", [SubSystem]),
+        case Target of
+            glog ->
+                Dest = filename:join(ScratchDir,
+                                     atom_to_list(SubSystem) ++ ".log"),
+                ok = systest_log:start_file(SubSystem, systest_log, Dest);
+            flog ->
+                ok = systest_log:start(SubSystem, systest_log, devnull);
+            Name ->
+                ok = systest_log:start(SubSystem, systest_log, Name)
+        end
+     end || {SubSystem, Target} <- Active],
+    ok.
 
 report_cover(Dir, Export, Config) ->
     rebar_log:log(info, "Code Coverage Results:~n", []),

@@ -66,7 +66,7 @@ init(systest, _Opts) ->
 pre_init_per_suite(Suite, Config, State=#state{auto_start=false}) ->
     {Config, State#state{suite=Suite}};
 pre_init_per_suite(Suite, Config, State) ->
-    log(framework, "pre_init_per_suite: maybe start ~p", [Suite]),
+    log(framework, "pre_init_per_suite: maybe start ~p~n", [Suite]),
     %% TODO: handle init_per_suite use of SUT aliases
     {systest:start_suite(Suite, systest:trace_on(Suite, Config)),
                     State#state{suite=Suite}}.

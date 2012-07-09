@@ -42,6 +42,7 @@
 -export([start/0, start/3, start_file/2, start_file/3]).
 -export([log/2, log/3]).
 -export([write_log/4]).
+-export([activate_logging_subsystem/3]).
 
 -export([init/1,
          handle_event/2,
@@ -96,6 +97,26 @@ start_file(Id, Mod, Dest) ->
 start(Id, Mod, Output) ->
     gen_event:add_handler(systest_event_log, {?MODULE, Id}, [Id, Mod, Output]).
 
+activate_logging_subsystem(SubSys, Id, LogBase) ->
+    Handlers = gen_event:which_handlers(systest_event_log),
+    case [H || {_, H} <- Handlers, H =:= SubSys] of
+        [] ->
+            {error, not_installed};
+        [H|_] ->
+            gen_event:delete_handler(systest_event_log,
+                                     {?MODULE, {framework, Id}}, []),
+            case gen_event:call(systest_event_log, {?MODULE, H}, where) of
+                devnull ->
+                    File = filename:join(LogBase,
+                                  atom_to_list(Id) ++ ".log"),
+                    ok = start_file({framework, Id}, File),
+                    {ok, File};
+                Dest ->
+                    ok = start({framework, Id}, ?MODULE, Dest),
+                    {ok, Dest}
+            end
+    end.
+
 %% @doc Writes to the logging handler Scope, formatting Fmt with Args. This
 %% should work in much the same way as io:format/2 does, although this is
 %% implementation dependent to some extent.
@@ -110,7 +131,7 @@ log(Scope, Fmt, Args) ->
 %% @doc Writes (with formatting as per log/3) to all logging handlers.
 %% @end
 log(Fmt, Args) ->
-    gen_event:sync_notify(systest_event_log, {Fmt, Args}).
+    log(system, Fmt, Args).
 
 %%
 %% systest_log callback API!
@@ -135,9 +156,12 @@ handle_event({Scope, Fmt, Args},
 handle_event({Fmt, Args}, State=#state{mod=Mod, fd=Fd}) ->
     write(Mod, Fd, system, Fmt, Args),
     {ok, State};
-handle_event(_Message, State) ->
+handle_event(Message, State=#state{id=Id}) ->
+    %io:format(user, "~p Ignoring ~p~n", [Id, Message]),
     {ok, State}.
 
+handle_call(where, State) ->
+    {ok, State#state.fd, State};
 handle_call(_, State) ->
     {ok, ignored, State}.
 
@@ -150,5 +174,7 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+write(_, devnull, _, _, _) ->
+    ok;
 write(Mod, Fd, EvId, Fmt, Args) ->
     catch(Mod:write_log(EvId, Fd, Fmt, Args)).

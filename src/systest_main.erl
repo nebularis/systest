@@ -127,14 +127,21 @@ init_rebar(Options) ->
                     [], rebar_config:get_global(escript, undefined)),
     erlang:put(escript_files, Files),
     
+    ConsoleLogs = [{S, user} || S <- proplists:get_all_values(clog, Options)],
+    GFileLogs = [{S, glog} || S <- proplists:get_all_values(glog, Options)],
+    FileLogs = [{S, flog} || S <- proplists:get_all_values(flog, Options)],
+    ActiveLogging = ConsoleLogs ++ GFileLogs ++ FileLogs,
+    
     %% TODO: STOP USING REBAR LIKE THIS!!!!!!
     %% NB: see branch 'runner'
 
     BaseConfig = base_config(),
+    BaseConfig1 = rebar_config:set(BaseConfig,
+                                   systest_active_loggers, ActiveLogging),
     %% Keep track of how many operations we do, so we can detect bad commands
-    BaseConfig1 = rebar_config:set_xconf(BaseConfig, operations, 0),
+    BaseConfig2 = rebar_config:set_xconf(BaseConfig1, operations, 0),
     %% Initialize vsn cache
-    BaseConfig2 = rebar_config:set_xconf(BaseConfig1, vsn_cache, dict:new()).
+    rebar_config:set_xconf(BaseConfig2, vsn_cache, dict:new()).
 
 base_config() ->
     base_config(["systest.config", "rebar.config"]).
@@ -181,23 +188,30 @@ option_spec_list() ->
                   " falls back to 'default.spec'",
     CompileHelp = "Pre-build sources using (embedded) rebar",
     BuildHelp = "Run custom build commands (using embedded) rebar",
+    LogHelp = "Activate logging for the specified sub-system",
+    GLogHelp = "Activate logging (to file) for the specified sub-system",
+    FLogHelp = "Activate logging (to a uniquely named file) "
+               "for the specified sub-system",
     [
      %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
      %{help,     $h, "help",     undefined, "Show the program options"},
 
      %% forwarding rebar options
-     {verbose,  $v, "verbose",  integer,   VerboseHelp},
-     {defines,  $D, undefined,  string,    "Define compiler macro(s)"},
-     {jobs,     $j, "jobs",     integer,   JobsHelp},
+     {verbose,  $v, "verbose",  integer,    VerboseHelp},
+     {defines,  $D, undefined,  string,     "Define compiler macro(s)"},
+     {jobs,     $j, "jobs",     integer,    JobsHelp},
 
      %% execution environment
-     {profile,  $P, "profile",  string,    ProfileHelp},
+     {profile,  $P, "profile",  string,     ProfileHelp},
 
-     %%
+     %% multi-valued log activation
+     {clog, $L, "console-log",  atom, LogHelp},
+     {glog, $G, "global-file-log", atom, GLogHelp},
+     {flog, $F, "file-log", atom, FLogHelp},
 
      %% build support
-     {compile,  $C, "compile",  undefined, CompileHelp},
-     {build,    $b, "build",    string,    BuildHelp}
+     {compile,  $C, "compile",  undefined,  CompileHelp},
+     {build,    $b, "build",    string,     BuildHelp}
     ].
 
 config_overrides(Options) ->

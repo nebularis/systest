@@ -132,6 +132,13 @@ init([Scope, Id, Config]) ->
     %% names, perhaps this logic can go away?
     case systest_watchdog:sut_started(Id, self()) of
         ok ->
+            LogBase = systest_utils:default_log_dir(Config),
+            case systest_log:activate_logging_subsystem(sut, Id, LogBase) of
+                {error, _} ->
+                    log(framework, "per-system logging is disabled~n", []);
+                {ok, Dest} ->
+                    log(framework, "per-system logging to ~p~n", [Dest])
+            end,
             case with_sut({Scope, Id}, fun start_host/4, Config) of
                 Sut=#sut{procs=Procs, on_start=Hooks} ->
                     try 
@@ -240,12 +247,12 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
     case systest_cleaner:kill_wait(ProcRefs,
                                    fun systest_proc:stop/1, Timeout) of
         ok ->
-            log({framework, Id}, "stopping...~n"),
+            log({framework, Id}, "stopping...~n", []),
             [systest_watchdog:proc_stopped(Id, N) || N <- ProcRefs],
             gen_server:reply(ReplyTo, ok),
             {stop, normal, State};
         {error, {killed, StoppedOk}} ->
-            log({framework, Id}, "halt error: killed~n"),
+            log({framework, Id}, "halt error: killed~n", []),
             Err = {halt_error, orphans, ProcRefs -- StoppedOk},
             gen_server:reply(ReplyTo, Err),
             {stop, Err, State};
@@ -265,7 +272,7 @@ with_sut({Scope, Identity}, Handler, Config) ->
                                                      element(1, E) =/= on_start
                                                  end, SutConfig),
                 log({framework, Identity},
-                    "Configured hosts: ~p~n", [Hosts]),
+                    "configured hosts: ~p~n", [Hosts]),
                 Procs = lists:flatten([Handler(Identity, Alias,
                                                Host, Config) || Host <- Hosts]),
 

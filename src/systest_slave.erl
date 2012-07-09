@@ -98,15 +98,16 @@ handle_msg({nodedown, NodeId}, #proc{id=NodeId}, State=#state{runstate=RS}) ->
                        _       -> down
                    end,
     {stop, ShutdownType, State};
-handle_msg(Info, _Proc, State=#state{runstate=RS}) ->
-    log(framework,
+handle_msg(Info, Proc, State=#state{runstate=RS}) ->
+    log({framework, systest_proc:get(id, Proc)},
         "[~p] Ignoring Info Message:  ~p~n"
         "State:                       ~p~n",
         [?MODULE, Info, RS]),
     State.
 
-terminate(Reason, _Proc, _State) ->
-    log(framework, "Terminating due to ~p~n", [Reason]).
+terminate(Reason, Proc, _State) ->
+    log({framework, systest_proc:get(id, Proc)},
+        "Terminating due to ~p~n", [Reason]).
 
 %%
 %% Private API

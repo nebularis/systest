@@ -208,11 +208,21 @@ init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
     case catch( apply(Callback, init, [ProcInfo]) ) of
         {ok, NI2, HState} when is_record(NI2, proc) ->
 
+            Id = get(id, NI2),
+
+            LogBase = systest_utils:default_log_dir(get(config, NI2)),
+            case systest_log:activate_logging_subsystem(process, Id, LogBase) of
+                {error, _} ->
+                    log(framework, "per-process logging is disabled~n", []);
+                {ok, Dest} ->
+                    log(framework, "per-process logging to ~p~n", [Dest])
+            end,
+
             %% NB: look at branch 'cover' for details
             %% of how this will eventually look
             case Cover of
                 true ->
-                    cover:start(get(id, NI2));
+                    cover:start(Id);
                 _ ->
                     ok
             end,
@@ -289,24 +299,20 @@ apply_hook(Hook, Item, {Proc, HState}) ->
             Existing = get(user, Proc),
             {set([{user, StateL ++ Existing}], Proc), HState};
         {write, Loc, Data} ->
-            log(framework,
-                "[~p] ~p~n"
-                "argv: ~p~n"
-                "state-update: ~p => ~p~n",
-                [Proc#proc.id, Hook, Item, Loc, Data]),
+            log({framework, get(id, Proc)},
+                "~p (argv = ~p, state-update = [~p => ~p])~n",
+                [Hook, Item, Loc, Data]),
             {systest_proc:set([{Loc, Data}], Proc), HState};
         Other ->
-            log(framework,
-                "[~p] ~p~n"
-                "argv: ~p~n"
-                "response: ~p~n",
-                [Proc#proc.id, Hook, Item, Other]),
+            log({framework, get(id, Proc)},
+                "~p (argv = ~p, response = ~p)~n",
+                [Hook, Item, Other]),
             {Proc, HState}
     end.
 
 on_join(Proc, Sut, Procs, Hooks) ->
-    log(framework, "Proc ~p has joined a SUT with ~p~n",
-        [get(id, Proc), Procs]),
+    log({framework, get(id, Proc)},
+        "process has joined a SUT with ~p~n", [Procs]),
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
     {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
@@ -367,7 +373,8 @@ handle_msg(proc_info_list, State=#state{proc=Proc}, _ReplyTo) ->
     Info = [{K, get(K, Proc)} || K <- Attrs],
     {reply, Info, State};
 handle_msg({joined, Sut, Procs}, State=#state{proc=Proc}, _ReplyTo) ->
-    log(framework, "proc on_join info: ~p~n", [Proc#proc.on_join]),
+    log({framework, get(id, Proc)},
+        "proc on_join info: ~p~n", [Proc#proc.on_join]),
     case Proc#proc.on_join of
         []    -> {reply, ok, State};
         Hooks -> Proc2 = on_join(Proc, Sut, Procs, Hooks),
@@ -406,7 +413,7 @@ handle_msg(stop, State=#state{proc=Proc, handler=Mod,
         %% TODO: consider whether this is structured correctly - it *feels*
         %% a little hackish - and perhaps having a supervising process deal
         %% with these 'interactions' would be better
-        Shutdown  -> [log(framework, "~p~n",
+        Shutdown  -> [log({framework, get(id, Proc)}, "~p~n",
                         [interact(Proc, In, ModState)]) || In <- Shutdown]
     end,
     handle_callback(stopping_callback(Mod, handle_stop, Proc,
@@ -437,7 +444,7 @@ handle_msg({interaction, _},
 handle_msg({interaction, InputData},
             State=#state{proc=Proc, handler=Mod,
                          handler_state=ModState}, ReplyTo) ->
-    log(framework, "handle_interaction: ~p~n", [InputData]),
+    log({framework, get(id, Proc)}, "handle_interaction: ~p~n", [InputData]),
     handle_callback(Mod:handle_interaction(InputData,
                                            Proc, ModState), State, ReplyTo);
 %% our catch-all, which defers to Mod:handler_state/3 to see if the

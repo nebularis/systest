@@ -25,12 +25,17 @@
 -module(systest_utils).
 
 -include_lib("kernel/include/inet.hrl").
+-include("systest.hrl").
 
 -export([is_epmd_contactable/2, temp_dir/0, make_node/1, make_node/2]).
 -export([proplist_format/1, strip_suite_suffix/1, hostname/1]).
 -export([proc_id_and_hostname/1, find/2, timestamp/0]).
+-export([default_log_dir/1]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
+
+default_log_dir(Config) ->
+    ?CONFIG(scratch_dir, Config, systest_utils:temp_dir()).
 
 %% @doc make a valid erlang node shortname from Name,
 %% using the current (local) hostname

@@ -67,22 +67,31 @@ print_banner() ->
 export(Config) ->
     [export_entry(F, Config) || F <- get(escript_files)].
 
-export_entry({File, Bin}=Entry, Config) ->
-    case filename:split(File) of
-        [FN] ->
-            case filename:basename(FN, ".hrl") of
-                FN       -> ok;
-                _HrlFile -> Dest = filename:join(["systest", "include", FN]),
-                            do_export({Dest, Bin}, Config)
-            end;
-        ["systest", "ebin", _] ->
+export_entry({File, _}=Entry, Config) ->
+    case lists:any(fun(Ext) -> lists:suffix(Ext, File) end,
+                   [".hrl", ".beam", ".app"]) of
+        true ->
             do_export(Entry, Config);
-        _ ->
-            ok
+        false ->
+            skip
     end.
 
+%export_entry({File, Bin}=Entry, Config) ->
+%    case filename:split(File) of
+%        [FN] ->
+%            case filename:basename(FN, ".hrl") of
+%                FN       -> ok;
+%                _HrlFile -> Dest = filename:join(["systest", "include", FN]),
+%                            do_export({Dest, Bin}, Config)
+%            end;
+%        ["systest", "ebin", _] ->
+%            do_export(Entry, Config);
+%        _ ->
+%            ok
+%    end.
+
 do_export({File, Bin}, Config) ->
-    Path = filename:join(deps_dir(Config), File),
+    Path = filename:join([deps_dir(Config), "systest", File]),
     rebar_utils:ensure_dir(Path),
     file:write_file(Path, Bin).
 

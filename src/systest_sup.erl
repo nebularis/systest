@@ -36,11 +36,15 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, [
+    {ok, {{one_for_one, 5, 10}, [
+        {systest_event_log,
+            {systest_log, start_link, []},
+                permanent, 5000, worker, dynamic},
         {systest_config_server,
             {systest_config, start_link, []},
-             permanent, 5000, worker, [gen_server]},
+                permanent, 5000, worker, [gen_server]},
         {systest_watchdog,
             {systest_watchdog, start, []},
-             permanent, 5000, worker, [gen_server]}]}}.
+                permanent, 5000, worker, [gen_server]}
+    ]}}.
 

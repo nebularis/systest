@@ -82,6 +82,8 @@ systest(Config, _) ->
             {ok, Export} = start_cover(CoverBase, Config),
             rebar_log:log(debug, "cover:modules() = ~p~n", [cover:modules()]),
 
+            ok = systest_log:start(ct, systest_ct_log, common_test),
+
             Result = ct:run_test([{'spec', FinalSpec},
                                   {logdir,
                                        filename:join(ScratchDir, "ct-logs")},

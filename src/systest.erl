@@ -33,6 +33,8 @@
 -export([sut_config/1]).
 -export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
+-export([list_processes/1, process_data/2, read_process_user_data/1,
+         write_process_user_data/2, restart/2]).
 
 %%
 %% Public APIs
@@ -96,6 +98,12 @@ sigkill(Pid) ->
     Result = os:cmd("kill -9 " ++ Pid),
     systest_log:log(framework, Result).
 
+stop_and_wait(ProcRef) ->
+    systest_proc:stop_and_wait(ProcRef).
+
+kill_after(Timeout, Target) ->
+    systest_proc:kill_after(Timeout, Target).
+
 interact(Proc, Inputs) ->
     systest_proc:interact(Proc, Inputs).
 
@@ -126,9 +134,23 @@ active_sut(Config) ->
 suts(Config) ->
     systest_config:read(?MODULE, Config).
 
+list_processes(SutRef) ->
+    procs(SutRef).
+
 procs(SutRef) ->
     systest_sut:procs(SutRef).
 
 sut_config(Scope) ->
     ct:get_config({Scope, sut}).
 
+process_data(Field, ProcRec) ->
+    systest_proc:get(Field, ProcRec).
+
+read_process_user_data(ProcRef) ->
+    systest_proc:user_data(ProcRef).
+
+write_process_user_data(ProcRef, Data) ->
+    systest_proc:user_data(ProcRef, Data).
+
+restart(SutRef, ProcRef) ->
+    systest_sut:restart_proc(SutRef, ProcRef).

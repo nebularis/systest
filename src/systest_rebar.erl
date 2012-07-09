@@ -52,7 +52,7 @@ systest(Config, _) ->
                      Dir   -> Dir
                  end,
 
-    rebar_file_utils:rm_rf(ScratchDir),
+    systest_utils:rm_rf(ScratchDir),
     filelib:ensure_dir(filename:join([ScratchDir, "ct-logs", "foo"])),
     rebar_config:set_global(scratch_dir, ScratchDir),
 
@@ -99,7 +99,7 @@ systest(Config, _) ->
                         {ok, 0} ->
                             ok;
                         {ok, Failed} ->
-                            rebar_utils:abort("Failed (~p failing test cases)",
+                            rebar_utils:abort("Failed (~p failing test cases)~n",
                                               [Failed])
                     end
             end

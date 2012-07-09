@@ -518,6 +518,7 @@ reply(Reply, ReplyTo, State) ->
 %% proc making and configuration handling
 
 make_proc(Config) ->
+    log(framework, "make process: ~p~n", [Config]),
     %% NB: new_proc_info is an exprecs generated function
     record_fromlist([{scope,      ?REQUIRE(scope, Config)},
                      {host,       ?REQUIRE(host, Config)},

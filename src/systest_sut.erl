@@ -295,7 +295,7 @@ print_status_info({Proc, Status}) ->
 
 build_procs(Identity, Sut, {Host, Procs}, Config) ->
     [systest_proc:make_proc(Sut, N, [{host, Host}, {scope, Identity},
-                                         {name, N}|Config]) || N <- Procs].
+                                     {name, N}|Config]) || N <- Procs].
 
 start_host(Identity, Sut, {localhost, Procs}, Config) ->
     {ok, Hostname} = inet:gethostname(),

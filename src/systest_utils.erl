@@ -29,10 +29,32 @@
 
 -export([is_epmd_contactable/2, temp_dir/0, make_node/1, make_node/2]).
 -export([proplist_format/1, strip_suite_suffix/1, hostname/1]).
--export([proc_id_and_hostname/1, find/2, timestamp/0]).
+-export([proc_id_and_hostname/1, find/2, timestamp/0, rm_rf/1]).
 -export([default_log_dir/1]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
+
+rm_rf([H|_]=Path) when is_integer(H) ->
+    rm_rf([Path]);
+rm_rf(Paths) when is_list(Paths) ->
+    lists:foldl(fun rm_rf/2, ok, Paths).
+
+rm_rf(_Path, {error, _}=Err) ->
+    Err;
+rm_rf(Path, ok) ->
+    case filelib:is_dir(Path) of
+        false ->
+            case file:delete(Path) of
+                ok              -> ok;
+                {error, enoent} -> ok;
+                {error, Err}    -> {error, {Path, Err}}
+            end;
+        true ->
+            case file:list_dir(Path) of
+                {ok, FileNames} -> rm_rf(FileNames);
+                {error, Err}    -> {error, {Path, Err}}
+            end
+    end.
 
 default_log_dir(Config) ->
     ?CONFIG(scratch_dir, Config, systest_utils:temp_dir()).

@@ -544,6 +544,7 @@ lookup(Key, Config, Default) ->
 
 proc_config(Sut, Proc) ->
     Procs = systest_config:get_config({Sut, processes}),
+    log({framework, Proc}, "processes loading from config: ~p~n", [Procs]),
     UserData = systest_config:get_config({Sut, user_data}),
     ProcConf = case ?CONFIG(Proc, Procs, undefined) of
                    undefined               -> [];

@@ -32,6 +32,9 @@
                                      fun systest_proc:get/2}}])).
 -define(WRITE(Key, Value, Conf),
         lists:keyreplace(Key, 1, Conf, Value)).
+-define(REPLACE(Key, Value, Conf),
+        systest_config:replace_value(Key, Value, Conf)).
+-define(ENV(A, B), systest_utils:lookup_env(A, B)).
 
 -type application_info() :: {atom(), [{atom(), term()}]}.
 

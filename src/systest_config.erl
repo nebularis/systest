@@ -37,6 +37,7 @@
 -export([replace_value/3, ensure_value/3]).
 -export([get_config/1, get_config/3, merge_config/2]).
 -export([get_env/0, get_env/1, set_env/2]).
+-export([load_config/2, load_config_terms/2]).
 
 -export([start_link/0]).
 
@@ -55,9 +56,6 @@
     source     :: [{term(), term()}]
 }).
 
-%%
-%% Public API
-%%
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -83,6 +81,7 @@ sut_config(Scope, Identity) ->
             end
     end.
 
+%% @private
 extract_sut_config(Identity) ->
     case ct:get_config({Identity, sut}, noconfig) of
         noconfig ->
@@ -220,7 +219,20 @@ require_env(Key) ->
 set_env(Key, Value) ->
     ok = gen_server:call(?MODULE, {set, Key, Value}).
 
+load_config(Id, Path) ->
+    case file:consult(Path) of
+        {ok, Terms} ->
+            load_config_terms(Id, Terms);
+        Error ->
+            Error
+    end.
+
+load_config_terms(Id, Terms) ->
+    gen_server:call(?MODULE, {load, Id, Terms}).
+
 get_config(Key) ->
+    systest_log:log(framework,
+                    "reading config key ~p~n", [Key]),
     case ct:get_config(Key, [], [all]) of
         [Cfg] when is_list(Cfg) -> Cfg;
         Other                   -> Other
@@ -270,6 +282,18 @@ handle_call({set, Key, Value}, _From, State) ->
     {reply, ok, State};
 handle_call(list, _From, State) ->
     {reply, ets:tab2list(?MODULE), State};
+handle_call({load, Id, Terms}, _From, State) ->
+    case ets:info(Id) of
+        undefined -> ets:new(Id, [bag, named_table,
+                                  protected, {keypos, 1},
+                                  {write_concurrency, false},
+                                  {read_concurrency, true}]);
+        _T        -> ok
+    end,
+    true = ets:insert(Id, Terms),
+    {reply, ok, State};
+handle_call({get_config, Key}, _From, State) ->
+    {reply, ets:tab2list(Key), State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -284,6 +308,10 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%%
+%% Private/Internal API
+%%
 
 merge(New, Existing) when is_tuple(New) ->
     K = element(1, New),

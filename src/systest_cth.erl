@@ -102,12 +102,12 @@ post_end_per_group(Group, Config, Result, State) ->
 pre_init_per_testcase(TC, Config, State=#state{auto_start=false}) ->
     {systest:trace_on(TC, Config), State};
 pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
-    log(framework, "~p handling pre_init_per_testcase [~p]~n", [?MODULE, TC]),
+    log(framework, "handling ~p pre_init_per_testcase~n", [TC]),
     {systest:start(Suite, TC, Config), State}.
 
 post_end_per_testcase(TC, Config, Return, State) ->
     %% TODO: handle {save_config, Config} return values in st:stop
-    log(framework, "processing post_end_per_testcase: ~p: ~p~n", [TC, Config]),
+    log(framework, "processing ~p post_end_per_testcase~n", [TC]),
     Result = check_exceptions(TC, Return),
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
@@ -134,7 +134,7 @@ check_exceptions(SutId, Return) ->
         [] ->
             Return;
         Ex ->
-            log("test instance ~p failed!~n", [SutId]),
+            % log("test instance ~p failed!~n", [SutId]),
             
             [begin
                 log("~p: ~p~n", [SutId, Reason])

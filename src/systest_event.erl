@@ -103,9 +103,9 @@ failed(What, Desc, FailInfo) when is_list(What) ->
     failed(list_to_atom(string:join(lists:flatten([
                 io_lib:format("~p", [Thing]) || Thing <- What]), "|")),
           Desc, FailInfo);
-failed(What, Desc, FailInfo) when is_atom(What) ->
-    console("~s ~p failed: ~s~n", [Desc, What,
-                                   lists:flatten(fail_info(FailInfo))]).
+failed(What, Desc, _FailInfo) when is_atom(What) ->
+    console("~s ~p failed.~n", [Desc, What]).
+                        % lists:flatten(fail_info(FailInfo))]).
 
 fail_info({error,FailInfo}) ->
     fail_info(FailInfo);

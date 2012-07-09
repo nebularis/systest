@@ -47,6 +47,8 @@
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
 
+-import(systest_log, [log/2, log/3]).
+
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
 -exprecs_vfname([fname, "__", version]).
@@ -93,7 +95,7 @@ start(Scope, Proc, Config) ->
 -spec start(proc_info()) -> {'ok', pid()} | {'error', term()}.
 start(ProcInfo=#proc{handler=Handler, host=Host,
                      name=Name, config=BaseConf}) ->
-    ct:log("Starting ~p on ~p~n", [Name, Host]),
+    log(framework, "starting ~p on ~p~n", [Name, Host]),
 
     %% are there hidden traps here, when (for example) we're running
     %% embedded in an archive/escript or similarly esoteric situations?
@@ -122,8 +124,9 @@ kill(ProcRef) ->
 
 -spec sigkill(proc_ref()) -> 'ok'.
 sigkill(ProcRef) ->
-    ct:log("[WARNING] using SIGKILL is *NOT*"
-           " guaranteed to work with all proc types!~n"),
+    log(framework,
+        "[WARNING] using SIGKILL is *NOT*"
+        " guaranteed to work with all proc types!~n"),
     gen_server:cast(ProcRef, sigkill).
 
 -spec kill_after(integer(), proc_ref()) -> 'ok'.
@@ -175,12 +178,14 @@ shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
         false -> link(Owner),
-                 ct:log("Waiting for ~p to exit from: ~p~n",
-                        [Owner, erlang:process_info(self())]),
+                 log(framework,
+                     "waiting for ~p to exit from: ~p~n",
+                     [Owner, erlang:process_info(self())]),
                  ok = ShutdownOp(Owner),
                  receive
                      {'EXIT', Owner, _Reason} -> ok;
-                     Other                    -> ct:log("Other ~p~n", [Other])
+                     Other                    -> log(framework,
+                                                     "Other ~p~n", [Other])
                  end
     end.
 
@@ -284,21 +289,24 @@ apply_hook(Hook, Item, {Proc, HState}) ->
             Existing = get(user, Proc),
             {set([{user, StateL ++ Existing}], Proc), HState};
         {write, Loc, Data} ->
-            ct:log("[~p] ~p~n"
-                   "argv: ~p~n"
-                   "state-update: ~p => ~p~n",
-                   [Proc#proc.id, Hook, Item, Loc, Data]),
+            log(framework,
+                "[~p] ~p~n"
+                "argv: ~p~n"
+                "state-update: ~p => ~p~n",
+                [Proc#proc.id, Hook, Item, Loc, Data]),
             {systest_proc:set([{Loc, Data}], Proc), HState};
         Other ->
-            ct:log("[~p] ~p~n"
-                   "argv: ~p~n"
-                   "response: ~p~n",
-                    [Proc#proc.id, Hook, Item, Other]),
+            log(framework,
+                "[~p] ~p~n"
+                "argv: ~p~n"
+                "response: ~p~n",
+                [Proc#proc.id, Hook, Item, Other]),
             {Proc, HState}
     end.
 
 on_join(Proc, Sut, Procs, Hooks) ->
-    ct:log("Proc ~p has joined a SUT with ~p~n", [get(id, Proc), Procs]),
+    log(framework, "Proc ~p has joined a SUT with ~p~n",
+        [get(id, Proc), Procs]),
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
     {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
@@ -359,7 +367,7 @@ handle_msg(proc_info_list, State=#state{proc=Proc}, _ReplyTo) ->
     Info = [{K, get(K, Proc)} || K <- Attrs],
     {reply, Info, State};
 handle_msg({joined, Sut, Procs}, State=#state{proc=Proc}, _ReplyTo) ->
-    ct:log("proc on_join info: ~p~n", [Proc#proc.on_join]),
+    log(framework, "proc on_join info: ~p~n", [Proc#proc.on_join]),
     case Proc#proc.on_join of
         []    -> {reply, ok, State};
         Hooks -> Proc2 = on_join(Proc, Sut, Procs, Hooks),
@@ -398,7 +406,7 @@ handle_msg(stop, State=#state{proc=Proc, handler=Mod,
         %% TODO: consider whether this is structured correctly - it *feels*
         %% a little hackish - and perhaps having a supervising process deal
         %% with these 'interactions' would be better
-        Shutdown  -> [ct:log("~p~n",
+        Shutdown  -> [log(framework, "~p~n",
                         [interact(Proc, In, ModState)]) || In <- Shutdown]
     end,
     handle_callback(stopping_callback(Mod, handle_stop, Proc,
@@ -429,7 +437,7 @@ handle_msg({interaction, _},
 handle_msg({interaction, InputData},
             State=#state{proc=Proc, handler=Mod,
                          handler_state=ModState}, ReplyTo) ->
-    ct:log("handle_interaction: ~p~n", [InputData]),
+    log(framework, "handle_interaction: ~p~n", [InputData]),
     handle_callback(Mod:handle_interaction(InputData,
                                            Proc, ModState), State, ReplyTo);
 %% our catch-all, which defers to Mod:handler_state/3 to see if the

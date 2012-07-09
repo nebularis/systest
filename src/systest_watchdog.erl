@@ -26,6 +26,8 @@
 
 -include("systest.hrl").
 
+-import(systest_log, [log/2, log/3]).
+
 -define(ETS_OPTS,
         [{read_concurrency, true},
          {write_concurrency, false}]).
@@ -62,7 +64,7 @@ reset() ->
 force_stop(Id) ->
     case gen_server:call(?MODULE, {force_stop, Id}) of
         {error, regname, Id} ->
-            ct:log("ignoring stop for deceased SUT ~p~n", [Id]);
+            log(framework, "ignoring stop for deceased SUT ~p~n", [Id]);
         Ok ->
             Ok
     end.
@@ -114,11 +116,12 @@ handle_call({force_stop, SutId}, _From,
             State=#state{sut_table=CT}) ->
     case ets:lookup(CT, SutId) of
         [] ->
-            ct:log("~p not found in ~p~n", [SutId, ets:tab2list(CT)]),
+            log(framework,
+                "~p not found in ~p~n", [SutId, ets:tab2list(CT)]),
             {reply, {error, regname, SutId}, State};
         [{SutId, Pid}] ->
             systest_sut:stop(Pid),
-            ct:log("force stop complete~n"),
+            log(framework, "force stop complete~n"),
             {reply, ok, State}
     end;
 handle_call({exceptions, SutId}, _From,
@@ -146,8 +149,9 @@ handle_info({'EXIT', Pid, Reason},
                          exception_table=ET}) ->
     case ets:match_object(CT, {'_', Pid}) of
         [{SutId, _}=Sut] ->
-            ct:log("watchdog handling sut (process) down"
-                   " event for ~p~n", [SutId]),
+            log(framework,
+                "watchdog handling sut (process) down"
+                " event for ~p~n", [SutId]),
 
             case Reason of
                 normal ->
@@ -168,8 +172,9 @@ handle_info({'EXIT', Pid, Reason},
             handle_down(Sut, NT),
             ets:delete(CT, SutId);
         [[]] ->
-            ct:log("sut down even unhandled: no id for "
-                   "~p in ~p~n", [Pid, ets:tab2list(CT)]),
+            log(framework,
+                "sut down even unhandled: no id for "
+                "~p in ~p~n", [Pid, ets:tab2list(CT)]),
             ok
     end,
     {noreply, State}.
@@ -187,7 +192,7 @@ code_change(_OldVsn, State, _Extra) ->
 report_orphans(_, [], _) ->
     ok;
 report_orphans({SutId, _}, Procs, ET) ->
-    ct:log("watchdog detected orphaned procs of dead sut ~p: ~p~n",
+    log(framework, "watchdog detected orphaned procs of dead sut ~p: ~p~n",
            [SutId, Procs]),
     ets:insert(ET, [{SutId, orphan, N} || N <- Procs]).
 
@@ -198,7 +203,7 @@ handle_down(Sut, ProcTable) ->
     kill_wait(find_procs(ProcTable, Sut)).
 
 kill_wait([]) ->
-    ct:log("no procs to kill~n");
+    log(framework, "no procs to kill~n");
 kill_wait(Procs) ->
     systest_cleaner:kill_wait(Procs, fun systest_proc:kill/1).
 

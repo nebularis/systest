@@ -46,7 +46,7 @@ local_and_global_scope_configuration_handling(Config) ->
 starting_and_stopping_procs(Config) ->
     process_flag(trap_exit, true),
     Sut = systest:active_sut(Config),
-    systest_sut:print_status(Sut),
+    systest_sut:log_status(Sut),
     [begin
          ?assertEqual(up,   systest_proc:status(Ref)),
          ?assertEqual(pong, net_adm:ping(Id)),
@@ -59,7 +59,7 @@ starting_and_stopping_procs(Config) ->
 killing_procs(Config) ->
     process_flag(trap_exit, true),
     Sut = systest:active_sut(Config),
-    systest_sut:print_status(Sut),
+    systest_sut:log_status(Sut),
     [begin
          ?assertEqual(up, systest_proc:status(Ref)),
          ok = systest_proc:kill_and_wait(Ref),
@@ -71,7 +71,7 @@ killing_procs(Config) ->
 sigkill_on_procs(Config) ->
     process_flag(trap_exit, true),
     Sut = systest:active_sut(Config),
-    systest_sut:print_status(Sut),
+    systest_sut:log_status(Sut),
     [begin
          ?assertEqual(up, systest_proc:status(Ref)),
          ok = systest_proc:shutdown_and_wait(Ref,
@@ -83,7 +83,7 @@ sigkill_on_procs(Config) ->
 handling_detached_processes(Config) ->
     process_flag(trap_exit, true),
     Sut = systest:active_sut(Config),
-    systest_sut:print_status(Sut),
+    systest_sut:log_status(Sut),
     [begin
          ?assertEqual(up, systest_proc:status(Ref)),
          ok = systest_proc:kill_and_wait(Ref),

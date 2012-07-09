@@ -95,7 +95,7 @@ suite_nodes_should_be_up_and_running(_Config) ->
     ok.
 
 end_per_tc_can_manage_shutdown(Config) ->
-    systest_sut:print_status(?CONFIG(active, Config)),
+    systest_sut:log_status(?CONFIG(active, Config)),
     ok.
 
 end_per_tc_automation(Config) ->
@@ -121,7 +121,6 @@ after_end_per_tc_automation() ->
 after_end_per_tc_automation(Config) ->
     {end_per_tc_automation, SavedConfig} = ?config(saved_config, Config),
     SutPid = ?CONFIG(previous_active, SavedConfig),
-    ct:log("is end_per_tc_automation still alive!?...~n"),
     ?assertEqual(false, erlang:is_process_alive(SutPid)).
 
 trapping_nodedown_messages(Config) ->
@@ -130,4 +129,4 @@ trapping_nodedown_messages(Config) ->
     {_, ProcRef} = hd(systest:procs(Pid)),
     systest_proc:stop_and_wait(ProcRef),
     ?assertEqual({down, noproc}, systest_proc:status(ProcRef)),
-    systest_sut:print_status(Pid).  %% just to make sure it doesn't crash!
+    systest_sut:log_status(Pid).  %% just to make sure it doesn't crash!

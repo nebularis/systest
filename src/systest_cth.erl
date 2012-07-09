@@ -66,7 +66,7 @@ init(systest, _Opts) ->
 pre_init_per_suite(Suite, Config, State=#state{auto_start=false}) ->
     {Config, State#state{suite=Suite}};
 pre_init_per_suite(Suite, Config, State) ->
-    log(ct, "pre_init_per_suite: maybe start ~p", [Suite]),
+    log(framework, "pre_init_per_suite: maybe start ~p", [Suite]),
     %% TODO: handle init_per_suite use of SUT aliases
     {systest:start_suite(Suite, systest:trace_on(Suite, Config)),
                     State#state{suite=Suite}}.
@@ -75,10 +75,10 @@ post_end_per_suite(Suite, Config, Result, State) ->
     %% TODO: check and see whether there *is* actually an active SUT
     case ?CONFIG(systest_utils:strip_suite_suffix(Suite), Config, undefined) of
         undefined ->
-            log(ct, "no configured suite to stop~n");
+            log(framework, "no configured suite to stop~n");
         SutPid ->
-            log(ct, "stopping ~p~n", [SutPid]),
-            log(ct, "stopped ~p~n",
+            log(framework, "stopping ~p~n", [SutPid]),
+            log(framework, "stopped ~p~n",
                    [systest_sut:stop(SutPid)])
     end,
     systest:trace_off(Config),
@@ -102,12 +102,12 @@ post_end_per_group(Group, Config, Result, State) ->
 pre_init_per_testcase(TC, Config, State=#state{auto_start=false}) ->
     {systest:trace_on(TC, Config), State};
 pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
-    log(ct, "~p handling pre_init_per_testcase [~p]~n", [?MODULE, TC]),
+    log(framework, "~p handling pre_init_per_testcase [~p]~n", [?MODULE, TC]),
     {systest:start(Suite, TC, Config), State}.
 
 post_end_per_testcase(TC, Config, Return, State) ->
     %% TODO: handle {save_config, Config} return values in st:stop
-    log(ct, "processing post_end_per_testcase: ~p: ~p~n", [TC, Config]),
+    log(framework, "processing post_end_per_testcase: ~p: ~p~n", [TC, Config]),
     Result = check_exceptions(TC, Return),
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
@@ -116,11 +116,11 @@ post_end_per_testcase(TC, Config, Return, State) ->
         SutPid ->
             case erlang:is_process_alive(SutPid) of
                 true ->
-                    log(ct, "stopping ~p~n", [SutPid]),
-                    log(ct, "stopped ~p~n",
+                    log(framework, "stopping ~p~n", [SutPid]),
+                    log(framework, "stopped ~p~n",
                            [systest_sut:stop(SutPid)]);
                 false ->
-                    log(ct, "sut ~p is already down~n", [SutPid])
+                    log(framework, "sut ~p is already down~n", [SutPid])
             end,
             systest:trace_off(Config),
             {Result, State}
@@ -144,6 +144,6 @@ check_exceptions(SutId, Return) ->
                            [E] -> E;
                            _   -> Ex
                        end,
-            {fail, {Return, Ex}}
+            {fail, {Return, Failures}}
     end.
 

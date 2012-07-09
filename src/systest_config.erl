@@ -72,7 +72,9 @@ sut_config(Scope, Identity) ->
                         search_options([{key_func, fun(X) -> X end}])) of
                 Bad when Bad =:= not_found orelse
                          Bad =:= undefined ->
-                    ct:log("nothing at ~p.(~p|all)~n", [Scope, Identity]),
+                    systest_log:log(framework,
+                                    "nothing at ~p.(~p|all)~n",
+                                    [Scope, Identity]),
                     {Identity, extract_sut_config(Identity)};
                 Alias when is_atom(Alias) ->
                     {Alias, extract_sut_config(Alias)};

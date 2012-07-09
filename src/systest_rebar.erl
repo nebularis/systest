@@ -82,7 +82,7 @@ systest(Config, _) ->
             {ok, Export} = start_cover(CoverBase, Config),
             rebar_log:log(debug, "cover:modules() = ~p~n", [cover:modules()]),
 
-            ok = systest_log:start(ct, systest_ct_log, common_test),
+            ok = systest_log:start(framework, systest_ct_log, common_test),
 
             Result = ct:run_test([{'spec', FinalSpec},
                                   {logdir,
@@ -94,9 +94,14 @@ systest(Config, _) ->
             case Result of
                 {error, Reason} ->
                     error(Reason);
-                Results ->
-                    rebar_log:log(info, "Results: ~p~n", [Results]),
-                    ok
+                _Results ->
+                    case application:get_env(systest, failures) of
+                        {ok, 0} ->
+                            ok;
+                        {ok, Failed} ->
+                            rebar_utils:abort("Failed (~p failing test cases)",
+                                              [Failed])
+                    end
             end
     end.
 

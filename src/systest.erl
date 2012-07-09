@@ -92,9 +92,9 @@ trace_off(Config) ->
 %% interactions
 
 sigkill(Pid) ->
-    ct:log("executing kill -9 ~s~n", [Pid]),
+    systest_log:log(framework, "executing kill -9 ~s~n", [Pid]),
     Result = os:cmd("kill -9 " ++ Pid),
-    ct:log(Result).
+    systest_log:log(framework, Result).
 
 interact(Proc, Inputs) ->
     systest_proc:interact(Proc, Inputs).

@@ -116,6 +116,8 @@ log(Fmt, Args) ->
 %% systest_log callback API!
 %%
 
+write_log({framework, EvId}, Fd, What, Args) ->
+    write_log(EvId, Fd, What, Args);
 write_log(EvId, Fd, What, Args) ->
     io:format(Fd, "[~p]  " ++ What, [EvId|Args]).
 

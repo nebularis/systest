@@ -40,6 +40,8 @@
 
 -include("systest.hrl").
 
+-import(systest_log, [log/2, log/3]).
+
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
 -exprecs_vfname([fname, "__", version]).
@@ -67,7 +69,7 @@ start_link(ScopeId, SutId, Config) ->
     start_it(start_link, ScopeId, SutId, Config).
 
 start_it(How, ScopeId, SutId, Config) ->
-    ct:log("Processing SUT ~p~n", [SutId]),
+    log(framework, "System Under Test: ~p~n", [SutId]),
     case apply(gen_server, How, [{local, SutId},
                                  ?MODULE, [ScopeId, SutId, Config], []]) of
         {error, noconfig} ->
@@ -103,10 +105,11 @@ procs(SutRef) ->
     gen_server:call(SutRef, procs).
 
 print_status(Sut) ->
-    ct:log(lists:flatten([print_status_info(N) || N <- status(Sut)])).
+    log(lists:flatten([print_status_info(N) || N <- status(Sut)]), []).
 
 log_status(Sut) ->
-    ct:log(lists:flatten([print_status_info(N) || N <- status(Sut)])).
+    log(framework,
+        lists:flatten([print_status_info(N) || N <- status(Sut)]), []).
 
 check_config(Sut, Config) ->
     with_sut({Sut, Sut}, fun build_procs/4, Config).
@@ -134,17 +137,18 @@ init([Scope, Id, Config]) ->
                     try 
                         case Hooks of
                             [{on_start, Run}|_] ->
-                                ct:log("running SUT on_start hooks ~p~n",
-                                       [Run]),
+                                log({framework, Id},
+                                    "running on_start hooks ~p~n", [Run]),
                                 [systest_hooks:run(Sut,
                                                    Hook, Sut) || Hook <- Run];
                             Other ->
-                                ct:log("ignoring SUT hooks ~p~n", [Other]),
+                                log({framework, Id},
+                                    "ignoring on_start hooks ~p~n", [Other]),
                                 ok
                         end,
                         [begin
                              {_, Ref} = Proc,
-                             ct:log("~p joined_sut~n", [Proc]),
+                             log(framework, "~p has joined~n", [Proc]),
                              systest_proc:joined_sut(Ref, Sut, Procs -- [Proc])
                          end || Proc <- Procs],
                         {ok, Sut}
@@ -236,17 +240,17 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
     case systest_cleaner:kill_wait(ProcRefs,
                                    fun systest_proc:stop/1, Timeout) of
         ok ->
-            ct:log("Stopping SUT...~n"),
+            log({framework, Id}, "stopping...~n"),
             [systest_watchdog:proc_stopped(Id, N) || N <- ProcRefs],
             gen_server:reply(ReplyTo, ok),
             {stop, normal, State};
         {error, {killed, StoppedOk}} ->
-            ct:log("Halt Error: killed~n"),
+            log({framework, Id}, "halt error: killed~n"),
             Err = {halt_error, orphans, ProcRefs -- StoppedOk},
             gen_server:reply(ReplyTo, Err),
             {stop, Err, State};
         Other ->
-            ct:log("Halt Error: ~p~n", [Other]),
+            log({framework, Id}, "halt error: ~p~n", [Other]),
             gen_server:reply(ReplyTo, {error, Other}),
             {stop, {halt_error, Other}, State}
     end.
@@ -260,7 +264,8 @@ with_sut({Scope, Identity}, Handler, Config) ->
                 {Hosts, Hooks} = lists:splitwith(fun(E) ->
                                                      element(1, E) =/= on_start
                                                  end, SutConfig),
-                ct:log("Configured hosts: ~p~n", [Hosts]),
+                log({framework, Identity},
+                    "Configured hosts: ~p~n", [Hosts]),
                 Procs = lists:flatten([Handler(Identity, Alias,
                                                Host, Config) || Host <- Hosts]),
 
@@ -311,7 +316,7 @@ verify_host(Host) ->
         true ->
             ok;
         {false, Reason} ->
-            ct:log("Unable to contact ~p: ~p~n", [Host, Reason]),
+            log(framework, "unable to contact ~p: ~p~n", [Host, Reason]),
             throw({host_unavailable, Host})
     end.
 

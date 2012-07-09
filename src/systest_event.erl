@@ -90,12 +90,11 @@ handle_event(#event{name=tc_auto_skip, data={Suite,Func,Reason}}, State) ->
 handle_event(#event{name=test_stats}=Ev, _State) ->
     {ok, Ev};
 handle_event(#event{name=test_done}, #event{data={Ok, Failed, Skipped}}=S) ->
-    application:set_env(systest, failures, Failed),
-    {UserSkipped,AutoSkipped} = Skipped,
-    console("test run complete:~n"
-            "~p passed, ~p failed, "
-            "~p skipped (user), ~p skipped (auto)~n",
-            [Ok, Failed, UserSkipped, AutoSkipped]),
+    PreviousFailed = case application:get_env(systest, failures) of
+                         undefined -> 0;
+                        Value     -> Value
+                     end,
+    application:set_env(systest, failures, PreviousFailed + Failed),
     {ok, S};
 handle_event(_Message, State) ->
     {ok, State}.

@@ -41,12 +41,12 @@ id(_Opts) ->
 %% @doc Always called before any other callback function. Use this to initiate
 %% any common state.
 init(_Id, _Opts) ->
-    ct:log("intialising ~p~n", [?MODULE]),
+    systest_log:log(framework, "intialising ~p~n", [?MODULE]),
     {ok, #ctx{}}.
 
 pre_init_per_testcase(TC, [{_,_}|_]=Config, State) ->
     Active = ?CONFIG(TC, Config, undefined),
-    ct:log("active sut: ~p~n", [Active]),
+    systest_log:log(framework, "active sut: ~p~n", [Active]),
     {Config, State#ctx{active={TC, Active}}};
 pre_init_per_testcase(TC, Config, State) ->
     {Config, State}.
@@ -69,23 +69,25 @@ post_end_per_testcase(TC, Config, Return,
             %% shut down the sut, so here we assert that this is the case..
             case erlang:is_process_alive(Active) of
                 false ->
-                    ct:log("sut process is already dead! pass~n"),
+                    systest_log:log(framework,
+                                    "sut process is already dead! pass~n"),
                     {Return, State};
                 true ->
                     case systest_watchdog:exceptions(TC) of
                         [] ->
-                            ct:log("sut process is still "
-                                   "alive, with no exception~n"),
+                            systest_log:log(framework,
+                                            "sut process is still "
+                                            "alive, with no exception~n"),
                             {Return, State};
                         Ex ->
                             ErrMsg =
-                            io_lib:format("Unexpected shutdown failures: ~p~n",
+                            io_lib:format("unexpected shutdown failures: ~p~n",
                                           [Ex]),
                             {{fail, ErrMsg}, State}
                     end
             end;
         SutPid ->
-            ct:log("ignoring active sut ~p~n", [SutPid]),
+            systest_log:log(framework, "ignoring active sut ~p~n", [SutPid]),
             %% we don't actually *care* about this case, because the user
             %% defined end_per_testcase in the SUITE only shuts down the
             %% sut for a specific subset of the test cases, and all the
@@ -93,7 +95,7 @@ post_end_per_testcase(TC, Config, Return,
             {Return, State}
     end;
 post_end_per_testcase(TC, _Config, Return, State) ->
-    ct:log("ignoring testcase ~p: ~p~n", [TC, Return]),
+    systest_log:log(framework, "ignoring testcase ~p: ~p~n", [TC, Return]),
     {Return, State}.
 
 %% TODO: test group shutdown here....

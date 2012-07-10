@@ -132,7 +132,7 @@ init([Scope, Id, Config]) ->
     %% names, perhaps this logic can go away?
     case systest_watchdog:sut_started(Id, self()) of
         ok ->
-            LogBase = systest_utils:default_log_dir(Config),
+            LogBase = systest_env:default_log_dir(Config),
             case systest_log:activate_logging_subsystem(sut, Id, LogBase) of
                 {error, _} ->
                     log(framework, "per-system logging is disabled~n", []);
@@ -319,7 +319,7 @@ start_proc(Identity, Proc) ->
     {?CONFIG(id, systest_proc:proc_data(ProcRef)), ProcRef}.
 
 verify_host(Host) ->
-    case systest_utils:is_epmd_contactable(Host, 5000) of
+    case systest_env:is_epmd_contactable(Host, 5000) of
         true ->
             ok;
         {false, Reason} ->

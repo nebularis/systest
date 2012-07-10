@@ -26,12 +26,16 @@
 
 -include("systest.hrl").
 
--export([make_node/1, make_node/2, as_string/1]).
+-export([make_node/1, make_node/2, as_string/1, abort/2]).
 -export([proplist_format/1, strip_suite_suffix/1]).
 -export([proc_id_and_hostname/1, rm_rf/1, find_files/2]).
 -export([with_file/3, with_termfile/2, combine/2, uniq/1]).
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
--export([record_to_proplist/2]).
+-export([record_to_proplist/2, border/2]).
+
+abort(Fmt, Args) ->
+    io:format(user, Fmt, Args),
+    init:stop(1).
 
 throw_unless(Cond, Msg) ->
     throw_unless(Cond, Msg, []).
@@ -132,14 +136,22 @@ record_to_proplist(Rec, Mod) ->
 %% @doc convert the 'proplist' L into a printable list
 %% @end
 proplist_format(L) ->
+    DescrLen = 1 + lists:max([length(as_string(K)) || {K, _V} <- L]),
+    Padding = erlang:max(25, DescrLen),
+    LenPrefix = "~-" ++ integer_to_list(Padding),
     lists:flatten(
         [begin
              Fmt = if is_list(V) andalso
                       is_integer(hd(V)) -> "~s~n";
                       true -> "~p~n"
                    end,
-             io_lib:format("    ~p: " ++ Fmt, [K, V])
+             io_lib:format(LenPrefix ++ "s: " ++ Fmt, [as_string(K), V])
          end || {K, V} <- L]).
+
+border(S, C) ->
+    Pad = erlang:max(25, length(S)),
+    Border = string:copies(C, Pad),
+    io_lib:format("~s~n~s~n~s~n", [Border, string:centre(S, Pad), Border]).
 
 %% @doc recursive search in Dir for files matching Regex
 %% @end

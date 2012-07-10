@@ -1,18 +1,27 @@
-%% Copyright (c) 2012 Nebularis.  All Rights Reserved.
+%% -*- tab-width: 4;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%% ex: ts=4 sw=4 et
+%% ----------------------------------------------------------------------------
 %%
-%% This file is provided to you under the Apache License,
-%% Version 2.0 (the "License"); you may not use this file
-%% except in compliance with the License.  You may obtain
-%% a copy of the License at
+%% Copyright (c) 2005 - 2012 Nebularis.
 %%
-%%   http://www.apache.org/licenses/LICENSE-2.0
+%% Permission is hereby granted, free of charge, to any person obtaining a copy
+%% of this software and associated documentation files (the "Software"), deal
+%% in the Software without restriction, including without limitation the rights
+%% to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+%% copies of the Software, and to permit persons to whom the Software is
+%% furnished to do so, subject to the following conditions:
 %%
-%% Unless required by applicable law or agreed to in writing,
-%% software distributed under the License is distributed on an
-%% "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-%% KIND, either express or implied.  See the License for the
-%% specific language governing permissions and limitations
-%% under the License.
+%% The above copyright notice and this permission notice shall be included in
+%% all copies or substantial portions of the Software.
+%%
+%% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%% AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+%% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+%% IN THE SOFTWARE.
+%% ----------------------------------------------------------------------------
 -module(systest_runner).
 
 -include("systest.hrl").
@@ -78,7 +87,7 @@ print_banner() ->
               "Version ~s~n", [Banner, AppVsn]).
 
 start_logging(Config) ->
-    Active     = ?CONFIG(logging, Config, []),
+    Active = ?CONFIG(logging, Config, []),
     [begin
         io:format(user, "activating logging sub-system ~p~n", [SubSystem]),
         ok = systest_log:start(SubSystem, systest_log, user)
@@ -90,17 +99,18 @@ verify(Exec2=#execution{profile     = Prof,
                         targets     = Targets,
                         base_config = Config}) ->
     Mod = systest_profile:get(framework, Prof),
-
-    io:format(user, "SysTest Task Descriptor:~n", []),
+    io:format(user, "~s~n",
+              [systest_utils:border("SysTest Task Descriptor", "-")]),
     io:format(user, "~s~n",
               [systest_utils:proplist_format([
                 {"Base Directory", BaseDir},
-                {"Test Directories", [D || {dir, D} <- Targets]},
-                {"Test Suites", [S || {suite, S} <- Targets]}])]),
+                {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
+                {"Test Suites", lists:concat([S || {suite, S} <- Targets])}])]),
 
     Prop = systest_utils:record_to_proplist(Prof, systest_profile),
     Print = systest_utils:proplist_format(Prop),
-    io:format(user, "SysTest Profile:~n", []),
+    io:format(user, "~s~n",
+              [systest_utils:border("SysTest Profile", "-")]),
     io:format(user, "~s~n", [Print]),
 
     TestFun = case ?CONFIG(dryrun, Config, false) of
@@ -134,13 +144,24 @@ load_test_targets(Prof, Config) ->
 
 load_test_targets(Prof) ->
     {Dirs, Suites} = load_targets_from_profile(Prof),
-    [{suite, systest_utils:uniq(Suites)},
+    Suites2 = case Suites of
+                  [] ->
+                      [begin
+                          list_to_atom(hd(string:tokens(
+                                filename:basename(F), ".")))
+                       end || Dir <- Dirs,
+                                F <- filelib:wildcard(
+                                            filename:join(Dir, "*_SUITE.*"))];
+                  _ ->
+                      Suites
+              end,
+    [{suite, systest_utils:uniq(Suites2)},
      {dir, systest_utils:uniq(Dirs)}].
 
 load_targets_from_profile(Prof) ->
     lists:foldl(
         fun(Path, {Dirs, _}=Acc) when is_list(Path) ->
-                setelement(1, Acc, [Path|Dirs]);
+                setelement(1, Acc, [filename:absname(Path)|Dirs]);
            (Mod, {Dirs, Suites}) when is_atom(Mod) ->
                 Path = test_dir(Mod),
                 {[Path|Dirs], [Mod|Suites]}
@@ -151,7 +172,7 @@ test_dir(Thing) when is_atom(Thing) ->
         {error, Reason} ->
             throw({invalid_target, {Thing, Reason}});
         _ ->
-            filename:dirname(code:which(Thing))
+            filename:absname(filename:dirname(code:which(Thing)))
     end.
 
 preload_resources(Resources) ->

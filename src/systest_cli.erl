@@ -314,7 +314,7 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
 
 log_file(Suffix, Scope, Id, Env, Config) ->
     log_to(Suffix, Scope, Id,
-           ?CONFIG(log_dir, Env, systest_utils:default_log_dir(Config))).
+           ?CONFIG(log_dir, Env, systest_env:default_log_dir(Config))).
 
 log_to(Suffix, Scope, Id, Dir) ->
     filename:join(Dir, logfile(Scope, Id) ++ Suffix).

@@ -22,26 +22,23 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
--module(build_escript).
+-module(build_support).
 
--export([pre_escriptize/2]).
+-export([mv_test_beams/2]).
 
-pre_escriptize(_Config, _) ->
-    Base = rebar_config:get_global(base_dir, rebar_utils:get_cwd()),
-    {ok, Hrls} = file:list_dir(filename:join(Base, "include")),
+mv_test_beams(_, _) ->
+    Base = rebar_config:get_global(base_dir,
+                            rebar_utils:get_cwd()),
+    TestSources = filelib:wildcard(
+                        filename:join([Base, "test", "*.erl"])),
     [begin
-         Src = filename:join([Base, "include", Hdr]),
-         Dest = filename:join([Base, "ebin", Hdr]),
-         file:copy(Src, Dest)
-     end || Hdr <- Hrls],
-    copy_rebar_badness(Base),
+         Target = filename:basename(Src, ".erl") ++ ".beam",
+         Source = filename:join([Base, "ebin", Target]),
+         Dest = filename:join([Base, "test-ebin", Target]),
+         rebar_utils:ensure_dir(Dest),
+         case filelib:is_regular(Source) of
+             true  -> ok = file:rename(Source, Dest);
+             false -> ok
+         end
+     end || Src <- TestSources],
     ok.
-
-copy_rebar_badness(Base) ->
-    [copy_rebar_badness(Base, F) || F <- ["rebar_file_utils.beam",
-                                          "mustache.beam"]].
-
-copy_rebar_badness(Base, Mod) ->
-    Src = filename:join([Base, "deps", "rebar", "ebin", Mod]),
-    Dest = filename:join([Base, "ebin", Mod]),
-    file:copy(Src, Dest).

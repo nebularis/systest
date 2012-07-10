@@ -56,27 +56,33 @@ compile: $(REBAR)
 
 .PHONY: escriptize
 escriptize: compile
-	ERL_FLAGS="-pa ebin" $(REBAR) skip_deps=true escriptize -v $(LOGLEVEL)
+	ERL_FLAGS="-pa ebin" \
+	    $(REBAR) skip_deps=true mv_test_beams escriptize -v $(LOGLEVEL)
+
+.PHONY: verify
+verify:
+	ERL_FLAGS="-pa ebin" \
+	    $(REBAR) skip_deps=true clean compile xref -v 4
 
 .PHONY: eunit
-eunit: test-compile
+eunit:
 	rm -rf .eunit
 	$(REBAR) skip_deps=true -C test.config eunit -v $(LOGLEVEL)
 
 .PHONY: test-compile
 test-compile: $(REBAR)
-	$(REBAR) skip_deps=true -C test.config get-deps compile -v $(LOGLEVEL)
+	$(REBAR) skip_deps=true -C test.config compile mv_test_beams -v $(LOGLEVEL)
 
 .PHONY: test
 test: eunit test-default test-error-handling
 
 .PHONY: test-dependencies
-test-dependencies: test-compile escriptize
+test-dependencies: test-compile
 
 .PHONY: test-default
 test-default: test-dependencies
-	ERL_FLAGS="-pa ebin" SYSTEST_PROFILE="$@" \
-	    priv/bin/systest -L framework -L sut -L process
+	ERL_FLAGS="-pa ebin -pa test-ebin" \
+	    priv/bin/systest -P default -L framework -L sut -L process
 
 .PHONY: test-error-handling
 test-error-handling: test-dependencies

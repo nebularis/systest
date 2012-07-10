@@ -213,7 +213,7 @@ init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
 
             Id = get(id, NI2),
 
-            LogBase = systest_utils:default_log_dir(get(config, NI2)),
+            LogBase = systest_env:default_log_dir(get(config, NI2)),
             case systest_log:activate_logging_subsystem(process, Id, LogBase) of
                 {error, _} ->
                     log(framework, "per-process logging is disabled~n", []);

@@ -78,7 +78,6 @@ load(Config) ->
 load(ProfFile, BaseDir) ->
     %% NB: set/2 record access is *generated* by the exprecs parse_transform
     Terms = load_terms(ProfFile),
-    io:format("Terms = ~p~n", [Terms]),
     Profile = lists:foldl(fun(E, P) -> set([E], P) end,
                           default_profile(BaseDir), Terms),
     Profile#profile{ source=ProfFile }.
@@ -132,7 +131,7 @@ default_profile(BaseDir) ->
     #profile{ name          = default,
               source        = generated,
               output_dir    = ScratchDir,
-              log_dir       = filename:join(ScratchDir, "systest"),
+              log_dir       = filename:join(ScratchDir, "logs"),
               settings_base = filename:join([BaseDir, "test",
                                             "default.settings"]),
               resources     = glob([BaseDir, "test", "*.resource"]),

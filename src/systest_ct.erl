@@ -1,4 +1,6 @@
-%% -------------------------------------------------------------------
+%% -*- tab-width: 4;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%% ex: ts=4 sw=4 et
+%% ----------------------------------------------------------------------------
 %%
 %% Copyright (c) 2005 - 2012 Nebularis.
 %%
@@ -34,41 +36,47 @@ run(RunSpec) ->
 
 run(RunSpec, DryRun) ->
     Profile = systest_runner:get(profile, RunSpec),
+    Targets = systest_runner:get(targets, RunSpec),
     Label   = systest_profile:get(name, Profile),
     Specs   = systest_profile:get(specifications, Profile),
     LogDir  = systest_profile:get(log_dir, Profile),
-    Timeout = systest_profile:get(default_timetrap, Profile),
-    Targets = systest_profile:get(targets, Profile),
+    % Timeout = systest_profile:get(default_timetrap, Profile),
 
     ok = systest_log:start(system, systest_ct_log, common_test),
     ok = systest_log:start(framework, systest_ct_log, common_test),
 
-    TestFun = if DryRun =:= true -> fun ct:run_test/1;
-                            true -> fun print_test_data/1
+    TestFun = if DryRun =:= false -> fun run_test/1;
+                            true  -> fun print_test/1
               end,
 
-    case TestFun([{'spec', Specs},
-                  {logdir, LogDir},
+    case TestFun([{logdir, LogDir},
                   {label, Label},
                   {auto_compile, false},
                   {allow_user_terms, true},
                   {event_handler, systest_event},
                   {enable_builtin_hooks, true},
-                  {timetrap, Timeout},
                   {ct_hooks, [cth_log_redirect,
                               {systest_cth, [], 100000}]}|Targets]) of
         {error, _}=Error ->
             Error;
         _Other ->
             case application:get_env(systest, failures) of
+                undefined    -> ok;
                 {ok, 0}      -> ok;
                 {ok, Failed} -> {error, {failures, Failed}}
             end
     end.
 
-print_test_data(Config) ->
-    io:format("Dry Run:~n"
-              "Framework: Common Test~n"
-              "Handler: ~p~n"
-              "Test Run Configuration:~n~s~ndone.~n",
-              [?MODULE, systest_utils:proplist_format(Config)]).
+run_test(Cfg) ->
+    print_test_data(Cfg, "Starting Test Run"),
+    ct:run_test(Cfg).
+
+print_test(Cfg) ->
+    print_test_data(Cfg, "Starting Dry Run").
+
+print_test_data(Config, Border) ->
+    io:format("~s~n"
+              "~s~ndone.~n",
+              [systest_utils:border(Border, "-"),
+               systest_utils:proplist_format([{"framework", "Common Test"},
+                                              {"handler", ?MODULE}|Config])]).

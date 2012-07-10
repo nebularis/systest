@@ -36,13 +36,17 @@
 -export([list_processes/1, process_data/2, read_process_user_data/1]).
 -export([write_process_user_data/2, restart/2, stop_and_wait/1, kill_after/2]).
 
+-ignore_xref([{start, 2},
+              {procs, 1},
+              {write_pid_file/1}]).
+
 %%
 %% Public APIs
 %%
 
 %% escript API
 main(Args) ->
-    systest_main2:run(Args).
+    systest_main:run(Args).
 
 %% application startup
 

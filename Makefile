@@ -48,8 +48,8 @@ clean:
 
 .PHONY: dist-clean
 dist-clean: clean
-	rm -drf deps
-	rm -drf bin
+	rm -rf deps
+	rm -rf priv/bin/systest*
 
 compile: $(REBAR)
 	$(REBAR) get-deps compile -v $(LOGLEVEL)

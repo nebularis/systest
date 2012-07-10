@@ -25,24 +25,28 @@
 -module(systest_profile).
 -include("systest.hrl").
 
--export([load/1]).
+-export([load/1, load/2]).
+-import(systest_utils, [combine/2, as_list/1]).
 
 -define(lookup(W, D), systest_utils:lookup_env(W, D)).
 
--record(profile, {
-    name            :: string(),
-    source          :: file:filename(),
-    root_dir        :: file:filename(),
-    log_base        :: file:filename(),
-    config_files    :: [file:filename()],
-    test_dirs       :: [file:filename()],
-    suites          :: [module()],
-    cases           :: [{module(), atom()}],
-    ct_config       :: [tuple()]
-}).
+-type testable() :: file:filename() | module().
+-type time_unit() :: 'hr' | 'min' | 'sec' | 'ms'.
 
--opaque profile() :: #profile{}.
--export_type([profile/0]).
+%% {allow_user_terms, Bool}, {label, ProfileName}
+
+-record(profile, {
+    name                        :: string(),        %% {label, Label}
+    framework = systest_ct      :: module(),
+    source                      :: file:filename(),
+    output_dir                  :: file:filename(),
+    log_dir                     :: file:filename(),
+    settings_base               :: file:filename(),
+    resources        = []       :: [file:filename()],
+    targets          = ["ebin"] :: [testable()],
+    specifications   = []       :: [file:filename()],
+    default_timetrap            :: {integer(), time_unit()}
+}).
 
 -exprecs_prefix([operation]).
 -exprecs_fname([prefix, "profile"]).
@@ -51,132 +55,85 @@
 -compile({parse_transform, exprecs}).
 -export_records([profile]).
 
-write_terms(Terms, Fd) ->
-    try
-        [begin
-            Element = lists:flatten(erl_pp:expr(erl_parse:abstract(Item))),
-            Term = Element ++ ".\n",
-            ok = file:write(Fd, Term)
-         end || Item <- Terms]
-    after
-        file:close(Fd)
-    end.
+-opaque profile() :: #profile{}.
+-export_type([profile/0]).
 
-log_terms(Type, Data) when is_list(Data) ->
-    rebar_log:log(debug, "Loading ~s: ~s~n", [Type, Data]);
-log_terms(Type, Data) when is_atom(Data) ->
-    rebar_log:log(debug, "Loading ~s: ~p~n", [Type, Data]).
-
+%%
+%% @doc load a new test profile using the supplied configuration
+%% @end
 -spec load(systest_config:config()) -> profile().
 load(Config) ->
-    %% NB: change of plans...
-    %% 1. we want to support other testing frameworks besides common_test
-    %% 2. we want users to be able to override things on the command line
-    %% 3. we want to generate sensible defaults for things where possible
-    %% 4. we want to call ct:run_tests([Options]) even when running ct!
-    %% 5. so.....
-    %% 
-    %% we will use the profile(s) to load custom settings and environment vars
-    %% but, we will generate the other stuff wherever possible
-    %% and we *will* continue to support ct.config files, but re-use them in
-    %% other testing environments
-    %% AND
-    %% we will continue to expand relative paths (in config files) to absolute
-    %% AND
-    %% we will do all of this as simply as possible....
-    
-    {ok, Cwd} = file:get_cwd(),
-    case load_all_profiles(Cwd, Config) of
-        []   -> generate_default_spec(Cwd);
-        Spec -> Spec
+    BaseDir = ?REQUIRE(base_dir, Config),
+    case ?CONFIG(profile, Config, undefined) of
+        undefined -> load_configured_profile_data(Config, BaseDir);
+        Name      -> Profile = load_named_profile_data(Name, BaseDir),
+                     Profile#profile{ name=Name }
     end.
 
 %%
-%% Private API
+%% @doc load a new test profile from the supplied ProfFile
+%% @end
+-spec load(file:filename(),
+           file:filename()) -> profile().
+load(ProfFile, BaseDir) ->
+    %% NB: set/2 record access is *generated* by the exprecs parse_transform
+    Terms = load_terms(ProfFile),
+    io:format("Terms = ~p~n", [Terms]),
+    Profile = lists:foldl(fun(E, P) -> set([E], P) end,
+                          default_profile(BaseDir), Terms),
+    Profile#profile{ source=ProfFile }.
+
+%%
+%% Private/Internal API
 %%
 
-generate_default_spec(Root) ->
-    LogBase = filename:join([systest_utils:temp_dir(), "systest", "logs"]),
-    SuiteModules = systest_utils:find_files(Root, ".*_SUITE.beam"),
-    Suites = [list_to_atom(filename:basename(Mod, ".beam")) ||
-                                                    Mod <- SuiteModules],
-    #profile{name         = generated_default,
-             source       = none,
-             root_dir     = Root,
-             log_base     = LogBase,
-             config_files = [],
-             test_dirs    = [filename:join(Root, "ebin")],
-             suites       = Suites,
-             cases        = [],
-             ct_config    = []}.
-
-load_all_profiles(Cwd, Config) ->
-    ProfileBase = filename:join(Cwd, ?CONFIG(profile_dir, Config, "profiles")),
-    Default = filename:join(ProfileBase, "default.profile"),
-    Selected = filename:join(ProfileBase, profile_name(Config)),
-    if Default == Selected ->
-        load_profile(Cwd, Default, Config);
-       true ->
-        systest_config:merge_config(load_profile(Cwd, Default, Config),
-                                    load_profile(Cwd, Selected, Config))
+load_configured_profile_data(Config, BaseDir) ->
+    case ?CONFIG(systest_profile, Config, undefined) of
+        undefined -> default_profile(BaseDir);
+        Data      -> Data
     end.
 
-load_profile(Root, ProfilePath, Config) ->
-    Terms = load_terms(ProfilePath, Config),
-    BaseDir = ?CONFIG(base_dir, Config, Root),
-    ProfileName = list_to_atom(filename:basename(ProfilePath, ".profile")),
-    LogBase = ?CONFIG(logdir, Terms, filename:join(Root, "logs")),
-    InitProfile = #profile{name         = ProfileName,
-                           source       = ProfilePath,
-                           root_dir     = Root,
-                           log_base     = LogBase,
-                           config_files = [],
-                           test_dirs    = [],
-                           suites       = [],
-                           cases        = [],
-                           ct_config    = []},
-    lists:foldl(fun({config, Path}, P=#profile{config_files=Paths}) ->
-                    Path2 = convert_path(Path, BaseDir),
-                    P#profile{config_files=[Path2|Paths]};
-                   (T, P=#profile{test_dirs=Dirs, ct_config=CtConf,
-                                  suites=Suites, cases=Cases})
-                            when is_tuple(T) ->
-                    case element(1, T) of
-                        alias ->
-                            Path = element(3, T),
-                            T2 = setelement(3, T,
-                                    convert_path(Path, BaseDir)),
-                            P#profile{test_dirs=[T2|Dirs]};
-                        suites ->
-                            P#profile{suites=[T|Suites]};
-                        cases ->
-                            P#profile{cases=[T|Cases]};
-                        _ ->
-                            P#profile{ct_config=[T|CtConf]}
+load_named_profile_data(Profile, BaseDir) ->
+    ProfName = systest_utils:as_string(Profile),
+    case systest_utils:find_files(BaseDir, ProfName ++ "\\.profile$") of
+        []           -> throw({profile_unavailable, ProfName});
+        [_P1, _P2|_] -> throw({ambiguous_profile,   ProfName});
+        [ProfFile]   -> load(ProfFile, BaseDir)
+    end.
+
+load_terms(ProfFile) ->
+    systest_utils:with_termfile(ProfFile, fun read_terms/1).
+
+read_terms(Terms) ->
+    lists:foldl(fun({K, V}=E, Acc) ->
+                    case lists:keyfind(K, 1, Acc) of
+                        false   -> case {K, V} of
+                                       {resource, [H|_]} when is_integer(H) ->
+                                           [{sanitize_key(K), [V]}|Acc];
+                                       {resource, R} when is_list(R) ->
+                                           [{sanitize_key(K), R}|Acc];
+                                       _ ->
+                                           [E|Acc]
+                                   end;
+                        {K, V2} -> Key = sanitize_key(K),
+                                   lists:keyreplace(Key, 1, Acc,
+                                                    {Key, combine(V, V2)})
                     end
-                end, InitProfile, Terms).
+                end, [], Terms).
 
-convert_path(Path, BaseDir) ->
-    case filename:pathtype(Path) of
-        absolute -> Path;
-        relative -> filename:join(BaseDir, Path)
-    end.
+sanitize_key(resource) -> resources;
+sanitize_key(K)        -> K.
 
-load_terms(Path, Config) ->
-    case file:consult(Path) of
-        {ok, Terms} ->
-            systest_config:expand(Terms, Config,
-                        [{return, value},
-                         {callback,
-                            {runtime,
-                             fun(K, C) ->
-                                 proplists:get_value(K, C)
-                             end}}]);
-        _ ->
-            []
-    end.
+glob(Parts) ->
+    filelib:wildcard(filename:join(Parts)).
 
-profile_name(Config) ->
-    ?CONFIG(profile, Config,
-            systest_utils:lookup_env("SYSTEST_PROFILE", os:getenv("USER"))).
-
+default_profile(BaseDir) ->
+    ScratchDir = systest_env:default_scratch_dir(),
+    #profile{ name          = default,
+              source        = generated,
+              output_dir    = ScratchDir,
+              log_dir       = filename:join(ScratchDir, "systest"),
+              settings_base = filename:join([BaseDir, "test",
+                                            "default.settings"]),
+              resources     = glob([BaseDir, "test", "*.resource"]),
+              targets       = filename:join(BaseDir, "ebin") }.

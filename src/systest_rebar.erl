@@ -105,6 +105,10 @@ systest(Config, _) ->
             end
     end.
 
+load(RebarConfig) ->
+    %% MOVE ME BACK HOME!!!!!!
+    load(rebar_config:get_local(RebarConfig, systest, [])).
+
 start_systest_logging(ScratchDir, Config) ->
     ok = systest_log:start(system, systest_ct_log, common_test),
     ok = systest_log:start(framework, systest_ct_log, common_test),

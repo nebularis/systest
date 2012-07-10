@@ -39,7 +39,7 @@ run(Args) ->
     Options = parse_args(Args),
     application:load(systest),
     BaseConfig = init_rebar(Options),
-
+    %% unload
     print_banner(),
 
     MainConfig = rebar_config:get_local(BaseConfig, plugins, []),
@@ -69,7 +69,7 @@ export(Config) ->
 
 export_entry({File, _}=Entry, Config) ->
     case lists:any(fun(Ext) -> lists:suffix(Ext, File) end,
-                   [".hrl", ".beam", ".app"]) of
+                   [".hrl", "ebin/.beam", ".app"]) of
         true ->
             do_export(Entry, Config);
         false ->

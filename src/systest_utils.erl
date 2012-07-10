@@ -24,15 +24,59 @@
 %% ----------------------------------------------------------------------------
 -module(systest_utils).
 
--include_lib("kernel/include/inet.hrl").
 -include("systest.hrl").
 
--export([is_epmd_contactable/2, temp_dir/0, make_node/1, make_node/2]).
--export([proplist_format/1, strip_suite_suffix/1, hostname/1]).
--export([proc_id_and_hostname/1, find/2, timestamp/0, rm_rf/1]).
--export([default_log_dir/1]).
+-export([make_node/1, make_node/2, as_string/1]).
+-export([proplist_format/1, strip_suite_suffix/1]).
+-export([proc_id_and_hostname/1, rm_rf/1, find_files/2]).
+-export([with_file/3, with_termfile/2, combine/2, uniq/1]).
+-export([throw_unless/2, throw_unless/3, throw_unless/4]).
+-export([record_to_proplist/2]).
 
--define(DEFAULT_EPMD_PORT, 4369).
+throw_unless(Cond, Msg) ->
+    throw_unless(Cond, Msg, []).
+
+throw_unless(Cond, Msg, FmtArgs) ->
+    throw_unless(Cond, system, Msg, FmtArgs).
+
+throw_unless(Cond, SubSys, Msg, FmtArgs) ->
+    case Cond of
+        true ->
+            ok;
+        false ->
+            systest_log:log(SubSys, Msg, FmtArgs),
+            throw({SubSys, assertion_failed})
+    end.
+
+with_termfile(Path, Handler) ->
+    case file:consult(Path) of
+        {ok, Terms} -> Handler(Terms);
+        Error       -> Error
+    end.
+
+with_file(Path, Modes, Handler) ->
+    case file:open(Path, Modes) of
+        {ok, Fd} ->
+            try Handler(Fd)
+            after file:close(Fd)
+            end;
+        Error ->
+            Error
+    end.
+
+uniq(List) -> sets:to_list(sets:from_list(List)).
+
+combine(V1, V2) when is_list(V1) andalso
+                     is_list(V2) -> V1 ++ V2;
+combine(V1, V2) when is_list(V1) -> [V2|V1];
+combine(V1, V2) when is_list(V2) -> [V1|V2];
+combine(V1, V2)                  -> [V1,V2].
+
+as_string(X) when is_atom(X)    -> atom_to_list(X);
+as_string(X) when is_integer(X) -> integer_to_list(X);
+as_string(X) when is_float(X)   -> float_to_list(X);
+as_string(X) when is_binary(X)  -> binary_to_list(X);
+as_string(X)                    -> X.
 
 rm_rf([H|_]=Path) when is_integer(H) ->
     rm_rf([Path]);
@@ -56,32 +100,37 @@ rm_rf(Path, ok) ->
             end
     end.
 
-default_log_dir(Config) ->
-    ?CONFIG(scratch_dir, Config, systest_utils:temp_dir()).
-
 %% @doc make a valid erlang node shortname from Name,
 %% using the current (local) hostname
+%% @end
 make_node(Name) ->
     {ok, Hostname} = inet:gethostname(),
     make_node(Name, list_to_atom(Hostname)).
 
 %% @doc make a node shortname from the supplied name and host atoms
+%% @end
 make_node(Name, Host) ->
     list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
-
-hostname(NodeName) ->
-    element(2, proc_id_and_hostname(NodeName)).
 
 proc_id_and_hostname(ProcId) ->
     list_to_tuple(lists:map(fun erlang:list_to_atom/1,
                             string:tokens(atom_to_list(ProcId), "@"))).
 
 %% @doc strip the "_SUITE" suffic from a ct test suite name
+%% @end
 strip_suite_suffix(Suite) ->
     S = atom_to_list(Suite),
     list_to_atom(re:replace(S, "_SUITE", "", [{return, list}])).
 
+%% @doc convert a record into a proplist using its exporting module
+%% @end
+record_to_proplist(Rec, Mod) ->
+    [begin
+        {Field, Mod:get(Field, Rec)}
+     end || Field <- Mod:info(element(1, Rec))].
+
 %% @doc convert the 'proplist' L into a printable list
+%% @end
 proplist_format(L) ->
     lists:flatten(
         [begin
@@ -93,63 +142,6 @@ proplist_format(L) ->
          end || {K, V} <- L]).
 
 %% @doc recursive search in Dir for files matching Regex
-find(Dir, Regex) ->
-    filelib:fold_files(Dir, Regex, true,
-                       fun(F, Acc) -> [F | Acc] end, []).
-
-timestamp() ->
-    Now = now(),
-    {{Year,Month,Day}, {Hour,Min,Sec}} = calendar:now_to_local_time(Now),
-    string:join([lists:flatten(io_lib:format("~4.10.0B", [Year]))|
-                [begin
-                     lists:flatten(io_lib:format("~2.10.0B", [X]))
-                 end || X <- [Day,Month,Hour,Min,Sec]]], "-").
-
-%%
-%% @doc returns the atom 'true' if epmd running on Host is visible
-%% from the calling node, otherwise {false, Reason::term()}.
-%%
--spec is_epmd_contactable(Host::atom(),
-                          Timeout::integer()) -> 'true' | {'false', term()}.
-is_epmd_contactable(Host, Timeout) ->
-    case inet:gethostbyname(Host, inet, Timeout) of
-        {ok, #hostent{h_name=H_Name}} ->
-            %% is host reachable?
-            case gen_tcp:connect(H_Name, epmd_port(), [inet], Timeout) of
-                {error, Reason} ->
-                    {false, Reason};
-                {ok, Sock} ->
-                    ok = gen_tcp:close(Sock),
-                    true
-            end;
-        {error, Reason} ->
-            {false, {dns, Reason}}
-    end.
-
-temp_dir() ->
-    %% TODO: move this into hyperthunk/rebar_plugin_manager?
-    case os:type() of
-        {win32, _} ->
-            %% mirrors the behaviour of the win32 GetTempPath function...
-            get("TMP", get("TEMP", element(2, file:get_cwd())));
-        _ ->
-            case os:getenv("TMPDIR") of
-                false -> "/tmp"; %% this is what the JVM does, but honestly...
-                Dir   -> Dir
-            end
-    end.
-
-get(Var, Default) ->
-    case os:getenv(Var) of
-        false -> Default;
-        Value -> Value
-    end.
-
-epmd_port() ->
-    %% based on the gigantic assumption that every EPDM instance
-    %% is running on the same port, but how could it be otherwise?
-    case os:getenv("ERL_EPMD_PORT") of
-        false -> ?DEFAULT_EPMD_PORT;
-        PortNum -> list_to_integer(PortNum)
-    end.
-
+%% @end
+find_files(Dir, Rx) ->
+    filelib:fold_files(Dir, Rx, true, fun(F, Acc) -> [F | Acc] end, []).

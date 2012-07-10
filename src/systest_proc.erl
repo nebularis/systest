@@ -27,7 +27,6 @@
 -include("systest.hrl").
 
 -type proc_info() :: #proc{}.
-
 -export_type([proc_info/0]).
 
 -export([behaviour_info/1]).
@@ -48,6 +47,10 @@
          handle_info/2, terminate/2, code_change/3]).
 
 -import(systest_log, [log/2, log/3]).
+
+-ifdef(TEST).
+-export([proc_config/2]).
+-endif.
 
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
@@ -543,9 +546,9 @@ lookup(Key, Config, Default) ->
     end.
 
 proc_config(Sut, Proc) ->
-    Procs = systest_config:get_config({Sut, processes}),
+    Procs = systest_config:get_config(Sut, processes, []),
     log({framework, Proc}, "processes loading from config: ~p~n", [Procs]),
-    UserData = systest_config:get_config({Sut, user_data}),
+    UserData = systest_config:get_config(Sut, user_data, []),
     ProcConf = case ?CONFIG(Proc, Procs, undefined) of
                    undefined               -> [];
                    Refs when is_list(Refs) -> load_config(Refs)
@@ -559,7 +562,7 @@ merge_refs(Ref, []) ->
     systest_config:get_config(Ref);
 merge_refs(Ref, Acc) ->
     RefConfig = systest_config:get_config(Ref),
-    Startup = systest_config:merge_config(
+    Startup = systest_config:merge(
                     ?CONFIG(startup, Acc, []),
                     ?CONFIG(startup, RefConfig, [])),
     OnStart = ?CONFIG(on_start, Acc, []) ++

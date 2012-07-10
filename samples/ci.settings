@@ -1,0 +1,1 @@
+{authz_url, "https://localhost:30001/ssos/login"}.

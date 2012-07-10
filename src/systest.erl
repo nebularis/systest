@@ -33,8 +33,8 @@
 -export([sut_config/1]).
 -export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
--export([list_processes/1, process_data/2, read_process_user_data/1,
-         write_process_user_data/2, restart/2]).
+-export([list_processes/1, process_data/2, read_process_user_data/1]).
+-export([write_process_user_data/2, restart/2, stop_and_wait/1, kill_after/2]).
 
 %%
 %% Public APIs
@@ -42,11 +42,12 @@
 
 %% escript API
 main(Args) ->
-    systest_main:run(Args).
+    systest_main2:run(Args).
 
 %% application startup
 
 start() ->
+    %% TODO: Don't make this assumption, but *do* by default! :O
     error_logger:tty(false),
     application:start(?MODULE).
 

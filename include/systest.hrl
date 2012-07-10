@@ -52,8 +52,16 @@
                             {module(), function(), [term()]}    |
                             {'local', module(), function(), [term()]}.
 
-%% TODO: deprecate the 'apps' field (merge into flags?)
+-record(execution, {
+    base_dir        :: file:filename(),
+    profile         :: systest_profile:profile(),
+    targets  = []   :: systest_config:config(),
+    options  = []   :: systest_config:config(),
+    settings = []   :: systest_config:config(),
+    base_config     :: systest_config:config()
+}).
 
+%% TODO: deprecate the 'apps' field (merge into flags?)
 -record(proc, {
     scope       :: atom(),                      %% usually the sut id...
     host        :: atom(),                      %% host name

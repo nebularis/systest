@@ -17,82 +17,183 @@
 
 -include("systest.hrl").
 
--export([execute/1]).
+%-export([execute/1]).
+-compile(export_all).
+
+-type execution() :: #execution{}.
+-export_type([execution/0]).
 
 -define(WORKDIR(A, B, C),
-        systest_utils:work_directory(A, B, C)).
+        systest_env:work_directory(A, B, C)).
 
--record(exec, {
-    profile         :: systest_profile:profile(),
-    specification   :: file:filename(),
-    scratch_dir     :: file:filename(),
-    ct_log_dir      :: file:filename(),
-    sys_log_dir     :: file:filename(),
-    config_dir      :: file:filename()
-}).
+-exprecs_prefix([operation]).
+-exprecs_fname(["record_", prefix]).
+-exprecs_vfname([fname, "__", version]).
+
+-compile({parse_transform, exprecs}).
+-export_records([execution]).
+
+behaviour_info(callbacks) ->
+    [{run, 1}, {dryrun, 1}];
+behaviour_info(_) ->
+    undefined.
 
 execute(Config) ->
     maybe_start_net_kernel(Config),
-    run(build_exec(Config)).
+    {ok, BaseDir} = file:get_cwd(),
+    Exec = build_exec([{base_dir, BaseDir}|Config]),
+    BaseDir = Exec#execution.base_dir,
+    Prof = Exec#execution.profile,
+    DefaultSettings = systest_profile:get(settings_base, Prof),
+    Resources = verify_resources(Prof, BaseDir),
 
-run(Exec) ->
+    %% because sometimes, code that is accessed from an escript archive doesn't
+    %% get handled in a particularly useful way by the code server.... :/
+    % code:ensure_loaded(systest_utils)
+    systest:start(),
+    print_banner(),
+    set_defaults(Prof),
+    start_logging(Config),
+
+    preload_resources(Resources),
+    ensure_test_directories(Prof),
+    systest_config:set_env(base_dir, BaseDir),
     
-    %% NB: we want systest_profile to do all the loading/configuring
-    %% and then we bootstrap the arguments to the testing framework
-    %% and execute the appropriate tests.......
+    Targets = load_test_targets(Prof, Config),
+    Settings = systest_settings:load(DefaultSettings),
+    Exec2 = set([{targets, Targets}, {settings, Settings}], Exec),
+    verify(Exec2).
 
-    %% we want to keep the scratch_dir, as this contains the ct logs....
-    %% but the config dir should be blown away whenever we copy to it...
-    systest_utils:rm_rf(Exec#exec.config_dir),
-    % filelib:ensure_dir(filename:join([Ex#exec.ct_log_dir,  "foo"])),
-    % filelib:ensure_dir(filename:join([Ex#exec.sys_log_dir, "foo"])),
-    % filelib:ensure_dir(filename:join([Ex#exec.config_dir,  "foo"])),
+set_defaults(Profile) ->
+    ScratchDir = systest_profile:get(output_dir, Profile),
+    systest_config:set_env("SCRATCH_DIR", ScratchDir).
 
-    % rebar_config:set_global(scratch_dir, ScratchDir),
+print_banner() ->
+    %% Urgh - could there be an uglier way!?
+    %% TODO: refactor this...
+    AppVsn = element(3, lists:keyfind(systest, 1,
+                                      application:loaded_applications())),
+    {ok, Banner} = application:get_env(systest, banner),
+    io:format("~s~n"
+              "Version ~s~n", [Banner, AppVsn]).
 
-%    InitSpec =  case find_files("profiles", Profile ++ "\\.spec$") of
-%                    [SpecFile] -> SpecFile;
-%                    _          -> filename:join("profiles", "default.spec")
-%                end,
-%    Spec =  case filelib:is_regular(Spec) of
-%                false ->
-%                    case file:list_dir("resources") of
-%                        {ok, ResFiles} ->
-%                            ok %% generate_default_spec()
-%                    end;
-%                true ->
-%                    ok
-%            end,
-%    Env = [{scratch_dir, ScratchDir}] ++ rebar_env() ++ os_env(),
-%    {ok, SpecOutput} = transform_file(Spec, temp_dir(), Env),
-%    {ok, FinalSpec} = process_config_files(ScratchDir, SpecFile, Env),
-%    LogDir = "systest-logs",
-%    case ct:run_test([{'spec', FinalSpec},
-%                      {logdir, filename:join(ScratchDir, LogDir)},
-%                      {auto_compile, false},
-%                      {allow_user_terms, true}]) of
-%        {error, Reason}=Err ->
-%            error(Reason);
-%        Results ->
-%            rebar_log:log(info, "Results: ~p~n", [Results]),
+start_logging(Config) ->
+    Active     = ?CONFIG(logging, Config, []),
+    [begin
+        io:format(user, "activating logging sub-system ~p~n", [SubSystem]),
+        ok = systest_log:start(SubSystem, systest_log, user)
+     end || SubSystem <- Active],
+    ok.
+
+verify(Exec2=#execution{profile     = Prof,
+                        base_dir    = BaseDir,
+                        targets     = Targets,
+                        base_config = Config}) ->
+    Mod = systest_profile:get(framework, Prof),
+
+    io:format(user, "SysTest Task Descriptor:~n", []),
+    io:format(user, "~s~n",
+              [systest_utils:proplist_format([
+                {"Base Directory", BaseDir},
+                {"Test Directories", [D || {dir, D} <- Targets]},
+                {"Test Suites", [S || {suite, S} <- Targets]}])]),
+
+    Prop = systest_utils:record_to_proplist(Prof, systest_profile),
+    Print = systest_utils:proplist_format(Prop),
+    io:format(user, "SysTest Profile:~n", []),
+    io:format(user, "~s~n", [Print]),
+
+    TestFun = case ?CONFIG(dryrun, Config, false) of
+                  true  -> dryrun;
+                  false -> run
+              end,
+
+    case catch( erlang:apply(Mod, TestFun, [Exec2]) ) of
+        {'EXIT', Reason} ->
+            handle_errors(Exec2, Reason, Config);
+        {failed, Reason} ->
+            handle_errors(Exec2, Reason, Config);
+        ok ->
             ok
-%    end.
-.
+    end.
+
+handle_errors(_Exec, Reason, Config) ->
+    ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
+    ErrorHandler("Execution Failed: ~p~n", [Reason]).
+
+load_test_targets(Prof, Config) ->
+    case proplists:get_all_values(testsuite, Config) of
+        [] ->
+            case ?CONFIG(testcase, Config, undefined) of
+                undefined   -> load_test_targets(Prof);
+                {Suite, TC} -> [{suite, Suite}, {testcase, TC}]
+            end;
+        Suites ->
+            [{suite, Suites}]
+    end.
+
+load_test_targets(Prof) ->
+    {Dirs, Suites} = load_targets_from_profile(Prof),
+    [{suite, systest_utils:uniq(Suites)},
+     {dir, systest_utils:uniq(Dirs)}].
+
+load_targets_from_profile(Prof) ->
+    lists:foldl(
+        fun(Path, {Dirs, _}=Acc) when is_list(Path) ->
+                setelement(1, Acc, [Path|Dirs]);
+           (Mod, {Dirs, Suites}) when is_atom(Mod) ->
+                Path = test_dir(Mod),
+                {[Path|Dirs], [Mod|Suites]}
+        end, {[], []}, systest_profile:get(targets, Prof)).
+
+test_dir(Thing) when is_atom(Thing) ->
+    case code:ensure_loaded(Thing) of
+        {error, Reason} ->
+            throw({invalid_target, {Thing, Reason}});
+        _ ->
+            filename:dirname(code:which(Thing))
+    end.
+
+preload_resources(Resources) ->
+    [begin
+        case file:consult(Resource) of
+            {ok, Terms} ->
+                systest_config:load_config_terms(Terms);
+            Error ->
+                throw(Error)
+        end
+     end || Resource <- Resources].
+
+verify_resources(Profile, BaseDir) ->
+    Resources = lists:foldl(fun(P, Acc) ->
+                                Glob = filename:join(BaseDir, P),
+                                filelib:wildcard(Glob) ++ Acc
+                            end, [], systest_profile:get(resources, Profile)),
+    [begin
+        case filelib:is_regular(Path) of
+            false -> throw({invalid_resource, Path});
+            true  -> Path
+        end
+     end || Path <- Resources].
+
+ensure_test_directories(Prof) ->
+    filelib:ensure_dir(filename:join(
+                       systest_profile:get(output_dir, Prof), "foo")),
+    filelib:ensure_dir(filename:join(
+                       systest_profile:get(log_dir, Prof), "foo")).
 
 build_exec(Config) ->
     %% TODO: consider adding a time stamp to the scratch
     %%       dir like common test does
     ScratchDir = ?CONFIG(scratch_dir, Config,
-                         ?WORKDIR(systest_utils:temp_dir(),
+                         ?WORKDIR(systest_env:temp_dir(),
                                   systest, "SYSTEST_SCRATCH_DIR")),
     Config2 = ?REPLACE(scratch_dir, ScratchDir, Config),
     Profile = systest_profile:load(Config2),
-    LogBase = systest_profile:get(log_base, Profile),
-    #exec{profile     = Profile,
-          scratch_dir = ScratchDir,
-          ct_log_dir  = ?WORKDIR(LogBase, "ct-log",      "SYSTEST_CT_LOG_DIR"),
-          sys_log_dir = ?WORKDIR(LogBase, "systest-log", "SYSTEST_LOG_DIR"),
-          config_dir  = ?WORKDIR(LogBase, "config",      "SYSTEST_CONF_DIR")}.
+    BaseDir = ?REQUIRE(base_dir, Config),
+    #execution{profile      = Profile,
+               base_dir     = BaseDir,
+               base_config  = Config2}.
 
 maybe_start_net_kernel(Config) ->
     UseLongNames = ?CONFIG(longnames, Config, false),
@@ -105,7 +206,7 @@ maybe_start_net_kernel(Config) ->
                     net_kernel:start([?MODULE, shortnames])
             end;
         LongNames ->
-            systest_assert:throw_unless(
+            systest_utils:throw_unless(
                 LongNames == UseLongNames, runner,
                 "The supplied configuration indicates that "
                 "longnames should be ~p, "
@@ -119,66 +220,3 @@ use_longnames(false) -> disabled.
 
 long_or_short_names(true)  -> longnames;
 long_or_short_names(false) -> shortnames.
-
-process_config_files(SDir, TempSpec, Env) ->
-    ScratchDir = filename:join(SDir, "temp"),
-    {ok, Terms} = file:consult(TempSpec),
-    {[Configs], Rest} = proplists:split(Terms, [config]),
-    rebar_log:log(debug, "Processing config sections: ~p~n", [Configs]),
-    Replacements = [begin
-                        {ok, Path} = transform_file(F, ScratchDir, Env),
-                        {config, Path}
-                    end || {_, F} <- lists:flatten(Configs)],
-    Spec = filename:join(ScratchDir, filename:basename(TempSpec)),
-    {ok, Fd} = file:open(Spec, [append]),
-    Content = Replacements ++ Rest,
-    rebar_log:log(debug, "Write to ~s: ~p~n", [Spec, Content]),
-    write_terms(Content, Fd),
-    {ok, Spec}.
-
-transform_file(File, ScratchDir, Env) ->
-    systest_assert:throw_unless(
-        filelib:is_regular(File), runner,
-        "File ~s not found.~n", [File]),
-
-    Output = filename:join(ScratchDir, filename:basename(File)),
-    Target = filename:absname(Output),
-    Origin = filename:absname(File),
-    rebar_log:log(info, "transform ~s into ~s~n", [Origin, Target]),
-
-    %% this looks *pointless* but avoids calling dict:to_list/1
-    %% unless it is actually going to use the result
-    case rebar_log:get_level() of
-        debug -> rebar_log:log(debug, "template environment: ~p~n", [Env]);
-        _     -> ok
-    end,
-
-    Context = rebar_templater:resolve_variables(Env, dict:new()),
-    {ok, Bin} = file:read_file(File),
-    Rendered = rebar_templater:render(Bin, Context),
-
-    file:write_file(Output, Rendered),
-    {ok, Target}.
-
-write_terms(Terms, Fd) ->
-    try
-        [begin
-            Element = lists:flatten(erl_pp:expr(erl_parse:abstract(Item))),
-            Term = Element ++ ".\n",
-            ok = file:write(Fd, Term)
-         end || Item <- Terms]
-    after
-        file:close(Fd)
-    end.
-
-rebar_env() ->
-    [{base_dir, rebar_config:get_global(base_dir, rebar_utils:get_cwd())}] ++
-    clean_env(application:get_all_env(rebar_global)).
-
-os_env() ->
-    systest_config:get_env().
-
-clean_env(Env) when is_list(Env) ->
-    [ E || {_, [H|_]}=E <- Env, is_integer(H) ];
-clean_env(_) ->
-    [].

@@ -89,7 +89,7 @@ handle_event(#event{name=tc_auto_skip, data={Suite,Func,Reason}}, State) ->
     {ok, State};
 handle_event(#event{name=test_stats}=Ev, _State) ->
     {ok, Ev};
-handle_event(#event{name=test_done}, #event{data={Ok, Failed, Skipped}}=S) ->
+handle_event(#event{name=test_done}, #event{data={_Ok, Failed, _Skipped}}=S) ->
     PreviousFailed = case application:get_env(systest, failures) of
                          undefined -> 0;
                         Value     -> Value

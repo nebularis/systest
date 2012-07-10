@@ -29,7 +29,53 @@
 
 -record(node, {id, name, ip_addr, port}).
 
-%% cli flags
+settings_merging_test_() ->
+    [{setup, fun() ->
+                 os:putenv("USER", "ci")
+             end,
+     ?_assertMatch([{authz_url, "https://localhost:30001/ssos/login"}],
+                   systest_settings:load("../samples/default.settings"))}].
+
+pre_loaded_config_test_() ->
+    systest:start(),
+    systest_config:start_link(),
+    {ok, Terms} = file:consult("../samples/test.config"),
+    systest_config:load_config_terms(Terms),
+    [?_assertMatch({handling_detached_processes,
+                        [{localhost,[yellow,blue]},{on_start,[]}]},
+                    systest_config:sut_config(systest_cli_SUITE,
+                                              handling_detached_processes)),
+     ?_assertMatch([{handler,systest_cli},
+                    {link_to_parent,false},
+                    {detached,true},
+                    {rpc_enabled, {true, {init, stop, []}}}],
+                   ?REQUIRE(startup, systest_proc:proc_config(
+                                handling_detached_processes, yellow))),
+     ?_assertMatch([
+            {start, [{program, "{{ base_dir }}/resources/test/start"},
+                     {args, ["${proc.id}"]},
+                     {environment, [
+                         {"LOGDIR", "%{TMPDIR}/logs/${proc.id}.log"},
+                         {"DUMPDIR", "${ct.priv_dir}/dump/${proc.id}.log"},
+                         {"PORT", "${proc.user.port}"}
+                     ]}]},
+            {stop,  [{program, "{{ base_dir }}/resources/test/stop"},
+                     {args, ["${proc.id}"]}]}],
+                   ?REQUIRE(flags, systest_proc:proc_config(
+                                handling_detached_processes, yellow))),
+     ?_assertMatch([], ?REQUIRE(user,
+                systest_proc:proc_config(handling_detached_processes,
+                                         yellow))),
+     ?_assertMatch([{local, systest, write_os_pid, []}],
+                                  ?REQUIRE(on_start,
+                systest_proc:proc_config(handling_detached_processes,
+                                         yellow))),
+     ?_assertMatch([], ?REQUIRE(on_stop,
+                systest_proc:proc_config(handling_detached_processes,
+                                         yellow))),
+     ?_assertMatch([], ?REQUIRE(on_join,
+                systest_proc:proc_config(handling_detached_processes,
+                                         yellow)))].
 
 parameterised_eval_test_() ->
     Config = test_config(),
@@ -47,7 +93,7 @@ parameterised_eval_test_() ->
                       systest_config:eval("node.on_start.local",
                                           Config, [{return, path}])),
         {setup, fun() ->
-                    ok = systest:start(),
+                    systest:start(),
                     systest_config:set_env("BASE_DIR", "/var/tmp/foobar")
                 end,
          ?_assertMatch("/var/tmp/foobar/scripts/start-hopper",
@@ -83,14 +129,14 @@ cli_flags_test_() ->
          ?_assertEqual([{program,"resources/test/start-daemon"},
                         {node,id},
                         {environment,"LOGDIR"}],
-                        systest_config:merge_config(GF, NF))
+                        systest_config:merge(GF, NF))
      end].
 
 %% config handling
 
 overwrite_globals_with_local_value_test() ->
     ?assertEqual([{a, 2}, {b, 3}],
-                 systest_config:merge_config([{a, 2}, {b, 1}],
+                 systest_config:merge([{a, 2}, {b, 1}],
                                              [{b, 3}])).
 
 merge_locals_into_global_test() ->
@@ -101,13 +147,13 @@ merge_locals_into_global_test() ->
     ?assertMatch([{flags, [{start, ["--dumpfile=red.dump",
                                     {program, "priv/start"},
                                     {node, id}, {environment, "LOGDIR"}]}|_]}],
-                 systest_config:merge_config(Globals, Locals)).
+                 systest_config:merge(Globals, Locals)).
 
 path_merge_test() ->
     ?assertEqual([{file,"tmp/mnesia/running.pid"},
                   {dir,"tmp-db"},
                   {priv_dir,"tmp"}],
-        systest_config:merge_config(
+        systest_config:merge(
                 [{priv_dir, "tmp"}],
                 [{dir, [scratch, "-db"]},
                  {file, {path, [scratch, "mnesia", "running.pid"]}}])).

@@ -22,6 +22,8 @@
 %% -----------------------------------------------------------------------------
 -module(systest_resource).
 
+-export([new/1]).
+
 -record(resource, {
     path :: file:filename()
 }).

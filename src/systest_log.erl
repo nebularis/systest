@@ -26,7 +26,7 @@
 %% information, so we can probably afford to be relatively lazy here. This 
 %% approach also enables us to remain basically framework agnostic, and does
 %% allow a user (in theory) to provide a custom log handler that delegates to
-%% their own framework of choice.
+%% their own logging framework of choice.
 %% @end
 %% -----------------------------------------------------------------------------
 -module(systest_log).
@@ -64,6 +64,7 @@ behaviour_info(_) ->
     undefined.
 
 start_link() ->
+    %% TODO: pass the log_base here, and use it when activating handlers....
     case gen_event:start_link({local, systest_event_log}) of
         {ok, _}=Ret ->
             ?MODULE:start(),
@@ -111,6 +112,9 @@ activate_logging_subsystem(SubSys, Id, LogBase) ->
                                   atom_to_list(Id) ++ ".log"),
                     ok = start_file({framework, Id}, File),
                     {ok, File};
+                system ->
+                    %% NB: we *only* allow 1 log handler for 'system' events
+                    {error, system};
                 Dest ->
                     ok = start({framework, Id}, ?MODULE, Dest),
                     {ok, Dest}
@@ -153,10 +157,10 @@ handle_event({Scope, Fmt, Args},
              State=#state{id=Id, mod=Mod, fd=Fd}) when Scope == Id ->
     write(Mod, Fd, Id, Fmt, Args),
     {ok, State};
-handle_event({Fmt, Args}, State=#state{mod=Mod, fd=Fd}) ->
+handle_event({Fmt, Args}, State=#state{id=system, mod=Mod, fd=Fd}) ->
     write(Mod, Fd, system, Fmt, Args),
     {ok, State};
-handle_event(Message, State=#state{id=Id}) ->
+handle_event(_Message, State) ->
     %io:format(user, "~p Ignoring ~p~n", [Id, Message]),
     {ok, State}.
 

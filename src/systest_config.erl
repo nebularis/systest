@@ -35,14 +35,16 @@
 -export([read/2, read/3, require/2]).
 -export([eval/2, eval/3, sut_config/2]).
 -export([replace_value/3, ensure_value/3]).
--export([get_config/1, get_config/3, merge_config/2]).
+-export([get_config/1, get_config/2, get_config/3, merge/2]).
 -export([get_env/0, get_env/1, set_env/2]).
--export([load_config/2, load_config_terms/2]).
+-export([load_config/2, load_config_terms/1, load_config_terms/2]).
 
 -export([start_link/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
+
+-import(systest_utils, [as_string/1]).
 
 -type key_type()    :: 'atom' | 'binary' | 'string'.
 -type return_spec() :: 'value' | 'key' | 'path'.
@@ -62,11 +64,11 @@ start_link() ->
 
 sut_config(Scope, Identity) ->
     case is_configured_explicitly(Identity) of
-        true ->
-            {Identity, extract_sut_config(Identity)};
+        {true, Config} ->
+            {Identity, Config};
         false ->
             case search({Identity, 'all'},
-                        ct:get_config(Scope, []),
+                        get_config(Scope, []),
                         search_options([{key_func, fun(X) -> X end}])) of
                 Bad when Bad =:= not_found orelse
                          Bad =:= undefined ->
@@ -82,18 +84,20 @@ sut_config(Scope, Identity) ->
     end.
 
 %% @private
+is_configured_explicitly(Identity) ->
+    case get_config(Identity, sut, noconfig) of
+        noconfig ->
+            false;
+        Cfg ->
+            {true, Cfg ++ [{on_start, get_config(Identity, on_start, [])}]}
+    end.
+
 extract_sut_config(Identity) ->
-    case ct:get_config({Identity, sut}, noconfig) of
+    case get_config(Identity, sut, noconfig) of
         noconfig ->
             noconfig;
         Cfg ->
-            Cfg ++ [{on_start, ct:get_config({Identity, on_start}, [])}]
-    end.
-
-is_configured_explicitly(Identity) ->
-    case ct:require({Identity, sut}) of
-        ok         -> true;
-        {error, _} -> false
+            Cfg ++ [{on_start, get_config(Identity, on_start, [])}]
     end.
 
 eval(Key, Config) ->
@@ -137,10 +141,6 @@ string_eval(Parts, Config, Opts) ->
                (E, ["%"|Acc]) -> [require_env(E)|Acc];
                (E, Acc)       -> [E|Acc]
             end, [], Parts))).
-
-as_string(X) when is_atom(X)    -> atom_to_list(X);
-as_string(X) when is_integer(X) -> integer_to_list(X);
-as_string(X)                    -> X.
 
 search_eval(_, not_found, _) ->
     not_found;
@@ -230,23 +230,41 @@ load_config(Id, Path) ->
 load_config_terms(Id, Terms) ->
     gen_server:call(?MODULE, {load, Id, Terms}).
 
+load_config_terms(Terms) ->
+    gen_server:call(?MODULE, {load, Terms}).
+
 get_config(Key) ->
     systest_log:log(framework,
                     "reading config key ~p~n", [Key]),
-    case ct:get_config(Key, [], [all]) of
-        [Cfg] when is_list(Cfg) -> Cfg;
-        Other                   -> Other
+    case gen_server:call(?MODULE, {get_config, Key}) of
+        [{Key, Config}] -> Config;
+        []              -> noconfig;
+        Other           -> Other
     end.
 
-get_config(Scope, Node, Type) ->
-    Nodes = get_config({Scope, Node}),
-    read(Type, Nodes).
+get_config(Key, Default) ->
+    case get_config(Key) of
+        noconfig -> Default;
+        Config   -> Config
+    end.
 
-merge_config([], C2) ->
+get_config(Key, Node, Default) ->
+    Nodes = case gen_server:call(?MODULE, {get_config, Key, Node}) of
+                {error, Error} ->
+                    systest_log:log(framework,
+                                    "failed to read config key ~p: ~p~n",
+                                    [{Key, Node}, Error]),
+                    [];
+                Result ->
+                    Result
+            end,
+    read(Node, Nodes, Default).
+
+merge([], C2) ->
     C2;
-merge_config(C1, []) ->
+merge(C1, []) ->
     C1;
-merge_config(Config1, Config2) ->
+merge(Config1, Config2) ->
     lists:foldl(fun extend/2, Config1, Config2).
 
 ensure_value(Key, Value, PList) ->
@@ -292,8 +310,25 @@ handle_call({load, Id, Terms}, _From, State) ->
     end,
     true = ets:insert(Id, Terms),
     {reply, ok, State};
+handle_call({load, Terms}, _From, State) ->
+    [begin
+        case ets:info(Id) of
+            undefined -> ets:new(Id, [set, named_table,
+                                      protected, {keypos, 1},
+                                      {write_concurrency, false},
+                                      {read_concurrency, true}]);
+            _         -> ok
+        end,
+        true = ets:insert(Id, Config)
+     end || {Id, Config} <- Terms],
+    {reply, ok, State};
 handle_call({get_config, Key}, _From, State) ->
     {reply, ets:tab2list(Key), State};
+handle_call({get_config, Key, SubKey}, _From, State) ->
+    case catch(ets:lookup(Key, SubKey)) of
+        {'EXIT', Reason} -> {reply, {error, Reason}, State};
+        Result           -> {reply, Result, State}
+    end;
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
@@ -313,7 +348,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private/Internal API
 %%
 
-merge(New, Existing) when is_tuple(New) ->
+merge2(New, Existing) when is_tuple(New) ->
     K = element(1, New),
     case lists:keymember(K, 1, Existing) of
         true ->
@@ -321,7 +356,7 @@ merge(New, Existing) when is_tuple(New) ->
         false ->
             [New|Existing]
     end;
-merge(New, Existing) ->
+merge2(New, Existing) ->
     append_if_missing(fun lists:member/2, New, Existing).
 
 %% TODO: this head (clause) isn't used any more!?
@@ -336,7 +371,7 @@ extend({Path, Spec}=New, Existing) when Path =:= dir orelse
                          end,
     case lists:member(scratch, Members) of
         false ->
-            merge(New, Existing);
+            merge2(New, Existing);
         true  ->
             ScratchDir = proplists:get_value(priv_dir, Existing),
             {Value, _} = lists:foldl(fun rewrite_path_spec/2,
@@ -355,7 +390,7 @@ extend({K, NewVal}=New, Existing) when is_list(NewVal) ->
                            Action when Action =:= start orelse
                                        Action =:= stop  orelse
                                        Action =:= kill  orelse
-                                       Action =:= status -> fun merge/2;
+                                       Action =:= status -> fun merge2/2;
                            _ -> fun extend/2
                        end,
             NewEntry = {K, lists:foldl(Extender, OldVal, NewVal)},
@@ -369,7 +404,7 @@ extend({environment, _}=New, Existing) ->
 extend({environment, _, _}=New, Existing) ->
     [New|Existing];
 extend({_, _}=New, Existing) ->
-    merge(New, Existing);
+    merge2(New, Existing);
 extend(Other, _Existing) ->
     Other.
 
@@ -393,5 +428,5 @@ lookup(Key) ->
     end.
 
 to_tuple(Var) ->
-    [A, B] = re:split(Var, "=", [{return,list},{parts,2}]),
+    [A, B] = re:split(Var, "=", [{return,list}, {parts,2}]),
     [{list_to_atom(string:to_lower(A)), B}, {A, B}].

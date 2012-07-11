@@ -3,8 +3,8 @@
     {startup, [{handler, systest_slave},
                {link_to_parent, true}]},
     {flags, [{start, "-boot start_sasl +W w +K true +A30 +P 1048576"
-                     " -pa {{ base_dir }}/ebin "
-                     "-systest scratch_dir '{file,\"{{ scratch_dir }}\"}' "
+                     " -pa ${settings.base_dir}/ebin "
+                     "-systest scratch_dir '{file,\"%{SCRATCH_DIR}\"}' "
                      "-sasl sasl_error_logger false"}]},
     {on_start, [{systest, write_pid_file, []}]},
     {apps, [{sasl, [{errlog_type, error}]}]}

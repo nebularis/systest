@@ -9,7 +9,7 @@
     ]},
     {flags, [
         {start, [
-            {program, "{{ base_dir }}/resources/test/start"},
+            {program, "${settings.base_dir}/resources/test/start"},
             {args, ["${proc.id}"]},
             {environment, [
                 {"LOGDIR", "%{TMPDIR}/logs/${proc.id}.log"},
@@ -17,7 +17,7 @@
                 {"PORT", "${proc.user.port}"}
             ]}
         ]},
-        {stop,  [{program, "{{ base_dir }}/resources/test/stop"},
+        {stop,  [{program, "${settings.base_dir}/resources/test/stop"},
                  {args, ["${proc.id}"]}]}
     ]}
 ]}.
@@ -30,7 +30,7 @@
         {rpc_enabled, default}
     ]},
     {flags, [
-        {start, [{program, "{{ base_dir }}/resources/test/start"},
+        {start, [{program, "${settings.base_dir}/resources/test/start"},
                  {args, ["${proc.id}"]}]},
         {stop,  [{program, "{{ base_dir }}/resources/test/stop"},
                  {args, ["${proc.id}"]}]}
@@ -65,7 +65,7 @@
     {startup, [{link_to_parent, false},
                {detached,       true}]},
     {flags, [
-        {start, [{program, "{{ base_dir }}/resources/test/start-daemon"},
+        {start, [{program, "${settings.base_dir}/resources/test/start-daemon"},
                  {args, ["${proc.id}"]}]}
     ]}
 ]}.

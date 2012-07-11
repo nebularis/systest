@@ -92,7 +92,7 @@ handle_event(#event{name=test_stats}=Ev, _State) ->
 handle_event(#event{name=test_done}, #event{data={_Ok, Failed, _Skipped}}=S) ->
     PreviousFailed = case application:get_env(systest, failures) of
                          undefined -> 0;
-                        Value     -> Value
+                         Value     -> Value
                      end,
     application:set_env(systest, failures, PreviousFailed + Failed),
     {ok, S};
@@ -103,9 +103,10 @@ failed(What, Desc, FailInfo) when is_list(What) ->
     failed(list_to_atom(string:join(lists:flatten([
                 io_lib:format("~p", [Thing]) || Thing <- What]), "|")),
           Desc, FailInfo);
-failed(What, Desc, _FailInfo) when is_atom(What) ->
-    console("~s ~p failed.~n", [Desc, What]).
-                        % lists:flatten(fail_info(FailInfo))]).
+failed(What, Desc, FailInfo) when is_atom(What) ->
+    console("~s ~p failed.~n", [Desc, What]),
+    systest_log:log(framework,
+                    "~s~n", [lists:flatten(fail_info(FailInfo))]).
 
 fail_info({error,FailInfo}) ->
     fail_info(FailInfo);
@@ -113,11 +114,8 @@ fail_info({timetrap_timeout, Value}) ->
     io_lib:format("timetrap timeout (~p)", [Value]);
 fail_info({failed,{_Suite,end_per_testcase,FailInfo}}) ->
     io_lib:format("end_per_testcase failure: ~s", [fail_info(FailInfo)]);
-fail_info({RunTimeError,StackTrace}) ->
-    io_lib:format("runtime error: ~p~nstacktrace: ~p",
-                  [RunTimeError, StackTrace]);
 fail_info(Other) ->
-    io_lib:format("~p", [Other]).
+    io_lib:format("Fail Info ~p", [Other]).
 
 %%
 %% @private

@@ -62,8 +62,7 @@ run(RunSpec, DryRun) ->
                                      {ModName, _, _} ->
                                          ModName
                                  end,
-                             io:format("hook code ensure loaded: ~p~n",
-                                       [code:ensure_loaded(M)])
+                             code:ensure_loaded(M)
                           end || Hook <- Hooks],
                          {ct_hooks, Hooks}
                  end,

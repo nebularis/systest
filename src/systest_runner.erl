@@ -119,17 +119,26 @@ verify(Exec2=#execution{profile     = Prof,
               end,
 
     case catch( erlang:apply(Mod, TestFun, [Exec2]) ) of
+        ok ->
+            ok;
+        {error,{failures, N}} ->
+            handle_failures(Prof, N, Config);
         {'EXIT', Reason} ->
             handle_errors(Exec2, Reason, Config);
-        {failed, Reason} ->
-            handle_errors(Exec2, Reason, Config);
-        ok ->
-            ok
+        Errors ->
+            handle_errors(Exec2, Errors, Config)
     end.
+
+handle_failures(Prof, N, Config) ->
+    ProfileName = systest_profile:get(name, Prof),
+    ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
+    ErrorHandler("[failed] Execution Profile ~p: ~p failed test cases~n",
+                 [ProfileName, N]).
 
 handle_errors(_Exec, Reason, Config) ->
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
-    ErrorHandler("Execution Failed: ~p~n", [Reason]).
+    ErrorHandler("[error] Framework Encountered Unhandled Errors: ~p~n",
+                 [Reason]).
 
 load_test_targets(Prof, Config) ->
     case proplists:get_all_values(testsuite, Config) of

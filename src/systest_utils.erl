@@ -31,7 +31,8 @@
 -export([proc_id_and_hostname/1, rm_rf/1, find_files/2]).
 -export([with_file/3, with_termfile/2, combine/2, uniq/1]).
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
--export([record_to_proplist/2, border/2]).
+-export([record_to_proplist/2, border/2, print_heading/1, print_section/2]).
+-export([ets_dump/1]).
 
 abort(Fmt, Args) ->
     io:format(user, Fmt, Args),
@@ -81,6 +82,11 @@ as_string(X) when is_integer(X) -> integer_to_list(X);
 as_string(X) when is_float(X)   -> float_to_list(X);
 as_string(X) when is_binary(X)  -> binary_to_list(X);
 as_string(X)                    -> X.
+
+%% @doc recursive search in Dir for files matching Regex
+%% @end
+find_files(Dir, Rx) ->
+    filelib:fold_files(Dir, Rx, true, fun(F, Acc) -> [F | Acc] end, []).
 
 rm_rf([H|_]=Path) when is_integer(H) ->
     rm_rf([Path]);
@@ -148,12 +154,20 @@ proplist_format(L) ->
              io_lib:format(LenPrefix ++ "s: " ++ Fmt, [as_string(K), V])
          end || {K, V} <- L]).
 
+print_heading(S) ->
+    io:format(user, "~s~n", [border(S, "-")]).
+
+print_section(Heading, Properties) ->
+    print_heading(Heading),
+    io:format(user, "~s~n", [systest_utils:proplist_format(Properties)]).
+
 border(S, C) ->
     Pad = erlang:max(25, length(S)),
     Border = string:copies(C, Pad),
     io_lib:format("~s~n~s~n~s~n", [Border, string:centre(S, Pad), Border]).
 
-%% @doc recursive search in Dir for files matching Regex
-%% @end
-find_files(Dir, Rx) ->
-    filelib:fold_files(Dir, Rx, true, fun(F, Acc) -> [F | Acc] end, []).
+ets_dump(Tab) ->
+    print_section("Table Dump - " ++ as_string(Tab),
+                  [{"Name", Tab},
+                   {"Ets Info", ets:info(Tab)}|ets:tab2list(Tab)]).
+

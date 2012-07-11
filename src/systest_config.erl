@@ -38,8 +38,8 @@
 -export([get_config/1, get_config/2, get_config/3, merge/2]).
 -export([get_env/0, get_env/1, set_env/2]).
 -export([load_config/2, load_config_terms/1, load_config_terms/2]).
-
--export([start_link/0]).
+-export([get_static/1, set_static/2]).
+-export([start_link/0, dump/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -233,13 +233,15 @@ load_config_terms(Id, Terms) ->
 load_config_terms(Terms) ->
     gen_server:call(?MODULE, {load, Terms}).
 
+dump() ->
+    gen_server:call(?MODULE, dump).
+
 get_config(Key) ->
     systest_log:log(framework,
                     "reading config key ~p~n", [Key]),
     case gen_server:call(?MODULE, {get_config, Key}) of
-        [{Key, Config}] -> Config;
-        []              -> noconfig;
-        Other           -> Other
+        []     -> noconfig;
+        Config -> Config
     end.
 
 get_config(Key, Default) ->
@@ -249,10 +251,24 @@ get_config(Key, Default) ->
     end.
 
 get_config(Key, Node, Default) ->
+    systest_log:log(framework,
+                    "reading config key ~p.~p~n", [Key, Node]),
     case gen_server:call(?MODULE, {get_config, Key, Node}) of
         noconfig -> noconfig;
         Nodes    -> read(Node, Nodes, Default)
     end.
+
+get_static(Key) ->
+    systest_log:log(framework,
+                    "reading config key ~p~n", [Key]),
+    case gen_server:call(?MODULE, {get_static, Key}) of
+        [Config] -> Config;
+        []              -> noconfig;
+        Other           -> Other
+    end.
+
+set_static(Key, Value) ->
+    gen_server:call(?MODULE, {set_static, Key, Value}).
 
 merge([], C2) ->
     C2;
@@ -287,6 +303,8 @@ init([]) ->
                       {write_concurrency, false}, {read_concurrency, true}]),
     ets:insert_new(?MODULE,
                    lists:flatten([to_tuple(Var) || Var <- os:getenv()])),
+    ets:new(systest_static_cs, [ordered_set, named_table, protected,{keypos,1},
+                        {write_concurrency, false}, {read_concurrency, true}]),
     {ok, []}.
 
 handle_call({set, Key, Value}, _From, State) ->
@@ -305,7 +323,8 @@ handle_call({load, Id, Terms}, _From, State) ->
     true = ets:insert(Id, Terms),
     {reply, ok, State};
 handle_call({load, Terms}, _From, State) ->
-    [begin
+    Ids = [
+    begin
         case ets:info(Id) of
             undefined -> ets:new(Id, [set, named_table,
                                       protected, {keypos, 1},
@@ -313,19 +332,35 @@ handle_call({load, Terms}, _From, State) ->
                                       {read_concurrency, true}]);
             _         -> ok
         end,
-        true = ets:insert(Id, Config)
-     end || {Id, Config} <- Terms],
-    {reply, ok, State};
+        true = ets:insert(Id, Config),
+        Id
+    end || {Id, Config} <- Terms],
+    {reply, ok, Ids ++ State};
+handle_call({get_static, Key}, From, State) ->
+    handle_call({get_config, systest_static_cs, Key}, From, State);
+handle_call({set_static, Key, Value}, _From, State) ->
+    case catch(ets:insert(systest_static_cs, {Key, Value})) of
+        {'EXIT', Reason} -> {reply, {error, Reason}, State};
+        true             -> {reply, ok, State}
+    end;
 handle_call({get_config, Key}, _From, State) ->
+    %% TODO: now that we hold dynamic tables in State,
+    %% we *could* use lists:member(Key, State) instead...
     case catch(ets:tab2list(Key)) of
         {'EXIT', Reason} -> {reply, noconfig, State};
         Result           -> {reply, Result, State}
     end;
 handle_call({get_config, Key, SubKey}, _From, State) ->
+    %% TODO: now that we hold dynamic tables in State,
+    %% we *could* use lists:member(Key, State) instead...
     case catch(ets:lookup(Key, SubKey)) of
         {'EXIT', Reason} -> {reply, noconfig, State};
         Result           -> {reply, Result, State}
     end;
+handle_call(dump, _From, State) ->
+    [systest_utils:ets_dump(Tab) || Tab <- [?MODULE,
+                                            systest_static_cs] ++ State],
+    {reply, ok, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 

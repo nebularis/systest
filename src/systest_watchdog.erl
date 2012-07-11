@@ -41,7 +41,7 @@
 -export([start/0, sut_started/2, exceptions/1, reset/0,
          proc_started/2, proc_stopped/2, force_stop/1]).
 
--export([clear_exceptions/0]).
+-export([clear_exceptions/0, dump/0]).
 
 %% OTP gen_server Exports
 
@@ -93,6 +93,9 @@ exceptions(SutId) ->
 clear_exceptions() ->
     gen_server:call(?MODULE, clear_exceptions).
 
+dump() ->
+    catch gen_server:call(?MODULE, dump, 25000).
+
 %%
 %% OTP gen_server API
 %%
@@ -138,6 +141,11 @@ handle_call({sut_started, SutId, SutPid},
                  {reply, ok, State};
         false -> {reply, {error, clash}, State}
     end;
+handle_call(dump, _From, State=#state{sut_table=CT,
+                                      proc_table=NT,
+                                      exception_table=OT}) ->
+    [systest_utils:ets_dump(T) || T <- [CT, NT, OT]],
+    {reply, ok, State};
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 

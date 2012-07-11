@@ -32,6 +32,8 @@ help() ->
               "-P, --profile    Use the specified test profile~n"
               "-L, --logging    Active logging for the specified sub-system~n"
               "-n, --dryrun     Print everything out but don't run any tests~n"
+              "-X, --errdump    Dump configuration/status information if the "
+                                "run fails~n"
               "~n").
 
 run(["-h"]) ->
@@ -64,11 +66,10 @@ parse_args(Args) ->
            end,
     Spec = opt_spec(),
     OptsWithVals = lists:map(fun erlang:atom_to_list/1,
-                             lists:flatten([[L, S] || {L, S, string} <- Spec])),
+                            lists:flatten([[L, S] || {L, S, string} <- Spec])),
     {Options, _} = niceopt:parse(Args, [{mode, Mode},
                                         {opts_with_vals, OptsWithVals}]),
-    lists:foldl(fun(E, Acc) -> systest_config:merge(Acc, [E]) end, [],
-                validate(Options, Spec)).
+    validate(Options, Spec).
 
 validate(Options, Spec) ->
     [begin
@@ -92,4 +93,5 @@ unpack(V, {L, _, flag})    -> {L, V}.
 opt_spec() ->
     [{profile, 'P', string},
      {logging, 'L', string},
-     {dryrun,  'n', flag}].
+     {dryrun,  'n', flag},
+     {errdump, 'X', flag}].

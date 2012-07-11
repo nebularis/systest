@@ -40,8 +40,11 @@
 %% systest_proc API
 %%
 
-init(NI=#proc{host=Host, name=Name, flags=VmArgs}) ->
-    on_start(NI, slave:start_link(Host, Name, ?CONFIG(start, VmArgs, ""))).
+init(NI=#proc{host=Host, name=Name, config=Config}) ->
+    VmArgs = systest_config:eval("flags.start", Config,
+                    [{callback, {proc, fun systest_proc:get/2}},
+                     {return, value}]),
+    on_start(NI, slave:start_link(Host, Name, VmArgs)).
 
 %% @doc handles interactions with the proc.
 %% handle_interaction(Data, Proc, State) -> {reply, Reply, NewProc, NewState} |

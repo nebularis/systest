@@ -21,10 +21,13 @@
 
 load(DefaultFile) ->
     BaseDir = filename:dirname(DefaultFile),
-    systest_utils:with_termfile(DefaultFile,
-                                fun(BaseTerms) ->
-                                    load_terms(BaseDir, BaseTerms)
-                                end).
+    case systest_utils:with_termfile(DefaultFile,
+                                     fun(BaseTerms) ->
+                                         load_terms(BaseDir, BaseTerms)
+                                     end) of
+        {error, _} -> [];
+        Settings   -> Settings
+    end.
 
 load_terms(BaseDir, BaseTerms) ->
     User = os:getenv("USER"),

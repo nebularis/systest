@@ -141,7 +141,7 @@ init([Scope, Id, Config]) ->
             end,
             case with_sut({Scope, Id}, fun start_host/4, Config) of
                 Sut=#sut{procs=Procs, on_start=Hooks} ->
-                    try 
+                    try
                         case Hooks of
                             [{on_start, Run}|_] ->
                                 log({framework, Id},
@@ -159,9 +159,8 @@ init([Scope, Id, Config]) ->
                              systest_proc:joined_sut(Ref, Sut, Procs -- [Proc])
                          end || Proc <- Procs],
                         {ok, Sut}
-                    catch 
-                        throw:{hook_failed, Reason} -> {stop, Reason};
-                        _:Error                     -> {stop, Error}
+                    catch
+                        _:Error -> {stop, Error}
                     end;
                 Error ->
                     {stop, Error}
@@ -274,7 +273,7 @@ with_sut({Scope, Identity}, Handler, Config) ->
                 log({framework, Identity},
                     "configured hosts: ~p~n", [Hosts]),
                 Procs = lists:flatten([Handler(Identity, Alias,
-                                               Host, Config) || Host <- Hosts]),
+                                            Host, Config) || Host <- Hosts]),
 
                 #sut{id = Identity,
                      scope = Scope,
@@ -283,6 +282,8 @@ with_sut({Scope, Identity}, Handler, Config) ->
                      config = Config,
                      on_start = Hooks}
             catch _:Failed ->
+                log(framework, "SUT start/configuration failed: ~p~n",
+                    [Failed]),
                 Failed
             end
     end.
@@ -290,10 +291,11 @@ with_sut({Scope, Identity}, Handler, Config) ->
 %% TODO: make a Handler:status call to get detailed information back...
 print_status_info({Proc, Status}) ->
     Lines = [{status, Status}|systest_proc:proc_data(Proc)],
-    lists:flatten("Proc Info~n" ++ systest_utils:proplist_format(Lines) ++
+    lists:flatten("~nProc Info~n" ++ systest_utils:proplist_format(Lines) ++
                   "~n----------------------------------------------------~n").
 
 build_procs(Identity, Sut, {Host, Procs}, Config) ->
+    systest_log:log(framework, "building processes...~n", []),
     [systest_proc:make_proc(Sut, N, [{host, Host}, {scope, Identity},
                                      {name, N}|Config]) || N <- Procs].
 
@@ -311,8 +313,10 @@ start_host(Identity, Sut,
             Proc <- build_procs(Identity, Sut, HostConf, Config)].
 
 start_proc(Identity, Proc) ->
+    systest_log:log(framework, "handoff to ~p~n", [Proc]),
     {ok, ProcRef} = systest_proc:start(Proc),
-    systest_watchdog:proc_started(Identity, ProcRef),
+    ok = systest_watchdog:proc_started(Identity, ProcRef),
+    systest_log:log(framework, "process started ok~n", []),
     %% NB: the id field of Proc will *not* be set (correctly)
     %% until after the gen_server has started, so an API call
     %% is necessary rather than using systest_proc:get/2

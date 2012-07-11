@@ -67,7 +67,7 @@ execute(Config) ->
     preload_resources(Resources),
     ensure_test_directories(Prof),
     systest_config:set_env(base_dir, BaseDir),
-    
+
     Targets = load_test_targets(Prof, Config),
     Settings = systest_settings:load(DefaultSettings),
     Exec2 = set([{targets, Targets}, {settings, Settings}], Exec),
@@ -87,31 +87,32 @@ print_banner() ->
               "Version ~s~n", [Banner, AppVsn]).
 
 start_logging(Config) ->
-    Active = ?CONFIG(logging, Config, []),
+    Active = proplists:get_all_values(logging, Config),
     [begin
         io:format(user, "activating logging sub-system ~p~n", [SubSystem]),
-        ok = systest_log:start(SubSystem, systest_log, user)
+        %% TODO: reinstate logging to different appenders...
+        ok = systest_log:start(list_to_atom(SubSystem), systest_log, user)
      end || SubSystem <- Active],
     ok.
 
 verify(Exec2=#execution{profile     = Prof,
                         base_dir    = BaseDir,
                         targets     = Targets,
+                        settings    = Settings,
                         base_config = Config}) ->
+
+    %% we want 'settings' to be available as a configuration section,
+    %% so we store it in systest_config as a static config element
+    systest_config:set_static(settings, [{base_dir, BaseDir}|Settings]),
+
     Mod = systest_profile:get(framework, Prof),
-    io:format(user, "~s~n",
-              [systest_utils:border("SysTest Task Descriptor", "-")]),
-    io:format(user, "~s~n",
-              [systest_utils:proplist_format([
-                {"Base Directory", BaseDir},
-                {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
-                {"Test Suites", lists:concat([S || {suite, S} <- Targets])}])]),
+    systest_utils:print_section("SysTest Task Descriptor", [
+            {"Base Directory", BaseDir},
+            {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
+            {"Test Suites", lists:concat([S || {suite, S} <- Targets])}]),
 
     Prop = systest_utils:record_to_proplist(Prof, systest_profile),
-    Print = systest_utils:proplist_format(Prop),
-    io:format(user, "~s~n",
-              [systest_utils:border("SysTest Profile", "-")]),
-    io:format(user, "~s~n", [Print]),
+    systest_utils:print_section("SysTest Profile", Prop),
 
     TestFun = case ?CONFIG(dryrun, Config, false) of
                   true  -> dryrun;
@@ -130,15 +131,23 @@ verify(Exec2=#execution{profile     = Prof,
     end.
 
 handle_failures(Prof, N, Config) ->
+    maybe_dump(Config),
     ProfileName = systest_profile:get(name, Prof),
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
     ErrorHandler("[failed] Execution Profile ~p: ~p failed test cases~n",
                  [ProfileName, N]).
 
 handle_errors(_Exec, Reason, Config) ->
+    maybe_dump(Config),
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
     ErrorHandler("[error] Framework Encountered Unhandled Errors: ~p~n",
                  [Reason]).
+
+maybe_dump(Config) ->
+    case ?CONFIG(errdump, Config, false) of
+        true  -> systest_stats:dump();
+        false -> ok
+    end.
 
 load_test_targets(Prof, Config) ->
     case proplists:get_all_values(testsuite, Config) of

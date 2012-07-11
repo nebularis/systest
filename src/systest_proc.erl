@@ -88,7 +88,8 @@ behaviour_info(_) ->
 
 -spec make_proc(atom(), atom(), systest_config:config()) -> proc_info().
 make_proc(Scope, Proc, Config) ->
-    make_proc([{ct, Config}] ++ Config ++ proc_config(Scope, Proc)).
+    Settings = systest_config:get_static(settings),
+    make_proc([{ct, Config},Settings] ++ Config ++ proc_config(Scope, Proc)).
 
 -spec start(atom(), atom(),
             list(tuple(atom(), term()))) -> {'ok', pid()} | {'error', term()}.
@@ -547,15 +548,18 @@ lookup(Key, Config, Default) ->
 
 proc_config(Sut, Proc) ->
     Procs = systest_config:get_config(Sut, processes, []),
-    log({framework, Proc}, "processes loading from config: ~p~n", [Procs]),
+    log(framework, "processes loaded from config: ~p~n", [Procs]),
     UserData = systest_config:get_config(Sut, user_data, []),
+    log(framework, "user-data loaded from config: ~p~n", [UserData]),
     ProcConf = case ?CONFIG(Proc, Procs, undefined) of
                    undefined               -> [];
                    Refs when is_list(Refs) -> load_config(Refs)
                end,
-    [{user, ?CONFIG(Proc, UserData, [])}|ProcConf].
+    UserConf = ?CONFIG(Proc, UserData, []),
+    [{user, UserConf}|ProcConf].
 
 load_config(Refs) ->
+    log(framework, "merging configuration refs: ~p~n", [Refs]),
     lists:foldl(fun merge_refs/2, [], Refs).
 
 merge_refs(Ref, []) ->

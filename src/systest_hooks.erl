@@ -47,7 +47,7 @@ run(Item, Hook, Context) ->
     try 
         run_it(Item, Hook, Context)
     catch 
-        _:Error -> throw({hook_failed, Error})
+        _:Error -> throw({hook_failed, Hook, Error})
     end.
 
 run_it(Item, {eval, Where, Mod, Func, Args}, Context) ->

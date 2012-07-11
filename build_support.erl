@@ -27,6 +27,7 @@
 -export([mv_test_beams/2]).
 
 mv_test_beams(_, _) ->
+    %% Because rebar WILL NOT output beams into a directory other than 'ebin'
     Base = rebar_config:get_global(base_dir,
                             rebar_utils:get_cwd()),
     TestSources = filelib:wildcard(

@@ -38,11 +38,6 @@ suite() -> [{timetrap, {seconds, 60}}].
 all() ->
     systest_suite:export_all(?MODULE).
 
-local_and_global_scope_configuration_handling(Config) ->
-    Scope = systest_cli_config_example,
-    Cfg = systest_sut:check_config(Scope, Config),
-    ok.
-
 starting_and_stopping_procs(Config) ->
     process_flag(trap_exit, true),
     Sut = systest:active_sut(Config),

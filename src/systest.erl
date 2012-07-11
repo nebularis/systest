@@ -33,7 +33,8 @@
 -export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
 -export([list_processes/1, process_data/2, read_process_user_data/1]).
--export([write_process_user_data/2, restart/2, stop_and_wait/1, kill_after/2]).
+-export([write_process_user_data/2, restart/2, stop_and_wait/1]).
+-export([kill_after/2, kill_after/3]).
 
 -ignore_xref([{start, 2},
               {procs, 1},
@@ -107,6 +108,9 @@ stop_and_wait(ProcRef) ->
 
 kill_after(Timeout, Target) ->
     systest_proc:kill_after(Timeout, Target).
+
+kill_after(TimeoutMs, Target, Killer) ->
+    systest_proc:kill_after(TimeoutMs, Target, Killer).
 
 interact(Proc, Inputs) ->
     systest_proc:interact(Proc, Inputs).

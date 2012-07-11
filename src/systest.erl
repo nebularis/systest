@@ -30,7 +30,6 @@
 -export([start/0, reset/0, sigkill/1]).
 -export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
 -export([active_sut/1, suts/1, procs/1]).
--export([sut_config/1]).
 -export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
 -export([list_processes/1, process_data/2, read_process_user_data/1]).
@@ -142,11 +141,10 @@ suts(Config) ->
 list_processes(SutRef) ->
     procs(SutRef).
 
-procs(SutRef) ->
+procs(SutRef) when is_record(SutRef, sut) ->
+    systest_sut:get(procs, SutRef);
+procs(SutRef) when is_pid(SutRef) ->
     systest_sut:procs(SutRef).
-
-sut_config(Scope) ->
-    ct:get_config({Scope, sut}).
 
 process_data(Field, ProcRec) ->
     systest_proc:get(Field, ProcRec).

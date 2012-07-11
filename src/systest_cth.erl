@@ -108,6 +108,7 @@ pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
 post_end_per_testcase(TC, Config, Return, State) ->
     %% TODO: handle {save_config, Config} return values in st:stop
     log(framework, "processing ~p post_end_per_testcase~n", [TC]),
+    log(framework, "return: ~p~n", [Return]),
     Result = check_exceptions(TC, Return),
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
@@ -135,11 +136,11 @@ check_exceptions(SutId, Return) ->
             Return;
         Ex ->
             % log("test instance ~p failed!~n", [SutId]),
-            
+
             [begin
                 log("~p: ~p~n", [SutId, Reason])
              end || {_, _, Reason} <- Ex],
-            
+
             Failures = case Ex of
                            [E] -> E;
                            _   -> Ex

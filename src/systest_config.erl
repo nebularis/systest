@@ -249,16 +249,10 @@ get_config(Key, Default) ->
     end.
 
 get_config(Key, Node, Default) ->
-    Nodes = case gen_server:call(?MODULE, {get_config, Key, Node}) of
-                {error, Error} ->
-                    systest_log:log(framework,
-                                    "failed to read config key ~p: ~p~n",
-                                    [{Key, Node}, Error]),
-                    [];
-                Result ->
-                    Result
-            end,
-    read(Node, Nodes, Default).
+    case gen_server:call(?MODULE, {get_config, Key, Node}) of
+        noconfig -> noconfig;
+        Nodes    -> read(Node, Nodes, Default)
+    end.
 
 merge([], C2) ->
     C2;
@@ -323,10 +317,13 @@ handle_call({load, Terms}, _From, State) ->
      end || {Id, Config} <- Terms],
     {reply, ok, State};
 handle_call({get_config, Key}, _From, State) ->
-    {reply, ets:tab2list(Key), State};
+    case catch(ets:tab2list(Key)) of
+        {'EXIT', Reason} -> {reply, noconfig, State};
+        Result           -> {reply, Result, State}
+    end;
 handle_call({get_config, Key, SubKey}, _From, State) ->
     case catch(ets:lookup(Key, SubKey)) of
-        {'EXIT', Reason} -> {reply, {error, Reason}, State};
+        {'EXIT', Reason} -> {reply, noconfig, State};
         Result           -> {reply, Result, State}
     end;
 handle_call(_Request, _From, State) ->

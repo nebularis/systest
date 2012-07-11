@@ -173,8 +173,12 @@ load_test_targets(Prof) ->
                   _ ->
                       Suites
               end,
+    Dirs2 = case Dirs of
+                [Dir] -> Dir;
+                _     -> systest_utils:uniq(Dirs)
+            end,
     [{suite, systest_utils:uniq(Suites2)},
-     {dir, systest_utils:uniq(Dirs)}].
+     {dir, Dirs2}].
 
 load_targets_from_profile(Prof) ->
     lists:foldl(

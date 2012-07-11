@@ -45,6 +45,7 @@
     resources        = []       :: [file:filename()],
     targets          = ["ebin"] :: [testable()],
     specifications   = []       :: [file:filename()],
+    hooks            = []       :: [term()],
     default_timetrap            :: {integer(), time_unit()}
 }).
 

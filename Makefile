@@ -21,6 +21,7 @@
 ## IN THE SOFTWARE.
 ## ----------------------------------------------------------------------------
 LOGLEVEL ?= 0
+VERBOSE ?= 'false'
 REBAR=$(shell which rebar)
 SOURCE_DIR=src
 TEST_DIR=test
@@ -31,6 +32,12 @@ DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- pro
 
 ifndef $(REBAR)
 REBAR=bin/rebar
+endif
+
+ifneq ($(VERBOSE), 'false')
+NOISE=-L framework
+else
+NOISE=""
 endif
 
 .PHONY: all
@@ -49,6 +56,7 @@ clean:
 .PHONY: dist-clean
 dist-clean: clean
 	rm -rf deps
+	rm -rf bin
 	rm -rf priv/bin/systest*
 
 compile: $(REBAR)
@@ -82,12 +90,12 @@ test-dependencies: test-compile
 .PHONY: test-default
 test-default: test-dependencies
 	ERL_FLAGS="-pa ebin -pa test-ebin" \
-	    priv/bin/systest -P default -L framework -L sut -L process
+	    priv/bin/systest -P $@ $(NOISE) # -L sut -L process
 
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
-	ERL_FLAGS="-pa ebin" SYSTEST_PROFILE="$@" \
-		$(REBAR) skip_deps=true systest -v $(LOGLEVEL)
+	ERL_FLAGS="-pa ebin -pa test-ebin" \
+		priv/bin/systest -P $@ $(NOISE) # -L sut -L process
 
 bin/%:
 	mkdir -p deps

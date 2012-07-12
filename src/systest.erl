@@ -26,15 +26,16 @@
 
 -include("systest.hrl").
 
--export([main/1]).
+-export([main/1, get_system_under_test/1]).
 -export([start/0, reset/0, sigkill/1]).
 -export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
 -export([active_sut/1, suts/1, procs/1]).
 -export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
 -export([list_processes/1, process_data/2, read_process_user_data/1]).
--export([write_process_user_data/2, restart/2, stop_and_wait/1]).
+-export([write_process_user_data/2, restart_process/2, stop_and_wait/1]).
 -export([kill_after/2, kill_after/3]).
+-export([log/1, log/2]).
 
 -ignore_xref([{start, 2},
               {procs, 1},
@@ -139,6 +140,9 @@ write_pid_file(Name, {dir, Dir}) ->
     file:write_file(File, Pid, [write]).
 
 %% config handling
+
+get_system_under_test(Config) ->
+    active_sut(Config).
 
 active_sut(Config) ->
     ?REQUIRE(active, Config).

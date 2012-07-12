@@ -26,8 +26,7 @@
 
 -include("systest.hrl").
 
-%-export([execute/1]).
--compile(export_all).
+-export([behaviour_info/1, execute/1]).
 
 -type execution() :: #execution{}.
 -export_type([execution/0]).

@@ -46,6 +46,9 @@ behaviour_info(callbacks) ->
 behaviour_info(_) ->
     undefined.
 
+%% @doc Execute SysTest using the supplied parameters (in Config)
+%% @end
+-spec execute(systest_config:config()) -> 'ok'.
 execute(Config) ->
     maybe_start_net_kernel(Config),
     {ok, BaseDir} = file:get_cwd(),

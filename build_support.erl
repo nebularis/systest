@@ -24,21 +24,28 @@
 %% ----------------------------------------------------------------------------
 -module(build_support).
 
--export(['publish-wiki'/2, mv_test_beams/2]).
+-export(['publish-wiki'/2, post_doc/2, mv_test_beams/2]).
+
+post_doc(Config, _) ->
+    Dest = doc_dir(Config),
+    WikiDir = wiki_dir(Config),
+    case filelib:is_dir(WikiDir) of
+        true ->
+            Generated = doc_files(Dest),
+            rebar_file_utils:cp_r(Generated, WikiDir);
+        false ->
+            rebar_log:log(info, "Skipping ~p:post_doc/2 as no "
+                                "wiki directory was found~n", [?MODULE])
+    end,
+    ok.
 
 'publish-wiki'(Config, _) ->
-    Dest = filename:absname(rebar_config:get_local(Config,
-                                            wiki_repo, "../systest.wiki")),
-    DocDir = filename:absname(proplists:get_value(dir,
-                rebar_config:get_local(Config, edoc_opts, []), "doc")),
-    Generated = filelib:wildcard(filename:join(DocDir, "*.*")) -- 
-                    [filename:join(DocDir, "README.md")],
-    rebar_file_utils:cp_r(Generated, Dest),
-    Filenames = string:join(lists:map(fun filename:basename/1, Generated),
-    %% TODO: create a proper TOC.md
-    rebar_utils:sh("git add " ++ Filenames, " "), [{cd, Dest}]),
-    % rebar_utils:sh("git ci -m 'updated by rebar...'", [{cd, Dest}]),
-    % rebar_utils:sh("git push origin master", [{cd, Dest}]),
+    Dest = wiki_dir(Config),
+    Generated = lists:map(fun filename:basename/1, doc_files(Dest)),
+    Files = string:join(Generated, " "),
+    rebar_utils:sh("git add " ++ Files, [{cd, Dest}]),
+    rebar_utils:sh("git ci -m 'updated by rebar...'", [{cd, Dest}]),
+    rebar_utils:sh("git push origin master", [{cd, Dest}]),
     ok.
 
 mv_test_beams(_, _) ->
@@ -58,3 +65,16 @@ mv_test_beams(_, _) ->
          end
      end || Src <- TestSources],
     ok.
+
+wiki_dir(Config) ->
+    filename:absname(rebar_config:get_global(wiki_repo,
+            rebar_config:get_local(Config, wiki_repo, "../systest.wiki"))).
+
+doc_dir(Config) ->
+    filename:absname(proplists:get_value(dir,
+                rebar_config:get_local(Config, edoc_opts, []), "doc")).
+
+doc_files(DocDir) ->
+    filelib:wildcard(filename:join(DocDir, "*.*")) -- 
+                    [filename:join(DocDir, "README.md"),
+                     filename:join(DocDir, "TOC.md")].

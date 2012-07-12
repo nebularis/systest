@@ -32,7 +32,10 @@ help() ->
               "-P, --profile    Use the specified test profile~n"
               "-L, --logging    Active logging for the specified sub-system~n"
               "-n, --dryrun     Print everything out but don't run any tests~n"
-              "-X, --errdump    Dump configuration/status information if the "
+              "-a, --name       Specify (Erlang) node name, "
+                                "default = systest_runner~n"
+              "-A, --longnames  Use long instead of short names with -a~n"
+              "-X, --dump       Dump configuration/status information if the "
                                 "run fails~n"
               "~n").
 
@@ -94,4 +97,6 @@ opt_spec() ->
     [{profile, 'P', string},
      {logging, 'L', string},
      {dryrun,  'n', flag},
-     {errdump, 'X', flag}].
+     {dump,    'X', flag},
+     {node,    'a', string},
+     {longnames, 'A', flag}].

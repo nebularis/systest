@@ -74,11 +74,13 @@ start_it(How, ScopeId, SutId, Config) ->
                                  ?MODULE, [ScopeId, SutId, Config], []]) of
         {error, noconfig} ->
             Config;
+        {error, {bad_return_value, Return}} ->
+            {error, Return};
+        {error, _Other}=Err ->
+            Err;
         {ok, Pid} ->
             Config2 = systest_config:ensure_value(SutId, Pid, Config),
-            systest_config:replace_value(active, Pid, Config2);
-        {error, _Other}=Err ->
-            Err
+            systest_config:replace_value(active, Pid, Config2)
     end.
 
 stop(SutRef) ->
@@ -266,26 +268,20 @@ with_sut({Scope, Identity}, Handler, Config) ->
         {_, noconfig} ->
             noconfig;
         {Alias, SutConfig} ->
-            try
-                {Hosts, Hooks} = lists:splitwith(fun(E) ->
-                                                     element(1, E) =/= on_start
-                                                 end, SutConfig),
-                log({framework, Identity},
-                    "configured hosts: ~p~n", [Hosts]),
-                Procs = lists:flatten([Handler(Identity, Alias,
-                                            Host, Config) || Host <- Hosts]),
+            {Hosts, Hooks} = lists:splitwith(fun(E) ->
+                                                 element(1, E) =/= on_start
+                                             end, SutConfig),
+            log({framework, Identity},
+                "configured hosts: ~p~n", [Hosts]),
+            Procs = lists:flatten([Handler(Identity, Alias,
+                                        Host, Config) || Host <- Hosts]),
 
-                #sut{id = Identity,
-                     scope = Scope,
-                     name = Alias,
-                     procs = Procs,
-                     config = Config,
-                     on_start = Hooks}
-            catch _:Failed ->
-                log(framework, "SUT start/configuration failed: ~p~n",
-                    [Failed]),
-                Failed
-            end
+            #sut{id = Identity,
+                 scope = Scope,
+                 name = Alias,
+                 procs = Procs,
+                 config = Config,
+                 on_start = Hooks}
     end.
 
 %% TODO: make a Handler:status call to get detailed information back...

@@ -108,7 +108,6 @@ eval(Key, Config) ->
 eval(Path, Config, Opts) when is_list(Opts) ->
     eval(Path, Config, search_options(Opts));
 eval(Path, Config, Search=#search{return=Spec, key_func=KF}) ->
-    % io:format(user, "eval ~s~n", [Path]),
     try
         Parts = string:tokens(Path, "."),
         Result = search_eval(Parts, Config, Search),

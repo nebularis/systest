@@ -286,7 +286,8 @@ safe_call(ProcRef, Msg, Default) ->
     end.
 
 proc_id(Host, Name) ->
-    list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
+    HostName = systest_env:fqdn(Host),
+    list_to_atom(atom_to_list(Name) ++ "@" ++ HostName).
 
 apply_startup(Item, ProcState) ->
     apply_hook(on_start, Item, ProcState).

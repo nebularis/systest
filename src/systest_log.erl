@@ -163,7 +163,6 @@ handle_event({Fmt, Args}, State=#state{id=system, mod=Mod, fd=Fd}) ->
     write(Mod, Fd, system, Fmt, Args),
     {ok, State};
 handle_event(_Message, State) ->
-    %io:format(user, "~p Ignoring ~p~n", [Id, Message]),
     {ok, State}.
 
 handle_call(where, State) ->

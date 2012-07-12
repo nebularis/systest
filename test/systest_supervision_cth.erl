@@ -48,10 +48,10 @@ pre_init_per_testcase(TC, [{_,_}|_]=Config, State) ->
     Active = ?CONFIG(TC, Config, undefined),
     systest_log:log(framework, "active sut: ~p~n", [Active]),
     {Config, State#ctx{active={TC, Active}}};
-pre_init_per_testcase(TC, Config, State) ->
+pre_init_per_testcase(_TC, Config, State) ->
     {Config, State}.
 
-post_end_per_testcase(should_fail_bad_config, Config,
+post_end_per_testcase(should_fail_bad_config, _Config,
                       {skip,{failed,
                         {systest_supervision_SUITE,init_per_testcase,
                         {error, {already_started, _Pid}}}}}, State) ->

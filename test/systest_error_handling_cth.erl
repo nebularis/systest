@@ -37,15 +37,27 @@
          post_init_per_suite/4,
          pre_end_per_suite/3]).
 
-pre_init_per_testcase(TC, Config, State) ->
+pre_init_per_testcase(TC=sut_start_scripts_badly_configured, Config, State) ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
-        {{fail,{systest_under_test, start, {error, What}}},_}=Err ->
+        {{fail,{system_under_test, start, {error,
+                    {configuration_not_found, bad_cli}}}},_} ->
+            systest_event:console("ignoring expected sut start failure~n", []),
+            systest_watchdog:clear_exceptions(),
+            {Config, State};
+        Other ->
+            {{fail, Other}, State}
+    end;
+pre_init_per_testcase(TC=failing_sut_on_start_hook, Config, State) ->
+    case systest_cth:pre_init_per_testcase(TC, Config, State) of
+        {{fail,{system_under_test, start,
+                {error, {hook_failed,
+                    {local,erlang,error,[]}=What, _}}}},_} ->
             systest_event:console("ignoring expected sut start failure ~p~n",
                                   [What]),
             systest_watchdog:clear_exceptions(),
             {Config, State};
         Other ->
-            {{fail, [{expected, fail},{actual, Other}]}, State}
+            {{fail, Other}, State}
     end.
 
 post_init_per_suite(_Suite, _Config, Return, State) ->

@@ -95,7 +95,7 @@ test-default: test-dependencies
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
 	ERL_FLAGS="-pa ebin -pa test-ebin" \
-		priv/bin/systest -P $@ $(NOISE) # -L sut -L process
+		priv/bin/systest -A -a error_test -P $@ $(NOISE) # -L sut -L process
 
 bin/%:
 	mkdir -p deps

@@ -80,11 +80,8 @@ set_defaults(Profile) ->
 print_banner() ->
     %% Urgh - could there be an uglier way!?
     %% TODO: refactor this...
-    AppVsn = element(3, lists:keyfind(systest, 1,
-                                      application:loaded_applications())),
     {ok, Banner} = application:get_env(systest, banner),
-    io:format("~s~n"
-              "Version ~s~n", [Banner, AppVsn]).
+    io:format("~s~n", [Banner]).
 
 start_logging(Config) ->
     Active = proplists:get_all_values(logging, Config),
@@ -105,12 +102,16 @@ verify(Exec2=#execution{profile     = Prof,
     %% so we store it in systest_config as a static config element
     systest_config:set_static(settings, [{base_dir, BaseDir}|Settings]),
 
-    Mod = systest_profile:get(framework, Prof),
+    AppVsn = element(3, lists:keyfind(systest, 1,
+                                      application:which_applications())),
     systest_utils:print_section("SysTest Task Descriptor", [
+            {"Release Version", AppVsn},
+            {"Test Coordinator", node()},
             {"Base Directory", BaseDir},
             {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
             {"Test Suites", lists:concat([S || {suite, S} <- Targets])}]),
 
+    Mod = systest_profile:get(framework, Prof),
     Prop = systest_utils:record_to_proplist(Prof, systest_profile),
     systest_utils:print_section("SysTest Profile", Prop),
 
@@ -144,7 +145,7 @@ handle_errors(_Exec, Reason, Config) ->
                  [Reason]).
 
 maybe_dump(Config) ->
-    case ?CONFIG(errdump, Config, false) of
+    case ?CONFIG(dump, Config, false) of
         true  -> systest_stats:dump();
         false -> ok
     end.
@@ -240,13 +241,17 @@ build_exec(Config) ->
 
 maybe_start_net_kernel(Config) ->
     UseLongNames = ?CONFIG(longnames, Config, false),
+    NodeName = case ?CONFIG(node, Config, undefined) of
+                   undefined -> ?MODULE;
+                   Other     -> list_to_atom(Other)
+               end,
     case net_kernel:longnames() of
         ignored ->
             if
                 UseLongNames =:= true ->
-                    net_kernel:start([?MODULE, longnames]);
+                    {ok, _} = net_kernel:start([NodeName, longnames]);
                 UseLongNames =:= false ->
-                    net_kernel:start([?MODULE, shortnames])
+                    {ok, _} = net_kernel:start([NodeName, shortnames])
             end;
         LongNames ->
             systest_utils:throw_unless(
@@ -255,7 +260,7 @@ maybe_start_net_kernel(Config) ->
                 "longnames should be ~p, "
                 "but the current node is running with ~p.~n",
                 [use_longnames(UseLongNames),
-                long_or_short_names(LongNames)])
+                 long_or_short_names(LongNames)])
     end.
 
 use_longnames(true)  -> enabled;

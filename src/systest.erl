@@ -68,19 +68,23 @@ stop_scope(Scope) when is_atom(Scope) ->
     systest_watchdog:force_stop(Scope).
 
 start(Scope, Config) ->
-    case systest_sut:start(Scope, Config) of
+    try systest_sut:start(Scope, Config) of
         {error, _}=Err ->
-            {fail, {systest_under_test, start, Err}};
+            {fail, {system_under_test, start, Err}};        
         Other ->
             Other
+    catch
+        What -> {fail, {system_under_test, start, What}}
     end.
 
 start(Scope, Identify, Config) ->
-    case systest_sut:start(Scope, Identify, trace_on(Identify, Config)) of
+    try systest_sut:start(Scope, Identify, trace_on(Identify, Config)) of
         {error, _}=Err ->
-            {fail, {systest_under_test, start, Err}};
+            {fail, {system_under_test, start, Err}};
         Other ->
             Other
+    catch
+        What -> {fail, {system_under_test, start, What}}
     end.
 
 stop(Scope) when is_pid(Scope) ->

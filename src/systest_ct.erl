@@ -40,9 +40,7 @@ run(RunSpec, DryRun) ->
     Profile = systest_runner:get(profile, RunSpec),
     Targets = systest_runner:get(targets, RunSpec),
     Label   = systest_profile:get(name, Profile),
-    Specs   = systest_profile:get(specifications, Profile),
     LogDir  = systest_profile:get(log_dir, Profile),
-    % Timeout = systest_profile:get(default_timetrap, Profile),
     Hooks   = systest_profile:get(hooks, Profile),
 
     ok = systest_log:start(system, systest_ct_log, common_test),

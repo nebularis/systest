@@ -551,6 +551,7 @@ proc_config(Sut, Proc) ->
     log(framework, "processes loaded from config: ~p~n", [Procs]),
     UserData = systest_config:get_config(Sut, user_data, []),
     log(framework, "user-data loaded from config: ~p~n", [UserData]),
+    %% TODO: should *this* not ?REQUIRE otherwise how do we configure the proc?
     ProcConf = case ?CONFIG(Proc, Procs, undefined) of
                    undefined               -> [];
                    Refs when is_list(Refs) -> load_config(Refs)
@@ -563,9 +564,9 @@ load_config(Refs) ->
     lists:foldl(fun merge_refs/2, [], Refs).
 
 merge_refs(Ref, []) ->
-    systest_config:get_config(Ref);
+    systest_config:require_config(Ref);
 merge_refs(Ref, Acc) ->
-    RefConfig = systest_config:get_config(Ref),
+    RefConfig = systest_config:require_config(Ref),
     Startup = systest_config:merge(
                     ?CONFIG(startup, Acc, []),
                     ?CONFIG(startup, RefConfig, [])),

@@ -37,7 +37,7 @@
 -export([read/2, read/3, require/2]).
 -export([eval/2, eval/3, sut_config/2]).
 -export([replace_value/3, ensure_value/3]).
--export([get_config/1, get_config/2, get_config/3, merge/2]).
+-export([require_config/1, get_config/1, get_config/2, get_config/3, merge/2]).
 -export([get_env/0, get_env/1, set_env/2]).
 -export([load_config/2, load_config_terms/1, load_config_terms/2]).
 -export([get_static/1, set_static/2]).
@@ -238,6 +238,12 @@ load_config_terms(Terms) ->
 dump() ->
     gen_server:call(?MODULE, dump).
 
+require_config(Key) ->
+    case get_config(Key) of
+        noconfig -> throw({configuration_not_found, Key});
+        Config   -> Config
+    end.
+
 get_config(Key) ->
     systest_log:log(framework,
                     "reading config key ~p~n", [Key]),
@@ -256,7 +262,7 @@ get_config(Key, Node, Default) ->
     systest_log:log(framework,
                     "reading config key ~p.~p~n", [Key, Node]),
     case gen_server:call(?MODULE, {get_config, Key, Node}) of
-        noconfig -> noconfig;
+        noconfig -> Default;
         Nodes    -> read(Node, Nodes, Default)
     end.
 
@@ -316,7 +322,7 @@ handle_call(list, _From, State) ->
     {reply, ets:tab2list(?MODULE), State};
 handle_call({load, Id, Terms}, _From, State) ->
     case ets:info(Id) of
-        undefined -> ets:new(Id, [bag, named_table,
+        undefined -> ets:new(Id, [set, named_table,
                                   protected, {keypos, 1},
                                   {write_concurrency, false},
                                   {read_concurrency, true}]);
@@ -349,15 +355,15 @@ handle_call({get_config, Key}, _From, State) ->
     %% TODO: now that we hold dynamic tables in State,
     %% we *could* use lists:member(Key, State) instead...
     case catch(ets:tab2list(Key)) of
-        {'EXIT', Reason} -> {reply, noconfig, State};
-        Result           -> {reply, Result, State}
+        {'EXIT', _Reason} -> {reply, noconfig, State};
+        Result            -> {reply, Result, State}
     end;
 handle_call({get_config, Key, SubKey}, _From, State) ->
     %% TODO: now that we hold dynamic tables in State,
     %% we *could* use lists:member(Key, State) instead...
     case catch(ets:lookup(Key, SubKey)) of
-        {'EXIT', Reason} -> {reply, noconfig, State};
-        Result           -> {reply, Result, State}
+        {'EXIT', _Reason} -> {reply, noconfig, State};
+        Result            -> {reply, Result, State}
     end;
 handle_call(dump, _From, State) ->
     [systest_utils:ets_dump(Tab) || Tab <- [?MODULE,

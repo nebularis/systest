@@ -70,7 +70,7 @@ stop_scope(Scope) when is_atom(Scope) ->
 start(Scope, Config) ->
     try systest_sut:start(Scope, Config) of
         {error, _}=Err ->
-            {fail, {system_under_test, start, Err}};        
+            {fail, {system_under_test, start, Err}};
         Other ->
             Other
     catch
@@ -163,5 +163,13 @@ read_process_user_data(ProcRef) ->
 write_process_user_data(ProcRef, Data) ->
     systest_proc:user_data(ProcRef, Data).
 
-restart(SutRef, ProcRef) ->
+restart_process(SutRef, ProcRef) ->
     systest_sut:restart_proc(SutRef, ProcRef).
+
+%% logging
+
+log(Message) ->
+    log(Message, []).
+
+log(Format, Args) ->
+    systest_log:log(operator, Format, Args).

@@ -317,7 +317,8 @@ apply_hook(Hook, Item, {Proc, HState}) ->
 
 on_join(Proc, Sut, Procs, Hooks) ->
     log({framework, get(id, Proc)},
-        "process has joined a SUT with ~p~n", [Procs]),
+        "process has joined system under test: ~p~n",
+        [systest_sut:get(id, Sut)]),
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
     {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
@@ -523,11 +524,12 @@ reply(Reply, ReplyTo, State) ->
 %% proc making and configuration handling
 
 make_proc(Config) ->
-    log(framework, "make process: ~p~n", [Config]),
+    Name = ?REQUIRE(name, Config),
+    log(framework, "make process: ~p~n", [Name]),
     %% NB: new_proc_info is an exprecs generated function
     record_fromlist([{scope,      ?REQUIRE(scope, Config)},
                      {host,       ?REQUIRE(host, Config)},
-                     {name,       ?REQUIRE(name, Config)},
+                     {name,       Name},
                      {handler,    lookup("startup.handler",
                                          Config, systest_cli)},
                      {link,       lookup("startup.link_to_parent",

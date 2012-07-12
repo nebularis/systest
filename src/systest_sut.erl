@@ -93,6 +93,9 @@ restart_proc(SutRef, Proc) ->
     restart_proc(SutRef, Proc, infinity).
 
 restart_proc(SutRef, Proc, Timeout) ->
+    systest_log:log(framework,
+                    "restart requested for ~p by ~p~n",
+                    [Proc, self()]),
     case gen_server:call(SutRef, {restart, Proc}, Timeout) of
         {restarted, {_OldProc, NewProc}} ->
             {ok, NewProc};
@@ -180,16 +183,17 @@ handle_call({stop, Timeout}, From, State) ->
 handle_call(stop, From, State) ->
     shutdown(State, infinity, From);
 handle_call({restart, Proc}, From,
-            State=#sut{procs=Procs, pending=P}) ->
+            State=#sut{id=Id, procs=Procs, pending=P}) ->
     case [N || N <- Procs, element(1, N) == Proc orelse
                            element(2, N) == Proc] of
         [] ->
             {reply, {error, Proc}, State};
         [{_, Ref}=Found] ->
+            systest_log:log({framework, Id},
+                            "restarting process ~p"
+                            "on behalf of ~p~n", [Found, From]),
             systest_proc:stop(Ref),
-            State2 = State#sut{
-                pending=[{restart, Found, From}|P]
-            },
+            State2 = State#sut{ pending=[{restart, Found, From}|P] },
             {noreply, State2}
     end;
 handle_call(_Msg, _From, State) ->
@@ -201,8 +205,12 @@ handle_cast(_Msg, State) ->
 handle_info({'EXIT', Pid, normal}=Ev, State=#sut{name=Sut}) ->
     systest_watchdog:proc_stopped(Sut, Pid),
     {noreply, clear_pending(Ev, State)};
-handle_info({'EXIT', Pid, Reason}, State) ->
-    {stop, {proc_exit, Pid, Reason}, State}.
+handle_info({'EXIT', Pid, Reason}=Ev, State=#sut{id=Sut}) ->
+    systest_log:log({framework, Sut},
+                    "unexpected systest process exit "
+                    "from ~p: ~p",
+                    [Pid, Reason]),
+    {stop, {proc_exit, Pid, Reason}, clear_pending(Ev, State)}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -214,19 +222,28 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal API
 %%
 
-clear_pending({'EXIT', Pid, normal},
+clear_pending({'EXIT', Pid, _},
               #sut{id = Identity, name = SutName,
                    config = Config, procs = Procs,
                    pending = Pending}=State) ->
+    systest_log:log({framework, Identity},
+                    "checking ~p against pending restarts~n", [Pid]),
     case [P || {_, {_, DyingPid}, _}=P <- Pending, DyingPid == Pid] of
         [{restart, {Id, Pid}=DeadProc, Client}]=Restart ->
+            systest_log:log({framework, Identity},
+                            "found ~p~n", [DeadProc]),
             {ProcName, Host} = systest_utils:proc_id_and_hostname(Id),
             [Proc] = build_procs(SutName, SutName,
                                  {Host, [ProcName]}, Config),
             NewProc = start_proc(Identity, Proc),
             RemainingProcs = Procs -- [DeadProc],
+
+            systest_log:log({framework, Identity},
+                    "running on_join hooks for restarted process~n", []),
             systest_proc:joined_sut(element(2, NewProc),
                                         State, RemainingProcs),
+            systest_log:log({framework, Identity},
+                            "restart complete: notifying ~p~n", [Client]),
             gen_server:reply(Client, {restarted, {DeadProc, NewProc}}),
             NewProcState = [NewProc|(RemainingProcs)],
             NewPendingState = Pending -- Restart,
@@ -309,7 +326,8 @@ start_host(Identity, Sut,
             Proc <- build_procs(Identity, Sut, HostConf, Config)].
 
 start_proc(Identity, Proc) ->
-    systest_log:log(framework, "handoff to ~p~n", [Proc]),
+    systest_log:log(framework, "handoff to ~p~n",
+                    [systest_proc:get(name, Proc)]),
     {ok, ProcRef} = systest_proc:start(Proc),
     ok = systest_watchdog:proc_started(Identity, ProcRef),
     systest_log:log(framework, "process started ok~n", []),

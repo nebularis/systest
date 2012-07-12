@@ -45,6 +45,7 @@ run(RunSpec, DryRun) ->
 
     ok = systest_log:start(system, systest_ct_log, common_test),
     ok = systest_log:start(framework, systest_ct_log, common_test),
+    ok = systest_log:start(operator, systest_ct_log, common_test),
 
     TestFun = if DryRun =:= false -> fun run_test/1;
                             true  -> fun print_test/1

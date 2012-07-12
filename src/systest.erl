@@ -70,7 +70,7 @@ stop_scope(Scope) when is_atom(Scope) ->
 start(Scope, Config) ->
     case systest_sut:start(Scope, Config) of
         {error, _}=Err ->
-            {fail, {sut_start, Err}};
+            {fail, {systest_under_test, start, Err}};
         Other ->
             Other
     end.
@@ -78,7 +78,7 @@ start(Scope, Config) ->
 start(Scope, Identify, Config) ->
     case systest_sut:start(Scope, Identify, trace_on(Identify, Config)) of
         {error, _}=Err ->
-            {fail, {sut_start, Err}};
+            {fail, {systest_under_test, start, Err}};
         Other ->
             Other
     end.

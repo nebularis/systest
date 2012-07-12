@@ -145,19 +145,9 @@ init([Scope, Id, Config]) ->
                     log(framework, "per-system logging to ~p~n", [Dest])
             end,
             case with_sut({Scope, Id}, fun start_host/4, Config) of
-                Sut=#sut{procs=Procs, on_start=Hooks} ->
+                Sut=#sut{procs=Procs} ->
                     try
-                        case Hooks of
-                            [{on_start, Run}|_] ->
-                                log({framework, Id},
-                                    "running on_start hooks ~p~n", [Run]),
-                                [systest_hooks:run(Sut,
-                                                   Hook, Sut) || Hook <- Run];
-                            Other ->
-                                log({framework, Id},
-                                    "ignoring on_start hooks ~p~n", [Other]),
-                                ok
-                        end,
+                        maybe_run_hooks(Id, Sut),
                         [begin
                              {_, Ref} = Proc,
                              log(framework, "~p has joined~n", [Proc]),
@@ -172,6 +162,19 @@ init([Scope, Id, Config]) ->
             end;
         {error, clash} ->
             {stop, name_in_use}
+    end.
+
+maybe_run_hooks(Id, Sut=#sut{on_start=Hooks}) ->
+    case Hooks of
+        [{on_start, Run}|_] ->
+            log({framework, Id},
+                "running on_start hooks ~p~n", [Run]),
+            [systest_hooks:run(Sut,
+                               Hook, Sut) || Hook <- Run];
+        Other ->
+            log({framework, Id},
+                "ignoring on_start hooks ~p~n", [Other]),
+            ok
     end.
 
 handle_call(procs, _From, State=#sut{procs=Procs}) ->

@@ -24,7 +24,22 @@
 %% ----------------------------------------------------------------------------
 -module(build_support).
 
--export([mv_test_beams/2]).
+-export(['publish-wiki'/2, mv_test_beams/2]).
+
+'publish-wiki'(Config, _) ->
+    Dest = filename:absname(rebar_config:get_local(Config,
+                                            wiki_repo, "../systest.wiki")),
+    DocDir = filename:absname(proplists:get_value(dir,
+                rebar_config:get_local(Config, edoc_opts, []), "doc")),
+    Generated = filelib:wildcard(filename:join(DocDir, "*.*")) -- 
+                    [filename:join(DocDir, "README.md")],
+    rebar_file_utils:cp_r(Generated, Dest),
+    Filenames = string:join(lists:map(fun filename:basename/1, Generated),
+    %% TODO: create a proper TOC.md
+    rebar_utils:sh("git add " ++ Filenames, " "), [{cd, Dest}]),
+    % rebar_utils:sh("git ci -m 'updated by rebar...'", [{cd, Dest}]),
+    % rebar_utils:sh("git push origin master", [{cd, Dest}]),
+    ok.
 
 mv_test_beams(_, _) ->
     %% Because rebar WILL NOT output beams into a directory other than 'ebin'

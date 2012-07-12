@@ -55,9 +55,6 @@ execute(Config) ->
     DefaultSettings = systest_profile:get(settings_base, Prof),
     Resources = verify_resources(Prof, BaseDir),
 
-    %% because sometimes, code that is accessed from an escript archive doesn't
-    %% get handled in a particularly useful way by the code server.... :/
-    % code:ensure_loaded(systest_utils)
     systest:start(),
     print_banner(),
     set_defaults(Prof),

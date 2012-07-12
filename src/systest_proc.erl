@@ -181,15 +181,20 @@ shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     %% on branch 'supervision'
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
-        false -> link(Owner),
-                 log(framework,
-                     "waiting for ~p to exit from: ~p~n",
-                     [Owner, erlang:process_info(self())]),
-                 ok = ShutdownOp(Owner),
-                 receive
-                     {'EXIT', Owner, _Reason} -> ok;
-                     Other                    -> log(framework,
-                                                     "Other ~p~n", [Other])
+        false -> PFlag = erlang:process_flag(trap_exit, true),
+                 try
+                     link(Owner),
+                      log(framework,
+                          "waiting for ~p to exit from: ~p~n",
+                          [Owner, erlang:process_info(self())]),
+                      ok = ShutdownOp(Owner),
+                      receive
+                          {'EXIT', Owner, _Reason} -> ok;
+                          Other                    -> log(framework,
+                                                          "Other ~p~n", [Other])
+                      end
+                 after
+                     erlang:process_flag(trap_exit, PFlag)
                  end
     end.
 

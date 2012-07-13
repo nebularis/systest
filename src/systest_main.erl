@@ -27,7 +27,7 @@
 -export([run/1, help/0]).
 
 help() ->
-    io:format("Usage: systest [-P <profile>] [-L <logging>] [-n] [-h]~n"
+    io:format("Usage: systest [-P <profile>] [-L <logging>] [-n] [-h]~n~n"
               "-h               Show the program options~n"
               "-P, --profile    Use the specified test profile~n"
               "-L, --logging    Active logging for the specified sub-system~n"
@@ -37,11 +37,15 @@ help() ->
               "-A, --longnames  Use long instead of short names with -a~n"
               "-X, --dump       Dump configuration/status information if the "
                                 "run fails~n"
+              "--<s>-<k>=<v>    Set [k]ey for [s]ubsystem to [v]alue~n"
               "~n").
 
 run(["-h"]) ->
     help(),
     erlang:halt(0);
+run(["check"|Args]) ->
+    systest_utils:print_banner(),
+    systest_utils:print_section("Options", parse_args(Args));
 run(Args) ->
     Options = parse_args(Args),
     application:load(systest),
@@ -80,23 +84,23 @@ validate(Options, Spec) ->
             false ->
                 case lists:keyfind(K, 2, Spec) of
                     false ->
-                        systest_utils:abort("Invalid Option ~p~n", [K]);
+                        RawOpt;
                     Def ->
                         unpack(V, Def)
                 end;
             OptDef ->
                 unpack(V, OptDef)
         end
-     end || {K, V} <- Options].
+     end || {K, V}=RawOpt <- Options].
 
 unpack(V, {L, _, integer}) -> {L, list_to_integer(V)};
 unpack(V, {L, _, string})  -> {L, V};
 unpack(V, {L, _, flag})    -> {L, V}.
 
 opt_spec() ->
-    [{profile, 'P', string},
-     {logging, 'L', string},
-     {dryrun,  'n', flag},
-     {dump,    'X', flag},
-     {node,    'a', string},
+    [{profile,   'P', string},
+     {logging,   'L', string},
+     {dryrun,    'n', flag},
+     {dump,      'X', flag},
+     {node,      'a', string},
      {longnames, 'A', flag}].

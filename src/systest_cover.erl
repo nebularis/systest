@@ -42,7 +42,10 @@ start(ScratchDir, Config) ->
                      false ->
                          []
                  end,
-    SearchDirs = ?CONFIG(cover_dirs, Config, ["ebin"]),
+    SearchDirs = case proplists:get_all_values('cover-dir', Config) of
+                     []      -> ["ebin"];
+                     CovDirs -> CovDirs
+                 end,
     {ok, Cwd} = file:get_cwd(),
     Dirs = [case filename:pathtype(Dir) of
                 relative -> filename:join(Cwd, Dir);

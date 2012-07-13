@@ -20,7 +20,8 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% -----------------------------------------------------------------------------
-%% @doc Module systest_ct_log - provides a logging callback handler that prints
+%% @hidden 
+%% Module systest_ct_log - provides a logging callback handler that prints
 %% to the common test log. Both raw and HTML outputs are generated this way.
 %% -----------------------------------------------------------------------------
 -module(systest_ct_log).

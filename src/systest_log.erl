@@ -22,7 +22,8 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
-%% @doc Logging Event Handler - provides a gen_event based logging infrastructure
+%% @hidden 
+%% Logging Event Handler - provides a gen_event based logging infrastructure
 %% which is very lightweight, at relatively low cost. Whilst we aren't going to
 %% win any prizes for efficiency, we <i>only</i> deal with logging test related
 %% information, so we can probably afford to be relatively lazy here. This 
@@ -33,9 +34,7 @@
 %% -----------------------------------------------------------------------------
 -module(systest_log).
 
-%% TODO: this might just become a bottle neck at some point, whence we should
-%% rework it, possibly using a second slave/io node to handle the throughput
-%% of write intensive traffic whilst we deal with everything else
+%% TODO: this might just become a bottle neck at some point
 
 -behaviour(gen_event).
 
@@ -134,7 +133,7 @@ log(Scope, Fmt, Args) ->
     %% the handle_event callback and filter out unwanted messages that way.
     gen_event:sync_notify(systest_event_log, {Scope, Fmt, Args}).
 
-%% @doc Writes (with formatting as per log/3) to all logging handlers.
+%% @doc Writes (with formatting as per log/3) to the system logging handler.
 %% @end
 log(Fmt, Args) ->
     log(system, Fmt, Args).

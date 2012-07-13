@@ -22,6 +22,8 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
+%% @hidden
+%% ----------------------------------------------------------------------------
 -module(systest_env).
 
 -export([default_log_dir/1, default_scratch_dir/0, temp_dir/0]).

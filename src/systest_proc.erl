@@ -22,6 +22,8 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
+%% @hidden
+%% ----------------------------------------------------------------------------
 -module(systest_proc).
 
 -include("systest.hrl").
@@ -177,8 +179,6 @@ joined_sut(ProcRef, SutRef, SiblingProcs) ->
 
 %% NB: this *MUST* run on the client
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
-    %% TODO: review whether this makes sense in light of the changes
-    %% on branch 'supervision'
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
         false -> PFlag = erlang:process_flag(trap_exit, true),
@@ -191,7 +191,7 @@ shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
                       receive
                           {'EXIT', Owner, _Reason} -> ok;
                           Other                    -> log(framework,
-                                                          "Other ~p~n", [Other])
+                                                          "~p~n", [Other])
                       end
                  after
                      erlang:process_flag(trap_exit, PFlag)

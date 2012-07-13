@@ -22,6 +22,8 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
+%% @doc Common Test Hook
+%% ----------------------------------------------------------------------------
 -module(systest_cth).
 
 -include("systest.hrl").

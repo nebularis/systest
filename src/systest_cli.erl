@@ -3,11 +3,6 @@
 %% ----------------------------------------------------------------------------
 %%
 %% Copyright (c) 2005 - 2012 Nebularis.
-%% Copyright (c) 2010 Dave Smith (dizzyd@dizzyd.com).
-%%
-%% Some portions of the code taken from sh (c) 2005 - 2012 Nebularis
-%% Some portions of the code taken from rebar (c) 2010 Dave Smith
-%% Some portions of the code taken from retest (c) 2010 Dave Smith
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), deal

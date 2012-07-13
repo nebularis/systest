@@ -32,7 +32,9 @@ post_doc(Config, _) ->
     case filelib:is_dir(WikiDir) of
         true ->
             Generated = doc_files(Dest),
-            rebar_file_utils:cp_r(Generated, WikiDir);
+            rebar_file_utils:cp_r(Generated, WikiDir),
+            rebar_file_utils:cp_r(static_files(rebar_utils:get_cwd()),
+                                  WikiDir);
         false ->
             rebar_log:log(info, "Skipping ~p:post_doc/2 as no "
                                 "wiki directory was found~n", [?MODULE])
@@ -41,7 +43,9 @@ post_doc(Config, _) ->
 
 'publish-wiki'(Config, _) ->
     Dest = wiki_dir(Config),
-    Generated = lists:map(fun filename:basename/1, doc_files(Dest)),
+    BaseDir = rebar_utils:get_cwd(),
+    Generated = lists:map(fun filename:basename/1, doc_files(Dest) ++
+                                                   static_files(BaseDir)),
     Files = string:join(Generated, " "),
     rebar_utils:sh("git add " ++ Files, [{cd, Dest}]),
     rebar_utils:sh("git ci -m 'updated by rebar...'", [{cd, Dest}]),
@@ -73,6 +77,9 @@ wiki_dir(Config) ->
 doc_dir(Config) ->
     filename:absname(proplists:get_value(dir,
                 rebar_config:get_local(Config, edoc_opts, []), "doc")).
+
+static_files(BaseDir) ->
+    filelib:wildcard(filename:join([BaseDir, "static", "*.*"])).
 
 doc_files(DocDir) ->
     filelib:wildcard(filename:join(DocDir, "*.*")) -- 

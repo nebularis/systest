@@ -131,6 +131,7 @@ verify(Exec2=#execution{profile     = Prof,
 
     case Result of
         ok ->
+            io:format("[passed] All test cases succeeded~n"),
             ok;
         {error,{failures, N}} ->
             handle_failures(Prof, N, Config);

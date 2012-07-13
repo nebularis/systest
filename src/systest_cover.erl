@@ -74,52 +74,50 @@ start(ScratchDir, Config) ->
 -spec report_cover(file:filename(),
                    file:filename(),
                    systest_config:config()) -> ok.
-report_cover(Dir, Export, Config) ->
-    systest_utils:print_heading("Code Coverage Results"),
-    {Summary, SummaryFile} = 
-            case ?CONFIG('cover-summary', Config, user) of
-                console -> {user, none};
-                user    -> {user, none};
-                File    -> {ok, Cwd} = file:get_cwd(),
-                           Path = filename:join(Cwd, File),
-                           {ok, Fd} = file:open(Path, [write]),
-                           {Fd, Path}
-              end,
-    try
-        ok = filelib:ensure_dir(filename:join(Dir, "foo")),
-        lists:foreach(fun (F) -> file:delete(F) end,
-                      filelib:wildcard(filename:join(Dir, "*.html"))),
-        {CT, NCT, Acc} =
-            lists:foldl(
-                fun (M,{CovTot, NotCovTot, Acc}) ->
-                    case cover:analyze(M, module) of
-                        {ok, {M, {Cov, NotCov}}=Result} ->
-                            case analyse_to_file(M, Dir) of
-                                {error, Reason} ->
-                                    systest_log:log(framework,
-                                                    "unable to generate html"
-                                                    " coverage report for ~p: ~p~n",
-                                                    [M, Reason]);
-                                _ ->
-                                    ok
-                            end,
-                            {CovTot+Cov, NotCovTot+NotCov, [Result|Acc]};
-                        Error ->
-                            throw(Error)
-                    end
-                end, {0, 0, []}, lists:sort(cover:modules())),
-
-        [report(Summary, Cov, NotCov, M) || {M, {Cov, NotCov}} <- Acc],
-        ok = report(Summary, CT, NCT, 'TOTAL')
-    after
-        if Summary /= user ->
-            ok = file:close(Summary),
-            {ok, Bin} = file:read_file(SummaryFile),
-            io:format("~s~n", [Bin]);
-        true ->
-            ok
-        end
-    end,
+report_cover(Dir, Export, _Config) ->
+    io:nl(),
+    systest_utils:print_heading("Building Code Coverage Results - Please Wait"),
+%    {Summary, SummaryFile} = 
+%            case ?CONFIG('cover-summary', Config, user) of
+%                console -> {user, none};
+%                user    -> {user, none};
+%                File    -> {ok, Cwd} = file:get_cwd(),
+%                           Path = filename:join(Cwd, File),
+%                           {ok, Fd} = file:open(Path, [write]),
+%                           {Fd, Path}
+%            end,
+    ok = filelib:ensure_dir(filename:join(Dir, "foo")),
+    lists:foreach(fun (F) -> file:delete(F) end,
+                  filelib:wildcard(filename:join(Dir, "*.html"))),
+    {CT, NCT, Acc, _} =
+        lists:foldl(
+            fun (M,{CovTot, NotCovTot, Acc, Cnt}) ->
+                Cnt2 = if Cnt > 79 -> io:nl(), 0;
+                              true -> Cnt + 1
+                       end,
+                io:format("."),
+                case cover:analyze(M, module) of
+                    {ok, {M, {Cov, NotCov}}=Result} ->
+                        case analyse_to_file(M, Dir) of
+                            {error, Reason} ->
+                                systest_log:log(framework,
+                                                "unable to generate html"
+                                                " coverage report for ~p: ~p~n",
+                                                [M, Reason]);
+                            _ ->
+                                ok
+                        end,
+                        {CovTot+Cov, NotCovTot+NotCov, [Result|Acc], Cnt2};
+                    Error ->
+                        throw(Error)
+                end
+            end, {0, 0, [], 0}, lists:sort(cover:modules())),
+    io:format("~n~n"),
+    Entries = lists:reverse(
+                [report_entry(Cov, NotCov, M) || {M, {Cov, NotCov}} <- Acc]) ++
+                [report_entry(CT, NCT, 'TOTAL')],
+    io:format(user, "~s~n",
+              [systest_utils:proplist_format(Entries)]),
     timer:sleep(1000),
     ok = cover:export(Export),
     cover:reset(),
@@ -133,10 +131,11 @@ analyse_to_file(Mod, Dir) ->
     cover:analyze_to_file(Mod,
             filename:join(Dir, atom_to_list(Mod) ++ ".html"), [html]).
 
-report(File, Cov, NotCov, Mod) ->
-    io:format(File, "~6.2f ~p~n",
-              [if
-                   Cov+NotCov > 0 -> 100.0*Cov/(Cov+NotCov);
-                   true -> 100.0
-               end,
-               Mod]).
+report_entry(Cov, NotCov, Mod) ->
+    S = io_lib:format(
+        "~6.2f",
+        [if
+           Cov+NotCov > 0 -> 100.0*Cov/(Cov+NotCov);
+           true -> 100.0
+        end]),
+    {Mod, lists:flatten(S)}.

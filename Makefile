@@ -35,9 +35,9 @@ REBAR=bin/rebar
 endif
 
 ifneq ($(VERBOSE), 'false')
-NOISE=-L framework
+NOISE=-L framework -L operator
 else
-NOISE=""
+NOISE=
 endif
 
 .PHONY: all
@@ -90,12 +90,12 @@ test-dependencies: test-compile
 .PHONY: test-default
 test-default: test-dependencies
 	ERL_FLAGS="-pa ebin -pa test-ebin" \
-	    priv/bin/systest -P $@ $(NOISE) # -L sut -L process
+	    priv/bin/systest -P $@ $(NOISE)
 
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
 	ERL_FLAGS="-pa ebin -pa test-ebin" \
-		priv/bin/systest -A -a error_test -P $@ $(NOISE) # -L sut -L process
+		priv/bin/systest -A -a error_test -P $@ $(NOISE)
 
 bin/%:
 	mkdir -p deps

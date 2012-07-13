@@ -231,6 +231,8 @@ init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
             %% of how this will eventually look
             case Cover of
                 true ->
+                    systest_log:log(framework,
+                                    "starting cover on ~p~n", [Id]),
                     cover:start(Id);
                 _ ->
                     ok
@@ -468,7 +470,10 @@ handle_msg(Msg, State=#state{proc=Proc, handler=Mod,
 stopping_callback(Mod, Func, Proc, Args) ->
     case get(cover, Proc) of
         true ->
-            cover:stop(get(id, Proc));
+            Id = get(id, Proc),
+            systest_log:log(framework,
+                            "stopping cover for ~p~n", [Id]),
+            cover:stop(Id);
         _ ->
             ok
     end,

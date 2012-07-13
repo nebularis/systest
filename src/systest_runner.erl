@@ -114,12 +114,22 @@ verify(Exec2=#execution{profile     = Prof,
     Prop = systest_utils:record_to_proplist(Prof, systest_profile),
     systest_utils:print_section("SysTest Profile", Prop),
 
+    ScratchDir = systest_profile:get(output_dir, Prof),
+    CoverBase = filename:join(ScratchDir, "cover"),
+    {ok, Export} = systest_cover:start(ScratchDir, Config),
+
     TestFun = case ?CONFIG(dryrun, Config, false) of
                   true  -> dryrun;
                   false -> run
               end,
 
-    case catch( erlang:apply(Mod, TestFun, [Exec2]) ) of
+    Result = case catch( erlang:apply(Mod, TestFun, [Exec2]) ) of
+                 R -> R
+             end,
+    
+    systest_cover:report_cover(CoverBase, Export, Config),
+
+    case Result of
         ok ->
             ok;
         {error,{failures, N}} ->

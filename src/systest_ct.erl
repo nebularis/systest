@@ -91,7 +91,7 @@ run_test(Cfg) ->
 
 print_test(Cfg) ->
     print_test_data(Cfg, "Starting Dry Run"),
-    io:format("done.~n").
+    ok.
 
 print_test_data(Config, Border) ->
     io:format("~s~n"

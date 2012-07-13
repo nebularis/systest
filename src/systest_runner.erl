@@ -131,8 +131,10 @@ verify(Exec2=#execution{profile     = Prof,
 
     case Result of
         ok ->
-            io:format("[passed] All test cases succeeded~n"),
-            ok;
+            case ?CONFIG(dryrun, Config, false) of
+                true  -> io:format("[dryrun] done~n");
+                false -> io:format("[passed] all test cases succeeded~n")
+            end;
         {error,{failures, N}} ->
             handle_failures(Prof, N, Config);
         {'EXIT', Reason} ->

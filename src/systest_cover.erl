@@ -34,6 +34,12 @@
             systest_config:config()) -> {'ok', file:filename()} |
                                         {error, term()}.
 start(ScratchDir, Config) ->
+    case ?CONFIG(dryrun, Config, false) of
+        true  -> {ok, dryrun};
+        false -> do_start(ScratchDir, Config)
+    end.
+
+do_start(ScratchDir, Config) ->
     cover:start(),
 
     CoverBase = filename:join(ScratchDir, "cover"),
@@ -76,6 +82,8 @@ start(ScratchDir, Config) ->
 -spec report_cover(file:filename(),
                    file:filename(),
                    systest_config:config()) -> ok.
+report_cover(_Dir, dryrun, _Config) ->
+    ok;
 report_cover(Dir, Export, _Config) ->
     io:nl(),
     systest_utils:print_heading("Building Code Coverage Results - Please Wait"),

@@ -136,4 +136,4 @@ default_profile(BaseDir) ->
               settings_base = filename:join([BaseDir, "test",
                                             "default.settings"]),
               resources     = glob([BaseDir, "test", "*.resource"]),
-              targets       = filename:join(BaseDir, "ebin") }.
+              targets       = [filename:join(BaseDir, "ebin")] }.

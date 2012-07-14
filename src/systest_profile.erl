@@ -95,7 +95,8 @@ load_configured_profile_data(Config, BaseDir) ->
 
 load_named_profile_data(Profile, BaseDir) ->
     ProfName = systest_utils:as_string(Profile),
-    case systest_utils:find_files(BaseDir, ProfName ++ "\\.profile$") of
+    ProfDir = filename:join(BaseDir, "profiles"),
+    case systest_utils:find_files(ProfDir, ProfName ++ "\\.profile$") of
         []           -> throw({profile_unavailable, ProfName});
         [_P1, _P2|_] -> throw({ambiguous_profile,   ProfName});
         [ProfFile]   -> load(ProfFile, BaseDir)
@@ -133,7 +134,7 @@ default_profile(BaseDir) ->
               source        = generated,
               output_dir    = ScratchDir,
               log_dir       = filename:join(ScratchDir, "logs"),
-              settings_base = filename:join([BaseDir, "test",
+              settings_base = filename:join([BaseDir, "resources",
                                             "default.settings"]),
-              resources     = glob([BaseDir, "test", "*.resource"]),
+              resources     = glob([BaseDir, "resources", "*.resource"]),
               targets       = [filename:join(BaseDir, "ebin")] }.

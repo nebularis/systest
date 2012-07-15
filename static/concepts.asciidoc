@@ -1,0 +1,11 @@
+*SysTest* brings together a number of concepts which are prevalent in testing 
+methodologies on the whole. Understanding how these concepts fit in to the
+framework is key to getting the most out of it.
+
+== Overview
+
+== Runtime Environment
+
+== The _System Under Test_
+
+== The _Process_

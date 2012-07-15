@@ -1,0 +1,38 @@
+There are three primary types of configuration data in *SysTest*, each of which
+is supplied as using an Erlang Term based format that can be read by
++file:consult/1+. 
+
+=== Terminology
+
+We use the term _configuration element_ (or just _element_) to describe a tagged
+tuple stored in a configuration file. Consider the following configuration:
+
+```erlang
+{name, "Tom"}.
+{age, 61}.
+{roles, [{person, active}, {employee, inactive}]}.
+```
+
+In this configuration (above), the _top level_ entries +name, age, roles+ are 
+all _configuration elements_, but the +person, employee+ tuples are usually
+referred to as _sub-elements_ for clarity.
+
+=== Profiles
+
+*Profiles*, also called _test profiles_ in this guide, provide a mechanism to
+control the *SysTest* runtime environment. Each _element_ that the profile
+can contain is optional and unrecognised _elements_ are ignored. When an 
+_element_ is not given in a *profile*, its default value is used instead.
+
+[options="header", width="100%", cols="1,6,4,2"]
+|======================
+|Element |Description |Controls |Default
+|framework | The testing framework (module) to use | Test Execution |+systest_ct+
+|output_dir | Directory for generated artefacts | Logging, coverage reports |see _Temporary Files_ below
+|log_dir | Base directory for all log files | Logging | +"{output_dir}/logs"+
+|settings_base | Default/Base _Settings_ file | Settings | +"./resources/default.settings"+ 
+|resources | List of paths or glob patterns used to find _Resources_. | Resources | +[./resources/\*.resource]+
+|targets | Paths to directories containing beam code, or module names  | Test Execution | +["ebin"]+
+|specifications | Test Specification File | Common Test (only) | +[]+
+|hooks | Testing Framework Hooks | Testing Framework(s) | See _Framework Configuration_
+|======================

@@ -112,14 +112,14 @@ stop(Scope) when is_pid(Scope) ->
 %% tracing/debugging
 
 %% @doc Enables trace debugging. See the 
-%% {@link https://github.com/nebularis/systest/wiki/tracing. <em>Tracing/Debugging Guide</em>}
+%% <a href="https://github.com/nebularis/systest/wiki/tracing"><em>Tracing/Debugging Guide</em></a>
 %% for more details.   
 %% @end
 trace_on(Scope, Config) ->
     systest_trace:debug(Scope, Config).
 
 %% @doc Disables trace debugging. See the 
-%% {@link https://github.com/nebularis/systest/wiki/tracing. <em>Tracing/Debugging Guide</em>}
+%% <a href="https://github.com/nebularis/systest/wiki/tracing"><em>Tracing/Debugging Guide</em></a>
 %% for more details.   
 %% @end
 trace_off(Config) ->
@@ -161,7 +161,7 @@ stop_and_wait(ProcRef) ->
 kill_and_wait(ProcRef) ->
     systest_proc:kill_and_wait(ProcRef).
 
-%% @doc Sets up a timer that will {@see systest_proc:kill/1. <em>kill</em>} 
+%% @doc Sets up a timer that will {@link systest_proc:kill/1. <em>kill</em>} 
 %% the {@link systest_proc. <em>Process</em>} once it expires, and returns
 %% immediately. Killing a {@link systest_proc. <em>Process</em>} in this way
 %% does <em>not</em> cause a test case to fail, as the

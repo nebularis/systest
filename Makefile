@@ -53,6 +53,10 @@ info: $(REBAR)
 clean:
 	$(REBAR) skip_deps=true clean -v $(LOGLEVEL)
 
+.PHONY: doc
+doc:
+	$(REBAR) skip_deps=true doc -v $(LOGLEVEL)
+
 .PHONY: dist-clean
 dist-clean: clean
 	rm -rf deps

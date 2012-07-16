@@ -83,11 +83,20 @@ print_banner() ->
     io:format("~s~n", [Banner]).
 
 start_logging(Config) ->
-    Active = proplists:get_all_values(logging, Config),
+    Configured = proplists:get_all_values(logging, Config),
+    Environmental = case os:getenv("SYSTEST_LOG") of
+                        false -> [];
+                        Val   -> string:tokens(Val, ",")
+                    end,
+    Active = systest_utils:uniq(Configured ++ Environmental),
     [begin
         io:format(user, "activating logging sub-system ~p~n", [SubSystem]),
         %% TODO: reinstate logging to different appenders...
-        ok = systest_log:start(list_to_atom(SubSystem), systest_log, user)
+        Target = if is_atom(SubSystem) -> SubSystem;
+                    is_list(SubSystem) -> list_to_atom(SubSystem);
+                                  true -> throw({badarg, SubSystem})
+                 end,
+        ok = systest_log:start(Target, systest_log, user)
      end || SubSystem <- Active],
     ok.
 
@@ -126,7 +135,7 @@ verify(Exec2=#execution{profile     = Prof,
     Result = case catch( erlang:apply(Mod, TestFun, [Exec2]) ) of
                  R -> R
              end,
-    
+
     systest_cover:report_cover(CoverBase, Export, Config),
 
     case Result of

@@ -90,7 +90,7 @@ load(ProfFile, BaseDir) ->
 load_configured_profile_data(Config, BaseDir) ->
     case ?CONFIG(systest_profile, Config, undefined) of
         undefined -> default_profile(BaseDir);
-        Data      -> Data
+        Data      -> read_terms(Data)
     end.
 
 load_named_profile_data(Profile, BaseDir) ->
@@ -138,3 +138,4 @@ default_profile(BaseDir) ->
                                             "default.settings"]),
               resources     = glob([BaseDir, "resources", "*.resource"]),
               targets       = [filename:join(BaseDir, "ebin")] }.
+

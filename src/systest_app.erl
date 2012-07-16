@@ -43,7 +43,7 @@ start(_StartType, _StartArgs) ->
             AbsEbin = filename:absname(filename:dirname(AppF)),
             Path = filename:join([filename:dirname(AbsEbin),
                                  "priv", "banner.txt"]),
-            {ok, Bin} = file:open(Path, [read]),
+            {ok, Bin, _} = erl_prim_loader:get_file(Path),
             application:set_env(systest, banner, Bin);
         Path when is_list(Path) ->
             ok

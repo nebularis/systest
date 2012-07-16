@@ -2,7 +2,7 @@ There are three primary types of configuration data in *SysTest*, each of which
 is supplied as using an Erlang Term based format that can be read by
 +file:consult/1+. 
 
-=== Terminology
+== Terminology
 
 We use the term _configuration element_ (or just _element_) to describe a tagged
 tuple stored in a configuration file. Consider the following configuration:
@@ -17,7 +17,27 @@ In this configuration (above), the _top level_ entries +name, age, roles+ are
 all _configuration elements_, but the +person, employee+ tuples are usually
 referred to as _sub-elements_ for clarity.
 
-=== Profiles
+== Settings
+
+*Settings* are the most basic form of configuration that *SysTest* handles, and
+are simply a means to externalise certain data you wish to make use of in your
+tests. There is no _special_ format for this data, nor are there any allowed 
+(or disallowed) _elements_. Settings can be extracted at runtime using the 
+[[Configuration API|systest_config]], or accessed in and used in 
+_string-expressions_ by referencing the `settings` group. For example:
+
+```erlang
+{web_server_url, "${settings.base_url}/login.html"}.
+```
+
+Settings are sourced from +./resources/default.settings+ initially, if it 
+exists. Then the _base directory_ is searched (recursively) for a file whose
+name matches the pattern +./%{USER}.settings+, where +USER+ contains the content
+of the `USER` environment variable. These two files are then merged, with the
+_configuration elements_ from the latter file overwriting those from the 
+default.
+
+== Profiles
 
 *Profiles*, also called _test profiles_ in this guide, provide a mechanism to
 control the *SysTest* runtime environment. Each _element_ that the profile
@@ -36,3 +56,6 @@ _element_ is not given in a *profile*, its default value is used instead.
 |specifications | Test Specification File | Common Test (only) | +[]+
 |hooks | Testing Framework Hooks | Testing Framework(s) | See _Framework Configuration_
 |======================
+
+You select a *profile* when running *SysTest* by passing `-P <profile name>` on
+the command line. For more details, see the [[interfaces documentation|interfaces]].

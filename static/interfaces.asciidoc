@@ -1,4 +1,4 @@
-*SysTest* provides a number of interfaces, which can be used to execute and
+*SysTest* provides a number of user interfaces, which can be used to execute and
 inspect test cases. The following table provides an overview of the currently
 available execution modes.
 

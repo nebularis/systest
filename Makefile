@@ -55,6 +55,10 @@ clean:
 doc:
 	$(REBAR) skip_deps=true doc -v $(LOGLEVEL)
 
+.PHONY: publish-wiki
+publish-wiki:
+	$(REBAR) skip_deps=true publish-wiki -v $(LOGLEVEL)
+
 .PHONY: dist-clean
 dist-clean: clean
 	rm -rf deps

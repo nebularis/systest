@@ -15,7 +15,14 @@ tuple stored in a configuration file. Consider the following configuration:
 
 In this configuration (above), the _top level_ entries +name, age, roles+ are 
 all _configuration elements_, but the +person, employee+ tuples are usually
-referred to as _sub-elements_ for clarity.
+referred to as _sub-elements_ for clarity. Where complex nested structures are
+used, we also tend to refer to _sub-elements_ as _configuration sections_,
+reflecting their use as containers for other _sub-elements_.
+
+Configurations are normally grouped by the 
+[[*SysTest* Config Server|systest_config]] and we refer to these groupings as a
+_configuration set_. This name reflects the fact that each 
+_configuration element's_ key can occur only once.
 
 == Settings
 
@@ -38,6 +45,9 @@ _string-expressions_ by referencing the `settings` group. For example:
 ```erlang
 {web_auth_url, "${settings.base_url}/login.html"}.
 ```
+The *Settings* _configuration set_ also hosts a number of _elements_ which
+are added by the testing framework dynamically. See the *System Values* section
+below for more details.
 
 == Resource Configuration Files
 
@@ -48,6 +58,68 @@ see the [[Concepts/Overview|concepts]] page.
 *Resources Configuration Files* are sources from +./resources/*.resource+ by
 default, though like most config locations, this can be overridden by the
 current *Profile* (more on this later).
+
+Each top level _configuration element_ in a *Resources Configuration File* is
+accessible using the [[Configuration API|systest_config]]. *SysTest* uses these
+elements to resolve resources automatically and associate then with *Test 
+Scopes* at runtime - see [[Concepts/Overview|concepts]] for more information
+about *Test Scopes*.
+
+Each top level _configuration element_ can describe either a *Process* or a
+*SUT* (see [[Concepts/Overview|concepts]]). The *Process* configuration contains
+quite a bit of nested data, so an example should serve best to explain how it's
+put together:
+
+```erlang
+{basic_node, [ {startup, [{handler, systest_slave}]} ]}.
+```
+
+In this _basic_ configuration, we've given the *Process* a name `basic_node`, 
+and provided the minimal information *SysTest* needs to start up an instance of
+this process when a test scope or *SUT* requires it. The `handler` element is
+mandatory, and specifies the kind of _process handler_ we wish to use for 
+instances of this type. See [[Concepts/Overview|concepts]] for more information
+about _process handlers_.
+
+The [[`systest_slave`|systest_slave]] handler deals with starting slave (Erlang) 
+nodes, and it can be configured to pass startup arguments to the `erl` program 
+it is starting. For this we use the `flags.start` _elements_, which are provided 
+as a string and can contain _string-expressions_:
+
+```erlang
+{basic_node, [
+    {startup, [{handler, systest_slave}]},
+    {flags, [
+        {start, "-boot start_sasl +W w "
+                "+K true +A30 +P 1048576 "
+                "-pa ebin "
+                "-sasl sasl_error_logger ${settings.errlog_on_off}"}
+    ]}
+]}.
+```
+
+The [[`systest_slave`|systest_slave]] handler doesn't use `flags.stop` 
+_elements_, though it is not an error to supply them (they're simply ignored).
+
+Some handlers provide more complex startup options, the most common of which is
+[[`systest_cli`|systest_cli]]. As with the slave handler, we configure a
+*Process* resource to use this by settings the `{handler, systest_cli}` option
+_sub element_ in the `startup` _configuration section_.
+
+The *SUT* configuration can contain any of the _sub elements_ outlined in the 
+following table.
+
+[options="header", width="100%", cols="1,1,8,2"]
+|======================
+|SUT Sub-Element |Description |Example |Mandatory?
+|sut | List of process names (by host) | `{sut, [{localhost, [a, b]}]}` | Yes
+|processes | *Process* stereotypes | `{processes, [{a, [my_proc]}]}` | Yes (ALL)
+|======================
+
+Processes residing on `localhost` should always use the atom `localhost`, whilst
+other host names can be specified using a string. The *Processes* in a *SUT* 
+configuration must specify their _stereotypes_ - the *Process* definitions which
+should be applied to them. 
 
 == Profiles
 

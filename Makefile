@@ -30,9 +30,7 @@ DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- pro
 
 ## rules start here
 
-ifndef $(REBAR)
 REBAR=bin/rebar
-endif
 
 ifneq ($(VERBOSE), 'false')
 NOISE=-L framework -L operator

@@ -48,6 +48,10 @@ start(_StartType, _StartArgs) ->
         Path when is_list(Path) ->
             ok
     end,
+    %% because the code server *sometimes* appears not to load-on-demand
+    %% when we would expect it to...
+    {ok, Modules} = application:get_key(systest, modules),
+    [code:ensure_loaded(M) || M <- Modules],
     systest_sup:start_link().
 
 stop(_State) ->

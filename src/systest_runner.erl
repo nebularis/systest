@@ -223,7 +223,7 @@ preload_resources(Resources) ->
     [begin
         case file:consult(Resource) of
             {ok, Terms} ->
-                systest_config:load_config_terms(Terms);
+                systest_config:load_config_terms(resources, Terms);
             Error ->
                 throw(Error)
         end

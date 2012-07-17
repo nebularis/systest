@@ -40,7 +40,7 @@ pre_loaded_config_test_() ->
     systest:start(),
     systest_config:start_link(),
     {ok, Terms} = file:consult("../samples/test.config"),
-    systest_config:load_config_terms(Terms),
+    systest_config:load_config_terms(resources, Terms),
     [?_assertMatch({handling_detached_processes,
                         [{localhost,[yellow,blue]},{on_start,[]}]},
                     systest_config:sut_config(systest_cli_SUITE,

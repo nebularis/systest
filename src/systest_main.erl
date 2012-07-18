@@ -98,8 +98,9 @@ validate(Options, Spec) ->
 
 unpack(true, {L, _, V}) when V =:= integer orelse
                              V =:= string -> 
-                             systest_utils:abort(
-                                "Argument ~p requires a value!~n", [L]);
+                             io:format("Argument ~p requires a value!~n", [L]),
+                             help(),
+                             erlang:halt(1);
 unpack(V,    {L, _, integer}) -> {L, list_to_integer(V)};
 unpack(V,    {L, _, string})  -> {L, V};
 unpack(V,    {L, _, flag})    -> {L, V}.

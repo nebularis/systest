@@ -53,18 +53,21 @@ run(Args) ->
     File = escript:script_name(),
     case escript:extract(File, []) of
         {ok, [_Shebang, _Comment, _EmuArgs, {archive, ArchiveBin}]} ->
-            zip:foldl(fun(Name, _, Bin, _) ->
-                          case lists:suffix("banner.txt", Name) of
-                              true ->
-                                  application:set_env(systest, banner, Bin());
-                              false ->
-                                  ok
-                          end
-                      end, ok, {File, ArchiveBin});
+            zip:foldl(fun stash_files/4, ok, {File, ArchiveBin});
         {error, _} = Error ->
             throw(Error)
     end,
     systest_runner:execute(Options).
+
+stash_files(Name, _, Bin, _) ->
+    [begin
+        case lists:suffix(Suffix, Name) of
+            true ->
+                application:set_env(systest, Key, Bin());
+            false ->
+                ok
+        end
+     end || {Suffix, Key} <- systest_app:stashes()].
 
 parse_args(Args) ->
     Mode = case os:type() of

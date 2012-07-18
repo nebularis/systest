@@ -58,13 +58,11 @@ run(RunSpec, DryRun) ->
                      [] ->
                          {ct_hooks, [cth_log_redirect,
                                      {systest_cth, [], 100000}]};
-                     _ ->
+                     _  ->
                          [begin
                              M = case Hook of
-                                     Mod when is_atom(Mod) ->
-                                         Mod;
-                                     {ModName, _, _} ->
-                                         ModName
+                                     Mod when is_atom(Mod) -> Mod;
+                                     {ModName, _, _}       -> ModName
                                  end,
                              code:ensure_loaded(M)
                           end || Hook <- Hooks],

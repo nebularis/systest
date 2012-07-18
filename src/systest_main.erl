@@ -29,6 +29,7 @@
 help() ->
     io:format("Usage: systest [-P <profile>] [-L <logging>] [-n] [-h]~n~n"
               "-h               Show the program options~n"
+              "-q, --quiet      Disable header/options output on start~n"
               "-P, --profile    Use the specified test profile~n"
               "-L, --logging    Active logging for the specified sub-system~n"
               "-n, --dryrun     Print everything out but don't run any tests~n"
@@ -101,9 +102,13 @@ unpack(V,    {L, _, string})  -> {L, V};
 unpack(V,    {L, _, flag})    -> {L, V}.
 
 opt_spec() ->
-    [{profile,   'P', string},
-     {logging,   'L', string},
-     {dryrun,    'n', flag},
-     {dump,      'X', flag},
-     {node,      'a', string},
-     {longnames, 'A', flag}].
+    [{profile,          'P', string},
+     {logging,          'L', string},
+     {dryrun,           'n', flag},
+     {dump,             'X', flag},
+     {node,             'a', string},
+     {longnames,        'A', flag},
+     {trace_config,     't', string},
+     {trace_enable,     'T', string},
+     {trace_console,    'C', flag},
+     {quiet,            'q', flag}].

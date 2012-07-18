@@ -59,7 +59,7 @@ execute(Config) ->
     Resources = verify_resources(Prof, BaseDir),
 
     systest:start(),
-    print_banner(),
+    print_banner(Config),
     set_defaults(Prof),
     start_logging(Config),
 
@@ -76,29 +76,45 @@ set_defaults(Profile) ->
     ScratchDir = systest_profile:get(output_dir, Profile),
     systest_config:set_env("SCRATCH_DIR", ScratchDir).
 
-print_banner() ->
+print_banner(Config) ->
     %% Urgh - could there be an uglier way!?
     %% TODO: refactor this...
-    {ok, Banner} = application:get_env(systest, banner),
-    io:format("~s~n", [Banner]).
+    case quiet(Config) of 
+        true  -> ok;
+        false ->
+            {ok, Banner} = application:get_env(systest, banner),
+            io:format("~s~n", [Banner])
+    end.
 
 start_logging(Config) ->
-    Configured = proplists:get_all_values(logging, Config),
-    Environmental = case os:getenv("SYSTEST_LOG") of
-                        false -> [];
-                        Val   -> string:tokens(Val, ",")
-                    end,
-    Active = systest_utils:uniq(Configured ++ Environmental),
+    SystemLog = case quiet(Config) of
+                    true  -> LogName = lists:flatten(
+                                io_lib:format("systest.~s.log",
+                                              [systest_env:timestamp()])),
+                             io:format(user, "quiet: (logging to ~s)~n",
+                                       [LogName]),
+                             filename:absname(LogName);
+                    false -> user
+                end,
+    systest_log:start(SystemLog),
+    Active = proplists:get_all_values(logging, Config),
     [begin
-        io:format(user, "activating logging sub-system ~p~n", [SubSystem]),
         %% TODO: reinstate logging to different appenders...
         Target = if is_atom(SubSystem) -> SubSystem;
                     is_list(SubSystem) -> list_to_atom(SubSystem);
                                   true -> throw({badarg, SubSystem})
                  end,
+        case quiet(Config) of
+            true  -> ok;
+            false -> io:format(user, "activating logging sub-system ~p~n",
+                               [Target])
+        end,
         ok = systest_log:start(Target, systest_log, user)
      end || SubSystem <- Active],
     ok.
+
+quiet(Config) ->
+    ?CONFIG(quiet, Config, false).
 
 verify(Exec2=#execution{profile     = Prof,
                         base_dir    = BaseDir,
@@ -110,18 +126,25 @@ verify(Exec2=#execution{profile     = Prof,
     %% so we store it in systest_config as a static config element
     systest_config:set_static(settings, [{base_dir, BaseDir}|Settings]),
 
-    AppVsn = element(3, lists:keyfind(systest, 1,
-                                      application:which_applications())),
-    systest_utils:print_section("SysTest Task Descriptor", [
-            {"Release Version", AppVsn},
-            {"Test Coordinator", node()},
-            {"Base Directory", BaseDir},
-            {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
-            {"Test Suites", lists:concat([S || {suite, S} <- Targets])}]),
-
     Mod = systest_profile:get(framework, Prof),
-    Prop = systest_utils:record_to_proplist(Prof, systest_profile),
-    systest_utils:print_section("SysTest Profile", Prop),
+
+    case quiet(Config) of
+        true ->
+            ok;
+        false ->
+            AppVsn = element(3, lists:keyfind(systest, 1,
+                                        application:which_applications())),
+            systest_utils:print_section("SysTest Task Descriptor", [
+                {"Release Version", AppVsn},
+                {"Test Coordinator", node()},
+                {"Base Directory", BaseDir},
+                {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
+                {"Test Suites", lists:concat([S || {suite, S} <- Targets])},
+                {"Options", "(user supplied settings....)"}] ++ Config),
+
+            Prop = systest_utils:record_to_proplist(Prof, systest_profile),
+            systest_utils:print_section("SysTest Profile", Prop)
+    end,
 
     ScratchDir = systest_profile:get(output_dir, Prof),
     CoverBase = filename:join(ScratchDir, "cover"),
@@ -258,7 +281,8 @@ build_exec(Config) ->
     BaseDir = ?REQUIRE(base_dir, Config),
     #execution{profile      = Profile,
                base_dir     = BaseDir,
-               base_config  = Config2}.
+               base_config  = Config2,
+               quiet        = ?CONFIG(quiet, Config, false)}.
 
 maybe_start_net_kernel(Config) ->
     UseLongNames = ?CONFIG(longnames, Config, false),

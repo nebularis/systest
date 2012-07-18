@@ -84,7 +84,7 @@ do_start(ScratchDir, Config) ->
                    systest_config:config()) -> ok.
 report_cover(_Dir, dryrun, _Config) ->
     ok;
-report_cover(Dir, Export, _Config) ->
+report_cover(Dir, Export, Config) ->
     io:nl(),
     systest_utils:print_heading("Building Code Coverage Results - Please Wait"),
 %    {Summary, SummaryFile} = 
@@ -126,8 +126,14 @@ report_cover(Dir, Export, _Config) ->
     Entries = lists:reverse(
                 [report_entry(Cov, NotCov, M) || {M, {Cov, NotCov}} <- Acc]) ++
                 [report_entry(CT, NCT, 'TOTAL')],
-    io:format(user, "~s~n",
-              [systest_utils:proplist_format(Entries)]),
+    case proplists:get_value(quiet, Config, false) of
+        true  ->
+            systest_log:log("~s~n",
+                            [systest_utils:proplist_format(Entries)]);
+        false ->
+            io:format(user, "~s~n",
+                      [systest_utils:proplist_format(Entries)])
+    end,
     timer:sleep(1000),
     ok = cover:export(Export),
     cover:reset(),

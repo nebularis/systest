@@ -40,7 +40,7 @@
 
 -export([behaviour_info/1]).
 -export([start_link/0]).
--export([start/0, start/3, start_file/2, start_file/3]).
+-export([start/0, start/1, start/3, start_file/2, start_file/3]).
 -export([log/2, log/3]).
 -export([write_log/4]).
 -export([activate_logging_subsystem/3]).
@@ -66,19 +66,19 @@ behaviour_info(_) ->
 
 start_link() ->
     %% TODO: pass the log_base here, and use it when activating handlers....
-    case gen_event:start_link({local, systest_event_log}) of
-        {ok, _}=Ret ->
-            ?MODULE:start(),
-            Ret;
-        Error ->
-            Error
-    end.
+    gen_event:start_link({local, systest_event_log}).
 
 %% @doc Starts the default systest logging handler: 'system'.
 %% @end
 start() ->
-    start(system, ?MODULE, user).
+    start(user).
 
+start(File) ->
+    case is_list(File) of
+        true  -> start_file(system, File);
+        false -> start(system, ?MODULE, File)
+    end.
+    
 %% @doc Starts a logging handler registered with 'Id', that outputs to File.
 %% @end
 start_file(Id, File) ->

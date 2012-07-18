@@ -28,36 +28,14 @@
 -behaviour(application).
 
 %% Application callbacks
--export([stashes/0, start/2, stop/1]).
+-export([start/2, stop/1]).
 
 %%
 %% Application callbacks
 %%
 
 start(_StartType, _StartArgs) ->
-    case catch( escript:script_name() ) of
-        {'EXIT', _} ->
-            %% NB: code:lib_dir/2 doesn't *always* work - e.g., when we're in
-            %% in fact testing our own code base....
-            AppF = code:where_is_file("systest.app"),
-            AbsEbin = filename:absname(filename:dirname(AppF)),
-            stash_files(AbsEbin);
-        Path when is_list(Path) ->
-            ok
-    end,
     systest_sup:start_link().
 
 stop(_State) ->
     ok.
-
-stash_files(AbsEbin) ->
-    [begin
-        Path = filename:join([filename:dirname(AbsEbin), "priv", Name]),
-        {ok, Bin, _} = erl_prim_loader:get_file(Path),
-        application:set_env(systest, Key, Bin)
-     end || {Name, Key} <- stashes()].
-
-%% TODO: move this to the .app.src and load from env instead?
-stashes() ->
-    [{"banner.txt", banner},
-     {"tracing.config", default_trace_config}].

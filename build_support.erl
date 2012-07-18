@@ -24,7 +24,32 @@
 %% ----------------------------------------------------------------------------
 -module(build_support).
 
+-export([pre_compile/2, post_compile/2]).
 -export(['publish-wiki'/2, post_doc/2, mv_test_beams/2]).
+
+pre_compile(Config, _) ->
+    case is_base_dir() of
+        true ->
+            {ok, [{env, Env}]} = file:consult(filename:join("build",
+                                                            "app.env")),
+            {ok, Banner} = file:read_file(filename:join("build",
+                                                        "banner.txt")),
+            AppEnv = lists:keystore(banner, 1, Env,
+                                    {banner, Banner}),
+            AppVars = {env, AppEnv},
+            
+            file:write_file("app.vars",
+                             io_lib:format("~p.\n", [AppVars]), [write]);
+        false ->
+            ok
+    end.
+
+post_compile(Config, _) ->
+    case is_base_dir() of
+        true  -> file:delete("app.vars");
+        false -> ok
+    end,
+    ok.
 
 post_doc(Config, _) ->
     Dest = doc_dir(Config),
@@ -85,3 +110,7 @@ doc_files(DocDir) ->
     filelib:wildcard(filename:join(DocDir, "*.*")) -- 
                     [filename:join(DocDir, "README.md"),
                      filename:join(DocDir, "TOC.md")].
+
+is_base_dir() ->
+    rebar_utils:get_cwd() == rebar_config:get_global(base_dir, undefined).
+

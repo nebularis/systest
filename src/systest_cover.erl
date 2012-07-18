@@ -61,7 +61,7 @@ do_start(ScratchDir, Config) ->
             end || Dir <- SearchDirs],
 
     [begin
-         systest_log:log(framework, "cover compiling modules in ~s~n", [D]),
+         systest_log:log("cover compiling modules in ~s~n", [D]),
          Results = cover:compile_beam_directory(D),
          case [R || R <- Results, element(1, R) =:= error] of
              []     -> ok;

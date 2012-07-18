@@ -300,6 +300,13 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
     log({framework, Id}, "RPC Enabled: ~p~n", [RpcEnabled]),
     log({framework, Id}, "StdIO Log: ~s~n", [LogName]),
 
+    %% we make a hidden connection by default, so as to protect
+    %% any trace handling that is going on, and to avoid 'messing up'
+    %% any assumptions that a SUT might make about the expected state
+    %% returned from erlang:nodes/0
+    if RpcEnabled == true -> net_kernel:hidden_connect_node(Id);
+       RpcEnabled /= true -> ok
+    end,  
     case read_pid(Id, Port, Detached, RpcEnabled, LogFd) of
         {error, {stopped, Rc}} ->
             {stop, {launch_failure, Rc}};

@@ -77,9 +77,9 @@ parse_args(Args) ->
     Spec = opt_spec(),
     OptsWithVals = lists:map(fun erlang:atom_to_list/1,
                             lists:flatten([[L, S] || {L, S, string} <- Spec])),
-    {Options, _} = niceopt:parse(Args, [{mode, Mode},
-                                        {opts_with_vals, OptsWithVals}]),
-    validate(Options, Spec).
+    {Options, RawOpts} = niceopt:parse(Args, [{mode, Mode},
+                                              {opts_with_vals, OptsWithVals}]),
+    [{raw_opts, RawOpts}|validate(Options, Spec)].
 
 validate(Options, Spec) ->
     [begin

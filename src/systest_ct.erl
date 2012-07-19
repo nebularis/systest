@@ -44,11 +44,7 @@ run(RunSpec, DryRun) ->
     LogDir  = systest_profile:get(log_dir, Profile),
     Hooks   = systest_profile:get(hooks, Profile),
 
-    ok = systest_log:start(system, systest_ct_log, common_test),
-    ok = systest_log:start(framework, systest_ct_log, common_test),
-    ok = systest_log:start(operator, systest_ct_log, common_test),
-    ok = systest_log:start(sut, systest_ct_log, common_test),
-    ok = systest_log:start(process, systest_ct_log, common_test),
+    systest_ct_log:start(),
 
     TestFun = if DryRun =:= false -> fun run_test/2;
                             true  -> fun print_test/2

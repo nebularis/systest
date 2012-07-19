@@ -27,7 +27,14 @@
 -module(systest_ct_log).
 
 -behaviour(systest_log).
--export([write_log/4]).
+-export([write_log/4, start/0]).
+
+start() ->
+    ok = systest_log:start(system, systest_ct_log, common_test),
+    ok = systest_log:start(framework, systest_ct_log, common_test),
+    ok = systest_log:start(operator, systest_ct_log, common_test),
+    ok = systest_log:start(sut, systest_ct_log, common_test),
+    ok = systest_log:start(process, systest_ct_log, common_test).
 
 %%
 %% systest_log callback API!

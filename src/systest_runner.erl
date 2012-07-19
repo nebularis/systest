@@ -149,6 +149,7 @@ verify(Exec2=#execution{profile     = Prof,
     ScratchDir = systest_profile:get(output_dir, Prof),
     CoverBase = filename:join(ScratchDir, "cover"),
     {ok, Export} = systest_cover:start(ScratchDir, Config),
+    io:nl(),
 
     TestFun = case ?CONFIG(dryrun, Config, false) of
                   true  -> dryrun;

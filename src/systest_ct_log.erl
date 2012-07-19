@@ -23,6 +23,7 @@
 %% @hidden 
 %% Module systest_ct_log - provides a logging callback handler that prints
 %% to the common test log. Both raw and HTML outputs are generated this way.
+%% @end
 %% -----------------------------------------------------------------------------
 -module(systest_ct_log).
 

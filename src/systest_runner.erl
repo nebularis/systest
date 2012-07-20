@@ -59,11 +59,12 @@ execute(Config) ->
     Resources = verify_resources(Prof, BaseDir),
 
     systest:start(),
+    preload_resources(Resources, Config),
+
     print_banner(Config),
     set_defaults(Prof),
     start_logging(Config),
 
-    preload_resources(Resources),
     ensure_test_directories(Prof),
     systest_config:set_env(base_dir, BaseDir),
 
@@ -243,13 +244,16 @@ test_dir(Thing) when is_atom(Thing) ->
             filename:absname(filename:dirname(code:which(Thing)))
     end.
 
-preload_resources(Resources) ->
+preload_resources(Resources, Config) ->
     [begin
         case file:consult(Resource) of
             {ok, Terms} ->
                 systest_config:load_config_terms(resources, Terms);
             Error ->
-                throw(Error)
+                ErrorHandler = ?CONFIG(error_handler, Config,
+                                       fun systest_utils:abort/2),
+                ErrorHandler("unable to parse ~s: ~p~n",
+                             [Resource, Error])
         end
      end || Resource <- Resources].
 

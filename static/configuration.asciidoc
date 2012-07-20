@@ -19,6 +19,19 @@ referred to as _sub-elements_ for clarity. Where complex nested structures are
 used, we also tend to refer to _sub-elements_ as _configuration sections_,
 reflecting their use as containers for other _sub-elements_.
 
+== Configuration Types
+
+The following table outlines the various configuration options available to
+*SysTest* users.
+
+[options="header", width="100%", cols="2,4,4,3"]
+|======================
+|Configuration |Contains |Default Search Path |Required File Extension
+|*Settings* | Arbitrary user config data | _configurable_ |+.settings+
+|*Resources* | *Resource* definitions (see below) | +./resources/*.resource+ |None (supports glob pattern)
+|*Profiles* | *Profile* definitions | +./profiles/*.profile+ | +.profile+
+|======================
+
 Configurations are normally grouped by the 
 [[*SysTest* Config Server|systest_config]] and we refer to these groupings as a
 _configuration set_. This name reflects the fact that each 
@@ -65,10 +78,14 @@ elements to resolve resources automatically and associate then with *Test
 Scopes* at runtime - see [[Concepts/Overview|concepts]] for more information
 about *Test Scopes*.
 
-Each top level _configuration element_ can describe either a *Process* or a
-*SUT* (see [[Concepts/Overview|concepts]]). The *Process* configuration contains
-quite a bit of nested data, so an example should serve best to explain how it's
-put together:
+Each _configuration element_ can describe either a *Process* or a *SUT* (see 
+[[Concepts/Overview|concepts]]) - it may also contain _trace hooks_, but we'll 
+revisit those later on.
+
+=== *Process* Configuration
+
+The *Process* configuration contains quite a  bit of nested data, so an example 
+should serve best to explain how it's put together:
 
 ```erlang
 {basic_node, [ {startup, [{handler, systest_slave}]} ]}.
@@ -106,6 +123,8 @@ Some handlers provide more complex startup options, the most common of which is
 *Process* resource to use this by settings the `{handler, systest_cli}` option
 _sub element_ in the `startup` _configuration section_.
 
+=== *SUT* Configuration
+
 The *SUT* configuration can contain any of the _sub elements_ outlined in the 
 following table.
 
@@ -120,6 +139,47 @@ Processes residing on `localhost` should always use the atom `localhost`, whilst
 other host names can be specified using a string. The *Processes* in a *SUT* 
 configuration must specify their _stereotypes_ - the *Process* definitions which
 should be applied to them. 
+
+=== Trace Debugging Configuration
+
+Earlier on we said that each top level _configuration element_ in a *Resources 
+Configuration File* could describe either a *Process* or a *SUT*, or a set of
+trace hooks. These require a basic understand of the `dbg` module's interface,
+and essentially tie test scopes to trace configurations, which set up a tracer
+process for the duration of the specified scope.
+
+=== NB: Trace/Debug Support is EXPERIMENTAL
+
+```erlang
+{debug, [
+    {trace_setup, [        
+        %% {trace_method, [ct, pal, ["TRACE: ~p~n"]]},
+        {trace_type, port}, %% port | process
+        %% {port_kind, ip}, %% ip | file, ignored in trace_type process
+        {port_kind, file},
+        %% {trace_port, 4711} %% only used in 'ip' trace mode
+        %% {trace_port, {"node1", 4711}}
+        {filename, "/tmp/systest-test-trace.log"}
+    ]},
+    {test_cases, [{a_specific_test_case,      trace_config},
+                  {systest_supervision_SUITE, trace_proc_start}]},
+    {trace_targets, [
+        {trace_config, [
+            {mod, systest_config},
+            {match_spec, [{'_',[],[{exception_trace},
+                                   {message,{process_dump}}]}]},
+            {function, '_'},
+            {pflags, [c, return_to]}
+        ]},
+        {trace_proc_start, [
+            {mod, systest_proc},
+            {match_spec, [{'_', [], [{exception_trace},
+                                     {message, {process_dump}}]}]},
+            {pflags, [c, return_to]}
+        ]}
+    ]}
+]}.
+``` 
 
 == Profiles
 

@@ -141,6 +141,8 @@ record_to_proplist(Rec, Mod) ->
 
 %% @doc convert the 'proplist' L into a printable list
 %% @end
+proplist_format([]) ->
+    "";
 proplist_format(L) ->
     DescrLen = 1 + lists:max([length(as_string(K)) || {K, _V} <- L]),
     Padding = erlang:max(25, DescrLen),

@@ -37,31 +37,28 @@ run(RunSpec) ->
     run(RunSpec, false).
 
 run(RunSpec, DryRun) ->
+    Quiet   = systest_runner:get(quiet, RunSpec),
     Profile = systest_runner:get(profile, RunSpec),
     Targets = systest_runner:get(targets, RunSpec),
     Label   = systest_profile:get(name, Profile),
     LogDir  = systest_profile:get(log_dir, Profile),
     Hooks   = systest_profile:get(hooks, Profile),
 
-    ok = systest_log:start(system, systest_ct_log, common_test),
-    ok = systest_log:start(framework, systest_ct_log, common_test),
-    ok = systest_log:start(operator, systest_ct_log, common_test),
+    systest_ct_log:start(),
 
-    TestFun = if DryRun =:= false -> fun run_test/1;
-                            true  -> fun print_test/1
+    TestFun = if DryRun =:= false -> fun run_test/2;
+                            true  -> fun print_test/2
               end,
 
     HooksEntry = case Hooks of
                      [] ->
                          {ct_hooks, [cth_log_redirect,
                                      {systest_cth, [], 100000}]};
-                     _ ->
+                     _  ->
                          [begin
                              M = case Hook of
-                                     Mod when is_atom(Mod) ->
-                                         Mod;
-                                     {ModName, _, _} ->
-                                         ModName
+                                     Mod when is_atom(Mod) -> Mod;
+                                     {ModName, _, _}       -> ModName
                                  end,
                              code:ensure_loaded(M)
                           end || Hook <- Hooks],
@@ -74,7 +71,7 @@ run(RunSpec, DryRun) ->
                   {allow_user_terms, true},
                   {event_handler, systest_event},
                   {enable_builtin_hooks, true},
-                  HooksEntry|Targets]) of
+                  HooksEntry|Targets], Quiet) of
         {error, _}=Error ->
             Error;
         _Other ->
@@ -85,11 +82,14 @@ run(RunSpec, DryRun) ->
             end
     end.
 
-run_test(Cfg) ->
-    print_test_data(Cfg, "Starting Test Run"),
+run_test(Cfg, Quiet) ->
+    case Quiet of
+        true  -> ok;
+        false -> print_test_data(Cfg, "Starting Test Run")
+    end,
     ct:run_test(Cfg).
 
-print_test(Cfg) ->
+print_test(Cfg, _) ->
     print_test_data(Cfg, "Starting Dry Run"),
     ok.
 

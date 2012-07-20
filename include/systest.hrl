@@ -58,7 +58,8 @@
     targets  = []   :: systest_config:config(),
     options  = []   :: systest_config:config(),
     settings = []   :: systest_config:config(),
-    base_config     :: systest_config:config()
+    base_config     :: systest_config:config(),
+    quiet           :: boolean()
 }).
 
 %% TODO: deprecate the 'apps' field (merge into flags?)

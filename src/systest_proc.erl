@@ -426,8 +426,9 @@ handle_msg(stop, State=#state{proc=Proc, handler=Mod,
         %% TODO: consider whether this is structured correctly - it *feels*
         %% a little hackish - and perhaps having a supervising process deal
         %% with these 'interactions' would be better
-        Shutdown  -> [log({framework, get(id, Proc)}, "~p~n",
-                        [interact(Proc, In, ModState)]) || In <- Shutdown]
+        Shutdown  -> [log({framework, get(id, Proc)},
+                        "on_stop (argv = ~p, response = ~p)~n",
+                        [In, interact(Proc, In, ModState)]) || In <- Shutdown]
     end,
     handle_callback(stopping_callback(Mod, handle_stop, Proc,
                                       [Proc, ModState]),

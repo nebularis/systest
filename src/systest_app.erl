@@ -35,19 +35,6 @@
 %%
 
 start(_StartType, _StartArgs) ->
-    case catch( escript:script_name() ) of
-        {'EXIT', _} ->
-            %% NB: code:lib_dir/2 doesn't *always* work - e.g., when we're in
-            %% in fact testing our own code base....
-            AppF = code:where_is_file("systest.app"),
-            AbsEbin = filename:absname(filename:dirname(AppF)),
-            Path = filename:join([filename:dirname(AbsEbin),
-                                 "priv", "banner.txt"]),
-            {ok, Bin, _} = erl_prim_loader:get_file(Path),
-            application:set_env(systest, banner, Bin);
-        Path when is_list(Path) ->
-            ok
-    end,
     systest_sup:start_link().
 
 stop(_State) ->

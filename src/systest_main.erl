@@ -29,6 +29,7 @@
 help() ->
     io:format("Usage: systest [-P <profile>] [-L <logging>] [-n] [-h]~n~n"
               "-h               Show the program options~n"
+              "-q, --quiet      Disable header/options output on start~n"
               "-P, --profile    Use the specified test profile~n"
               "-L, --logging    Active logging for the specified sub-system~n"
               "-n, --dryrun     Print everything out but don't run any tests~n"
@@ -48,21 +49,6 @@ run(["check"|Args]) ->
 run(Args) ->
     Options = parse_args(Args),
     application:load(systest),
-    {module, zip} = code:ensure_loaded(zip),
-    File = escript:script_name(),
-    case escript:extract(File, []) of
-        {ok, [_Shebang, _Comment, _EmuArgs, {archive, ArchiveBin}]} ->
-            zip:foldl(fun(Name, _, Bin, _) ->
-                          case lists:suffix("banner.txt", Name) of
-                              true ->
-                                  application:set_env(systest, banner, Bin());
-                              false ->
-                                  ok
-                          end
-                      end, ok, {File, ArchiveBin});
-        {error, _} = Error ->
-            throw(Error)
-    end,
     systest_runner:execute(Options).
 
 parse_args(Args) ->
@@ -73,9 +59,9 @@ parse_args(Args) ->
     Spec = opt_spec(),
     OptsWithVals = lists:map(fun erlang:atom_to_list/1,
                             lists:flatten([[L, S] || {L, S, string} <- Spec])),
-    {Options, _} = niceopt:parse(Args, [{mode, Mode},
-                                        {opts_with_vals, OptsWithVals}]),
-    validate(Options, Spec).
+    {Options, RawOpts} = niceopt:parse(Args, [{mode, Mode},
+                                              {opts_with_vals, OptsWithVals}]),
+    [{raw_opts, RawOpts}|validate(Options, Spec)].
 
 validate(Options, Spec) ->
     [begin
@@ -94,16 +80,21 @@ validate(Options, Spec) ->
 
 unpack(true, {L, _, V}) when V =:= integer orelse
                              V =:= string -> 
-                             systest_utils:abort(
-                                "Argument ~p requires a value!~n", [L]);
+                             io:format("Argument ~p requires a value!~n", [L]),
+                             help(),
+                             erlang:halt(1);
 unpack(V,    {L, _, integer}) -> {L, list_to_integer(V)};
 unpack(V,    {L, _, string})  -> {L, V};
 unpack(V,    {L, _, flag})    -> {L, V}.
 
 opt_spec() ->
-    [{profile,   'P', string},
-     {logging,   'L', string},
-     {dryrun,    'n', flag},
-     {dump,      'X', flag},
-     {node,      'a', string},
-     {longnames, 'A', flag}].
+    [{profile,          'P', string},
+     {logging,          'L', string},
+     {dryrun,           'n', flag},
+     {dump,             'X', flag},
+     {node,             'a', string},
+     {longnames,        'A', flag},
+     {trace_config,     't', string},
+     {trace_enable,     'T', string},
+     {trace_console,    'C', flag},
+     {quiet,            'q', flag}].

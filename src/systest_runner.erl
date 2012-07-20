@@ -80,7 +80,7 @@ set_defaults(Profile) ->
 print_banner(Config) ->
     %% Urgh - could there be an uglier way!?
     %% TODO: refactor this...
-    case quiet(Config) of 
+    case quiet(Config) of
         true  -> ok;
         false ->
             {ok, Banner} = application:get_env(systest, banner),
@@ -112,7 +112,9 @@ start_logging(Config) ->
         end,
         ok = systest_log:start(Target, systest_log, user)
      end || SubSystem <- Active],
-    ok.
+    if length(Active) > 0 -> io:nl();
+                     true -> ok
+    end.
 
 quiet(Config) ->
     ?CONFIG(quiet, Config, false).
@@ -138,9 +140,9 @@ verify(Exec2=#execution{profile     = Prof,
             systest_utils:print_section("SysTest Task Descriptor", [
                 {"Release Version", AppVsn},
                 {"Test Coordinator", node()},
-                {"Base Directory", BaseDir},
-                {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
                 {"Test Suites", lists:concat([S || {suite, S} <- Targets])},
+                {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
+                {"Base Directory", BaseDir},
                 {"Options", "(user supplied settings....)"}] ++ Config),
 
             Prop = systest_utils:record_to_proplist(Prof, systest_profile),

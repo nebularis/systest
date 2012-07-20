@@ -27,7 +27,8 @@
 -export([run/1, help/0]).
 
 help() ->
-    io:format("Usage: systest [-P <profile>] [-L <logging>] [-n] [-h]~n~n"
+    io:format("Usage: systest [-P <profile>] [-L <logging>] [-n] [-h]"
+              " [?<command>]~n~n"
               "-h               Show the program options~n"
               "-q, --quiet      Disable header/options output on start~n"
               "-P, --profile    Use the specified test profile~n"
@@ -38,7 +39,9 @@ help() ->
               "-A, --longnames  Use long instead of short names with -a~n"
               "-X, --dump       Dump configuration/status information if the "
                                 "run fails~n"
-              "--<s>-<k>=<v>    Set [k]ey for [s]ubsystem to [v]alue~n"
+              "--<s>-<k>=<v>    Set [s]ubsystem [k]ey to [v]alue~n"
+              "commands (optional):~n"
+              "inspect-trace [node(s)]~n"
               "~n").
 
 run(["-h"]) ->
@@ -79,7 +82,7 @@ validate(Options, Spec) ->
      end || {K, V}=RawOpt <- Options].
 
 unpack(true, {L, _, V}) when V =:= integer orelse
-                             V =:= string -> 
+                             V =:= string ->
                              io:format("Argument ~p requires a value!~n", [L]),
                              help(),
                              erlang:halt(1);
@@ -88,13 +91,13 @@ unpack(V,    {L, _, string})  -> {L, V};
 unpack(V,    {L, _, flag})    -> {L, V}.
 
 opt_spec() ->
-    [{profile,          'P', string},
-     {logging,          'L', string},
-     {dryrun,           'n', flag},
-     {dump,             'X', flag},
-     {node,             'a', string},
-     {longnames,        'A', flag},
-     {trace_config,     't', string},
-     {trace_enable,     'T', string},
-     {trace_console,    'C', flag},
-     {quiet,            'q', flag}].
+    [{profile,      'P', string},
+     {logging,      'L', string},
+     {dryrun,       'n', flag},
+     {dump,         'X', flag},
+     {node,         'a', string},
+     {longnames,    'A', flag},
+     {trace_config, 't', string},
+     {trace_enable, 'T', string},
+     {trace_flush,  'F', flag},
+     {quiet,        'q', flag}].

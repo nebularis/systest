@@ -131,6 +131,8 @@ verify(Exec2=#execution{profile     = Prof,
 
     Mod = systest_profile:get(framework, Prof),
 
+    Trace = systest_trace:load(Config),
+
     case quiet(Config) of
         true ->
             ok;

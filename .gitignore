@@ -4,6 +4,7 @@ deps
 ebin
 *.beam
 logs
-.eunit
+.test
 priv/bin/systes*
 doc
+app.vars

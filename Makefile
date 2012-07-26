@@ -71,7 +71,7 @@ compile: $(REBAR)
 .PHONY: escriptize
 escriptize: compile
 	ERL_FLAGS="-pa ebin" \
-	    $(REBAR) skip_deps=true mv_test_beams escriptize -v $(LOGLEVEL)
+	    $(REBAR) skip_deps=true escriptize -v $(LOGLEVEL)
 
 .PHONY: verify
 verify:
@@ -80,27 +80,26 @@ verify:
 
 .PHONY: eunit
 eunit:
-	rm -rf .eunit
 	$(REBAR) skip_deps=true -C test.config eunit -v $(LOGLEVEL)
 
 .PHONY: test-compile
 test-compile: $(REBAR)
-	$(REBAR) skip_deps=true -C test.config compile mv_test_beams -v $(LOGLEVEL)
+	$(REBAR) skip_deps=true -C test.config test-compile -v $(LOGLEVEL)
 
 .PHONY: test
-test: eunit test-default test-error-handling
+test: escriptize eunit test-default test-error-handling
 
 .PHONY: test-dependencies
-test-dependencies: test-compile
+test-dependencies: escriptize test-compile
 
 .PHONY: test-default
 test-default: test-dependencies
-	ERL_FLAGS="-pa ebin -pa test-ebin" \
+	ERL_FLAGS="-pa ebin -pa .test" \
 	    priv/bin/systest -P $@ $(NOISE)
 
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
-	ERL_FLAGS="-pa ebin -pa test-ebin" \
+	ERL_FLAGS="-pa ebin -pa .test" \
 		priv/bin/systest -A -a error_test -P $@ $(NOISE)
 
 bin/%:

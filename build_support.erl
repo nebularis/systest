@@ -25,7 +25,7 @@
 -module(build_support).
 
 -export([pre_compile/2, post_compile/2]).
--export(['publish-wiki'/2, post_doc/2, mv_test_beams/2]).
+-export(['publish-wiki'/2, post_doc/2]).
 
 pre_compile(Config, _) ->
     case is_base_dir(Config) of
@@ -48,7 +48,7 @@ pre_compile(Config, _) ->
 
 post_compile(Config, _) ->
     case is_base_dir(Config) of
-        true  -> ok; %% file:delete("app.vars");
+        true  -> file:delete("app.vars");
         false -> ok
     end,
     ok.
@@ -77,24 +77,6 @@ post_doc(Config, _) ->
     rebar_utils:sh("git add " ++ Files, [{cd, Dest}]),
     rebar_utils:sh("git ci -m 'updated by rebar...'", [{cd, Dest}]),
     rebar_utils:sh("git push origin master", [{cd, Dest}]),
-    ok.
-
-mv_test_beams(Config, _) ->
-    %% Because rebar WILL NOT output beams into a directory other than 'ebin'
-    Base = rebar_config:get_xconf(Config, base_dir,
-                            rebar_utils:get_cwd()),
-    TestSources = filelib:wildcard(
-                        filename:join([Base, "test", "*.erl"])),
-    [begin
-         Target = filename:basename(Src, ".erl") ++ ".beam",
-         Source = filename:join([Base, "ebin", Target]),
-         Dest = filename:join([Base, "test-ebin", Target]),
-         rebar_utils:ensure_dir(Dest),
-         case filelib:is_regular(Source) of
-             true  -> ok = file:rename(Source, Dest);
-             false -> ok
-         end
-     end || Src <- TestSources],
     ok.
 
 wiki_dir(Config) ->

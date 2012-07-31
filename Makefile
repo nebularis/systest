@@ -26,6 +26,7 @@ SOURCE_DIR=src
 TEST_DIR=test
 EBIN_DIR=ebin
 DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- proplists:get_value(deps, element(2, file:consult("rebar.config")))], halt(0).').
+LATEST_STABLE=$(shell git log stable --oneline -1 --format="%h")
 
 ## rules start here
 
@@ -46,7 +47,7 @@ all: escriptize
 
 .PHONY: info
 info: $(REBAR)
-	$(info SysTest $(shell git describe --abbrev=0))
+	$(info SysTest $(shell git describe --abbrev=0 ${LATEST_STABLE}))
 	$(info $(shell $(REBAR) -V))
 	$(info 3rd Party Dependencies: ${DEPS})
 

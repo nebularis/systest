@@ -1,4 +1,4 @@
-## Installing
+## Installing SysTest
 
 To install from source, clone the repository using git, or download the version
 you want to use from the [github downloads page][downloads]. The git clone
@@ -22,6 +22,12 @@ planning on calling *SysTest* APIs in your tests, it is also worth putting the
 main *SysTest* directory somewhere where it can be utilised by your tests at
 runtime, or adding it to your `ERL_LIBS` environment variable. This will also
 be necessary if you plan on running `xref` or `dialyzer` on your test code.
+
+## Getting the sources for this tutorial
+
+The source for this tutorial are included in the `./examples/quickstart` folder
+inside the top level systest repository. There is also a sample `Makefile` which
+exports a `test` target that you can run to see everything working as expected.
 
 ## Writing your first test case
 
@@ -112,9 +118,14 @@ A minimal example looks something like this:
 -include_lib("eunit/include/eunit.hrl").
 -compile(export_all).
 
+-import(systest_utils, [make_node/1]).
+
+all() ->
+    systest_suite:export_all(?MODULE).
+
 check_that_our_nodes_are_up(_Config) ->
-    ?assertEqual(pong, net_adm:ping('node1@host1')),
-    ?assertEqual(pong, net_adm:ping('node2@host1')).
+    ?assertEqual(pong, net_adm:ping(make_node('node1'))),
+    ?assertEqual(pong, net_adm:ping(make_node('node2'))).
 ```
 
 Note that we can safely assume that our nodes survive for the duration of the
@@ -134,18 +145,55 @@ slave nodes without _informing_ *SysTest* about it, which the testing framework
 will construe as a failure.
 
 ```erlang
-%% file ./test/example_1_SUITE.erl
--module(example_1_SUITE).
--include_lib("common_test/include/ct.hrl").
--include_lib("eunit/include/eunit.hrl").
--compile(export_all).
-
 deliberately_kill_node(_Config) ->
-    rpc:call('node1@host1', init, stop, []),
+    rpc:call(make_node('node1'), init, stop, []),
+    %% we need enough time to 'detect' the node is down before the test ends
+    timer:sleep(2000),
     ok.
-
-%% etc
 ```
+
+Do be aware that this test case _will_ fail when it is run. You can delete it
+from the test suite (or remove the function name from the results of all/0) if
+you wish to keep it but not let it run.
+
+### Handling deliberate shut down and restarts
+
+If the framework assumes a test case has failed whenever a _Process_ (e.g., an
+Erlang node in our example) ceases unexpectedly, how are we to test situations
+in which a stop or restart is actually required, for example a cluster failover
+handling scenario?
+
+*SysTest* provides an API for explicitly performing such actions without causing
+test cases to fail. We will stop one node and restart another, and verify the
+state of both afterwards. In order to interact with our nodes, we must acquire
+references to them, using a *SUT* reference to do so. The latter reference can
+be acquired from the common test config parameter.
+
+```erlang
+stopping_and_restarting_nodes(Config) ->
+    %% the active_sut/1 call will fail if there is no SUT configured
+    %% for this particular test case
+    Sut = systest:get_system_under_test(Config),
+    
+    %% we can print out status info to the console like so:
+    systest_sut:print_status(Sut),
+    
+    %% and we can get the process info for the SUT as well
+    [{Id1, Ref1},{Id2, Ref2}] = systest:procs(Sut)],
+    
+    %% let's stop one and wait long enough to ensure it shuts down...
+    systest:stop_and_wait(Ref1),
+    
+    %% and let's restart the second one!
+    {ok, {Id2, NewRef2}} = systest:restart_process(Sut, Ref2),
+    
+    %% and our assertions....
+    ?assertEqual(pang, net_adm:ping(Id1)),
+    ?assertEqual(pong, net_adm:ping(Id2)).
+```
+
+As we can see, the nodes (which are our operating _Processes_ for this *SUT*)
+are left in exactly the state we expect them to be in.
 
 ## Links
 

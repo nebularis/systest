@@ -143,6 +143,16 @@ sigkill(Pid) ->
     Result = os:cmd("kill -9 " ++ Pid),
     systest_log:log(framework, Result).
 
+%% @doc Stops the Systest (Operating) Process ProcRef
+%% @end
+stop_no_wait(ProcRef) ->
+    systest_proc:stop(ProcRef).
+
+%% @doc Stops the Systest (Operating) Process ProcRef
+%% @end
+kill_no_wait(ProcRef) ->
+    systest_proc:kill(ProcRef).
+
 %% @doc Instructs the {@link systest_proc. <em>Process</em>} to stop and waits
 %% until it has completed its shutdown and fully stopped. Stopping a 
 %% {@link systest_proc. <em>Process</em>} in this way does <em>not</em> cause

@@ -305,9 +305,9 @@ maybe_start_net_kernel(Config) ->
                 "Please run `epmd -daemon` first and try again.~n", []),
             if
                 UseLongNames =:= true ->
-                    {ok, _} = start_net_kernel({Host, NodeName}, longnames);
+                    {ok, _} = net_kernel:start([NodeName, longnames]);
                 UseLongNames =:= false ->
-                    {ok, _} = start_net_kernel(NodeName, shortnames)
+                    {ok, _} = net_kernel:start([NodeName, shortnames])
             end;
         LongNames ->
             systest_utils:throw_unless(
@@ -318,26 +318,6 @@ maybe_start_net_kernel(Config) ->
                 [use_longnames(UseLongNames),
                  long_or_short_names(LongNames)])
     end.
-
-start_net_kernel({Host, NodeName}, longnames) ->
-    case inet_db:get_searchlist() of
-        [LocalOrHomeDomain] when LocalOrHomeDomain == "local",
-                                 LocalOrHomeDomain == "home" ->
-            %% fine, we can ignore this
-            net_kernel:start([NodeName, longnames]);
-        [SearchDomain|_] ->
-            Name = atom_to_list(NodeName) ++ "@" ++ Host ++ "." ++ SearchDomain,
-            net_kernel:start([list_to_atom(Name), longnames]);
-        [] ->
-            %% uhm. right. This is the reason we have duplicated systest_env's
-            %% qname functionality - this failure would be completely opaque
-            %% if we tried to re-use it
-            io:format("unable to start net_kernel using 'longnames' as "
-                      "no search domain info is available.~n"),
-            throw(no_search_domain)
-    end;
-start_net_kernel(NodeName, shortnames) ->
-    net_kernel:start([NodeName, shortnames]).
 
 use_longnames(true)  -> enabled;
 use_longnames(false) -> disabled.

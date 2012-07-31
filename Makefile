@@ -100,7 +100,7 @@ test-default: test-dependencies
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
 	ERL_FLAGS="-pa ebin -pa .test" \
-		priv/bin/systest -A -a error_test -P $@ $(NOISE)
+		priv/bin/systest -a error_test -P $@ $(NOISE)
 
 bin/%:
 	mkdir -p deps

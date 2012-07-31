@@ -44,8 +44,7 @@ init(NI=#proc{host=Host, name=Name, config=Config}) ->
     VmArgs = systest_config:eval("flags.start", Config,
                     [{callback, {proc, fun systest_proc:get/2}},
                      {return, value}]),
-    HostName = systest_env:qname(Host),
-    on_start(NI, slave:start_link(HostName, Name, VmArgs)).
+    on_start(NI, slave:start_link(Host, Name, VmArgs)).
 
 %% @doc handles interactions with the proc.
 %% handle_interaction(Data, Proc, State) -> {reply, Reply, NewProc, NewState} |

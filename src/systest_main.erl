@@ -49,10 +49,7 @@ run(["check"|Args]) ->
 run(Args) ->
     Options = parse_args(Args),
     application:load(systest),
-    try systest_runner:execute(Options)
-    catch _:_ ->
-        halt(1)
-    end.
+    systest_runner:execute(Options).
 
 parse_args(Args) ->
     Mode = case os:type() of

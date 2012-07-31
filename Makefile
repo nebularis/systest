@@ -22,7 +22,6 @@
 ## ----------------------------------------------------------------------------
 LOGLEVEL ?= 0
 VERBOSE ?= 'false'
-REBAR=$(shell which rebar)
 SOURCE_DIR=src
 TEST_DIR=test
 EBIN_DIR=ebin
@@ -40,6 +39,10 @@ endif
 
 .PHONY: all
 all: escriptize
+
+# the law of unintended consequences: it turns out that our `git describe` foo
+# only produces the latest tag for the current branch, so after moving stable
+# development out of 'master', we no longer get consistent version numbers
 
 .PHONY: info
 info: $(REBAR)

@@ -113,8 +113,8 @@ A minimal example looks something like this:
 -compile(export_all).
 
 check_that_our_nodes_are_up(_Config) ->
-    ?assertEqual(pong, net_adm:ping(node1)),
-    ?assertEqual(pong, net_adm:ping(node2)).
+    ?assertEqual(pong, net_adm:ping('node1@host1')),
+    ?assertEqual(pong, net_adm:ping('node2@host1')).
 ```
 
 Note that we can safely assume that our nodes survive for the duration of the
@@ -130,7 +130,22 @@ resource configuration to look like this:
 ```
 
 To check that our test cases fail as expected, we can explicitly kill one of our
-slave nodes without _informing_ *SysTest* about it, 
+slave nodes without _informing_ *SysTest* about it, which the testing framework
+will construe as a failure.
+
+```erlang
+%% file ./test/example_1_SUITE.erl
+-module(example_1_SUITE).
+-include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
+-compile(export_all).
+
+deliberately_kill_node(_Config) ->
+    rpc:call('node1@host1', init, stop, []),
+    ok.
+
+%% etc
+```
 
 ## Links
 

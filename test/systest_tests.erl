@@ -34,12 +34,12 @@ settings_merging_test_() ->
                  os:putenv("USER", "ci")
              end,
      ?_assertMatch([{authz_url, "https://localhost:30001/ssos/login"}],
-                   systest_settings:load("../samples/default.settings"))}].
+                 systest_settings:load("../sample-config/default.settings"))}].
 
 pre_loaded_config_test_() ->
     systest:start(),
     systest_config:start_link(),
-    {ok, Terms} = file:consult("../samples/test.config"),
+    {ok, Terms} = file:consult("../sample-config/test.config"),
     systest_config:load_config_terms(resources, Terms),
     [?_assertMatch({handling_detached_processes,
                         [{localhost,[yellow,blue]},{on_start,[]}]},

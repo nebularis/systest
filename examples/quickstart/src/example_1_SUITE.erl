@@ -29,7 +29,7 @@ stopping_and_restarting_nodes(Config) ->
     systest_sut:print_status(Sut),
 
     %% and we can get the process info for the SUT as well
-    [{Id1, Ref1},{Id2, Ref2}] = systest:procs(Sut),
+    [{Id1, Ref1},{Id2, Ref2}] = systest:list_processes(Sut),
 
     %% let's stop one and wait long enough to ensure it shuts down...
     systest:stop_and_wait(Ref1),

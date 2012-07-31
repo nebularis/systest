@@ -179,7 +179,7 @@ stopping_and_restarting_nodes(Config) ->
     systest_sut:print_status(Sut),
     
     %% and we can get the process info for the SUT as well
-    [{Id1, Ref1},{Id2, Ref2}] = systest:procs(Sut)],
+    [{Id1, Ref1},{Id2, Ref2}] = systest:list_processes(Sut)],
     
     %% let's stop one and wait long enough to ensure it shuts down...
     systest:stop_and_wait(Ref1),
@@ -194,8 +194,6 @@ stopping_and_restarting_nodes(Config) ->
 
 As we can see, the nodes (which are our operating _Processes_ for this *SUT*)
 are left in exactly the state we expect them to be in.
-
-## Links
 
 [wiki]: https://github.com/nebularis/systest/wiki
 [downloads]: https://github.com/nebularis/systest/downloads

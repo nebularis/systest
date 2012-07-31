@@ -45,8 +45,9 @@ _configuration elements_ from the latter file overwriting those from the
 default.
 
 Settings can be extracted at runtime using the 
-[[Configuration API|systest_config]], or accessed in and used in 
-_string-expressions_ by referencing the `settings` group. For example:
+https://github.com/nebularis/systest/wiki/systest_config[Configuration API],
+or accessed in and used in _string-expressions_ by referencing the `settings`
+group. For example:
 
 ```erlang
 {web_auth_url, "${settings.base_url}/login.html"}.
@@ -56,21 +57,25 @@ _string-expressions_ by referencing the `settings` group. For example:
 
 These configuration files define the various *Resources* that can be made to
 participate in a test run. For more information about *Resources* in general,
-see the [[Concepts/Overview|concepts]] page.
+see the
+https://github.com/nebularis/systest/wiki/concepts[Concepts/Overview|concepts]
+page.
 
 *Resources Configuration Files* are sources from +./resources/*.resource+ by
 default, though like most config locations, this can be overridden by the
 current *Profile* (more on this later).
 
 Each top level _configuration element_ in a *Resources Configuration File* is
-accessible using the [[Configuration API|systest_config]]. *SysTest* uses these
-elements to resolve resources automatically and associate then with *Test 
-Scopes* at runtime - see [[Concepts/Overview|concepts]] for more information
-about *Test Scopes*.
+accessible using the
+https://github.com/nebularis/systest/wiki/systest_config[Configuration API].
+*SysTest* uses these elements to resolve resources automatically and associate
+then with *Test Scopes* at runtime - see
+https://github.com/nebularis/systest/wiki/concepts[Concepts/Overview|concepts]
+for more information about *Test Scopes*.
 
 Each _configuration element_ can describe either a *Process* or a *SUT* (see 
-[[Concepts/Overview|concepts]]) - it may also contain _trace hooks_, but we'll 
-revisit those later on.
+https://github.com/nebularis/systest/wiki/concepts[Concepts/Overview|concepts])
+- it may also contain _trace hooks_, but we'll revisit those later on.
 
 === *Process* Configuration
 
@@ -88,10 +93,11 @@ mandatory, and specifies the kind of _process handler_ we wish to use for
 instances of this type. See [[Concepts/Overview|concepts]] for more information
 about _process handlers_.
 
-The [[`systest_slave`|systest_slave]] handler deals with starting slave (Erlang) 
-nodes, and it can be configured to pass startup arguments to the `erl` program 
-it is starting. For this we use the `flags.start` _elements_, which are provided 
-as a string and can contain _string-expressions_:
+The https://github.com/nebularis/systest/wiki/systest_slave[systest_slave]
+handler deals with starting slave (Erlang) nodes, and it can be configured to
+pass startup arguments to the `erl` program it is starting. For this we use the
+`flags.start` _elements_, which are provided as a string and can contain
+_string-expressions_:
 
 ```erlang
 {basic_node, [
@@ -105,13 +111,15 @@ as a string and can contain _string-expressions_:
 ]}.
 ```
 
-The [[`systest_slave`|systest_slave]] handler doesn't use `flags.stop` 
-_elements_, though it is not an error to supply them (they're simply ignored).
+The https://github.com/nebularis/systest/wiki/systest_slave[systest_slave]
+handler doesn't use `flags.stop` _elements_, though it is not an error to supply
+them (they're simply ignored).
 
 Some handlers provide more complex startup options, the most common of which is
-[[`systest_cli`|systest_cli]]. As with the slave handler, we configure a
-*Process* resource to use this by settings the `{handler, systest_cli}` option
-_sub element_ in the `startup` _configuration section_.
+https://github.com/nebularis/systest/wiki/[systest_cli]. As with the slave
+handler, we configure a *Process* resource to use this by settings the
+`{handler, systest_cli}` option _sub element_ in the `startup`
+_configuration section_.
 
 === *SUT* Configuration
 
@@ -193,4 +201,4 @@ _element_ is not given in a *profile*, its default value is used instead.
 
 You select a *profile* when running *SysTest* by passing `-P <profile name>` on
 the command line. For more details, see the 
-[[Interfaces Documentation|interfaces]].
+https://github.com/nebularis/systest/wiki/interfaces[Interfaces Documentation].

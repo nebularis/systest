@@ -329,7 +329,9 @@ start_net_kernel({Host, NodeName}, longnames) ->
             Name = atom_to_list(NodeName) ++ "@" ++ Host ++ "." ++ SearchDomain,
             net_kernel:start([list_to_atom(Name), longnames]);
         [] ->
-            %% uhm. right.
+            %% uhm. right. This is the reason we have duplicated systest_env's
+            %% qname functionality - this failure would be completely opaque
+            %% if we tried to re-use it
             io:format("unable to start net_kernel using 'longnames' as "
                       "no search domain info is available.~n"),
             throw(no_search_domain)

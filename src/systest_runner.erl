@@ -50,6 +50,8 @@ behaviour_info(_) ->
 %% @end
 -spec execute(systest_config:config()) -> 'ok'.
 execute(Config) ->
+    systest:start(),
+    start_logging(Config),
     maybe_start_net_kernel(Config),
     {ok, BaseDir} = file:get_cwd(),
     Exec = build_exec([{base_dir, BaseDir}|Config]),
@@ -58,12 +60,9 @@ execute(Config) ->
     DefaultSettings = systest_profile:get(settings_base, Prof),
     Resources = verify_resources(Prof, BaseDir),
 
-    systest:start(),
     preload_resources(Resources, Config),
-
     print_banner(Config),
     set_defaults(Prof),
-    start_logging(Config),
 
     ensure_test_directories(Prof),
     systest_config:set_env(base_dir, BaseDir),
@@ -299,11 +298,16 @@ maybe_start_net_kernel(Config) ->
                end,
     case net_kernel:longnames() of
         ignored ->
+            {ok, Host} = inet:gethostname(),
+            EpmdState = systest_env:is_epmd_contactable(Host, 5000),
+            systest_utils:throw_unless(EpmdState == true, runner,
+                "It appears that epmd has not been started yet. "
+                "Please run `epmd -daemon` first and try again.~n", []),
             if
                 UseLongNames =:= true ->
-                    {ok, _} = net_kernel:start([NodeName, longnames]);
+                    {ok, _} = start_net_kernel({Host, NodeName}, longnames);
                 UseLongNames =:= false ->
-                    {ok, _} = net_kernel:start([NodeName, shortnames])
+                    {ok, _} = start_net_kernel(NodeName, shortnames)
             end;
         LongNames ->
             systest_utils:throw_unless(
@@ -314,6 +318,24 @@ maybe_start_net_kernel(Config) ->
                 [use_longnames(UseLongNames),
                  long_or_short_names(LongNames)])
     end.
+
+start_net_kernel({Host, NodeName}, longnames) ->
+    case inet_db:get_searchlist() of
+        [LocalOrHomeDomain] when LocalOrHomeDomain == "local",
+                                 LocalOrHomeDomain == "home" ->
+            %% fine, we can ignore this
+            net_kernel:start([NodeName, longnames]);
+        [SearchDomain|_] ->
+            Name = atom_to_list(NodeName) ++ "@" ++ Host ++ "." ++ SearchDomain,
+            net_kernel:start([list_to_atom(Name), longnames]);
+        [] ->
+            %% uhm. right.
+            io:format("unable to start net_kernel using 'longnames' as "
+                      "no search domain info is available.~n"),
+            throw(no_search_domain)
+    end;
+start_net_kernel(NodeName, shortnames) ->
+    net_kernel:start([NodeName, shortnames]).
 
 use_longnames(true)  -> enabled;
 use_longnames(false) -> disabled.

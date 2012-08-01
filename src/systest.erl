@@ -114,7 +114,10 @@ stop(Scope) when is_pid(Scope) ->
 %% config/settings
 
 settings() ->
-    systest_config:get_static(settings).
+    case systest_config:get_static(settings) of
+        {settings, Settings} -> Settings;
+        _                    -> []
+    end.
 
 settings(Key) when is_atom(Key) ->
     systest_config:read(Key, settings());

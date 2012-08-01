@@ -30,15 +30,19 @@
 -record(node, {id, name, ip_addr, port}).
 
 settings_merging_test_() ->
+    systest:start(),
     [{setup, fun() ->
                  os:putenv("USER", "ci")
              end,
-     ?_assertMatch([{authz_url, "https://localhost:30001/ssos/login"}],
-                 systest_settings:load("../sample-config/default.settings"))}].
+     ?_assertMatch([{authz_url, "https://localhost:30001/ssos/login"}|_],
+                 systest_settings:load("../sample-config/default.settings"))},
+     begin
+         systest_config:set_static(settings,
+                    systest_settings:load("../sample-config/default.settings")),
+         ?_assertEqual(2000, systest:settings("scope1.scope2"))
+     end].
 
 pre_loaded_config_test_() ->
-    systest:start(),
-    systest_config:start_link(),
     {ok, Terms} = file:consult("../sample-config/test.config"),
     systest_config:load_config_terms(resources, Terms),
     [?_assertMatch({handling_detached_processes,

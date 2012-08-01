@@ -1,1 +1,4 @@
 {authz_url, "https://test-auth-web/ssos/login"}.
+{scope1, [
+    {scope2, 2000}
+]}.

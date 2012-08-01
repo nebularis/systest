@@ -37,6 +37,7 @@
 -export([list_processes/1, process_data/2, read_process_user_data/1]).
 -export([write_process_user_data/2, restart_process/2, stop_and_wait/1]).
 -export([stop_no_wait/1, kill_no_wait/1]).
+-export([settings/0, settings/1, config/1, env/1]).
 -export([kill_after/2, kill_after/3, kill_and_wait/1]).
 -export([log/1, log/2]).
 
@@ -109,6 +110,25 @@ start(Scope, Identify, Config) ->
 %% @end
 stop(Scope) when is_pid(Scope) ->
     systest_sut:stop(Scope).
+
+%% config/settings
+
+settings() ->
+    systest_config:get_static(settings).
+
+settings(Key) when is_atom(Key) ->
+    systest_config:read(Key, settings());
+settings(Key) when is_list(Key) ->
+    case lists:member($., Key) of
+        true  -> systest_config:eval(Key, settings());
+        false -> systest_config:read(Key, settings())
+    end.
+
+config(Key) ->
+    systest_config:get_config(Key).
+
+env(Key) ->
+    systest_config:get_env(Key).
 
 %% tracing/debugging
 

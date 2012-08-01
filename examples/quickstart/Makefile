@@ -22,8 +22,10 @@
 ## ----------------------------------------------------------------------------
 TOPDIR_1=$(abspath ../../../)/
 TOPDIR=$(abspath ../..)/
-REBAR=$(addprefix $(TOPDIR),bin/rebar)
-SYSTEST=$(addprefix $(TOPDIR),priv/bin/systest)
+REBAR_SRC=$(addprefix $(TOPDIR),bin/rebar)
+REBAR=rebar
+SYSTEST_SRC=$(addprefix $(TOPDIR),priv/bin/systest)
+SYSTEST=systest
 LOGLEVEL ?= 0
 VERBOSE ?= 'false'
 
@@ -41,7 +43,13 @@ test-compile: $(REBAR)
 test: test-compile $(SYSTEST)
 	ERL_LIBS="${TOPDIR_1}:${ERL_LIBS}" $(SYSTEST) $(NOISE)
 
-$(REBAR): $(SYSTEST)
+$(REBAR): $(REBAR_SRC)
+	cp $(REBAR_SRC) $@
 
-$(SYSTEST):
+$(REBAR_SRC): $(SYSTEST)
+
+$(SYSTEST): $(SYSTEST_SRC)
+	cp $(SYSTEST_SRC) $@
+
+$(SYSTEST_SRC):
 	make -C ${TOPDIR}

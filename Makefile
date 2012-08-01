@@ -22,11 +22,11 @@
 ## ----------------------------------------------------------------------------
 LOGLEVEL ?= 0
 VERBOSE ?= 'false'
-REBAR=$(shell which rebar)
 SOURCE_DIR=src
 TEST_DIR=test
 EBIN_DIR=ebin
 DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- proplists:get_value(deps, element(2, file:consult("rebar.config")))], halt(0).').
+LATEST_STABLE=$(shell git log stable --oneline -1 --format="%h")
 
 ## rules start here
 
@@ -38,12 +38,21 @@ else
 NOISE=
 endif
 
+define systest
+	ERL_FLAGS="-pa ebin -pa .test" \
+		priv/bin/systest -a $(1) -P $(1) $(NOISE) --cover-dir=.test
+endef
+
 .PHONY: all
 all: escriptize
 
+# the law of unintended consequences: it turns out that our `git describe` foo
+# only produces the latest tag for the current branch, so after moving stable
+# development out of 'master', we no longer get consistent version numbers
+
 .PHONY: info
 info: $(REBAR)
-	$(info SysTest $(shell git describe --abbrev=0))
+	$(info SysTest $(shell git describe --abbrev=0 ${LATEST_STABLE}))
 	$(info $(shell $(REBAR) -V))
 	$(info 3rd Party Dependencies: ${DEPS})
 
@@ -71,7 +80,7 @@ compile: $(REBAR)
 .PHONY: escriptize
 escriptize: compile
 	ERL_FLAGS="-pa ebin" \
-	    $(REBAR) skip_deps=true mv_test_beams escriptize -v $(LOGLEVEL)
+	    $(REBAR) skip_deps=true escriptize -v $(LOGLEVEL)
 
 .PHONY: verify
 verify:
@@ -80,28 +89,34 @@ verify:
 
 .PHONY: eunit
 eunit:
-	rm -rf .eunit
 	$(REBAR) skip_deps=true -C test.config eunit -v $(LOGLEVEL)
 
 .PHONY: test-compile
 test-compile: $(REBAR)
-	$(REBAR) skip_deps=true -C test.config compile mv_test_beams -v $(LOGLEVEL)
+	$(REBAR) skip_deps=true -C test.config test-compile -v $(LOGLEVEL)
 
 .PHONY: test
-test: eunit test-default test-error-handling
+test: escriptize eunit test-default test-error-handling
 
 .PHONY: test-dependencies
-test-dependencies: test-compile
+test-dependencies: escriptize test-compile
 
 .PHONY: test-default
 test-default: test-dependencies
-	ERL_FLAGS="-pa ebin -pa test-ebin" \
-	    priv/bin/systest -P $@ $(NOISE)
+	$(call systest,$@)
 
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
-	ERL_FLAGS="-pa ebin -pa test-ebin" \
-		priv/bin/systest -A -a error_test -P $@ $(NOISE)
+	$(call systest,$@)
+
+.PHONY: test-profile
+ifneq ($(SYSTEST_PROFILE), '')
+test-profile: test-dependencies
+	$(call systest,$(SYSTEST_PROFILE))
+else
+test-profile:
+	$(error you need to specify a SYSTEST_PROFILE to run this target)
+endif
 
 bin/%:
 	mkdir -p deps

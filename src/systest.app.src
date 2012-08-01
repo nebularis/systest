@@ -1,7 +1,7 @@
 {application, systest,
  [
   {description, ""},
-  {vsn, {cmd, "git describe --abbrev=0 | sed 's/v//g'"}},
+  {vsn, {cmd, "git describe --abbrev=0 `git log stable --oneline -1 --format=\"%h\"` | sed 's/v//g'"}},
   {registered, []},
   {applications, [
                   kernel,

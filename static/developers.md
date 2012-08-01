@@ -18,7 +18,9 @@ components installed on your system:
 - To use (optional) `systest_ssh` handlers, an [ssh client][ssh]
 
 In order to use the (optional) `systest_foreign_node` handler, you will need a 
-valid install of the target language/platform on your system. 
+valid install of the target language/platform on your system. For `systest_script`
+interfaces, you will need to acquire the correct Lua and/or Python dependencies.
+This process has not yet been fully automated.
 
 For `{target, jvm}` you will need a JRE installed on your system and should 
 ensure that your `JAVA_HOME` environment variable is set properly. You will also

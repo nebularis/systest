@@ -49,7 +49,7 @@ throw_unless(Cond, SubSys, Msg, FmtArgs) ->
         true ->
             ok;
         false ->
-            systest_log:log(SubSys, Msg, FmtArgs),
+            io:format(Msg, FmtArgs),
             throw({SubSys, assertion_failed})
     end.
 

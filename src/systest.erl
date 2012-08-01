@@ -36,6 +36,7 @@
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
 -export([list_processes/1, process_data/2, read_process_user_data/1]).
 -export([write_process_user_data/2, restart_process/2, stop_and_wait/1]).
+-export([stop_no_wait/1, kill_no_wait/1]).
 -export([kill_after/2, kill_after/3, kill_and_wait/1]).
 -export([log/1, log/2]).
 

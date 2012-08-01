@@ -52,14 +52,14 @@ pre_loaded_config_test_() ->
                    ?REQUIRE(startup, systest_proc:proc_config(
                                 handling_detached_processes, yellow))),
      ?_assertMatch([
-            {start, [{program, "{{ base_dir }}/resources/test/start"},
+            {start, [{program, "${settings.base_dir}/resources/test/start"},
                      {args, ["${proc.id}"]},
                      {environment, [
                          {"LOGDIR", "%{TMPDIR}/logs/${proc.id}.log"},
                          {"DUMPDIR", "${ct.priv_dir}/dump/${proc.id}.log"},
                          {"PORT", "${proc.user.port}"}
                      ]}]},
-            {stop,  [{program, "{{ base_dir }}/resources/test/stop"},
+            {stop,  [{program, "${settings.base_dir}/resources/test/stop"},
                      {args, ["${proc.id}"]}]}],
                    ?REQUIRE(flags, systest_proc:proc_config(
                                 handling_detached_processes, yellow))),

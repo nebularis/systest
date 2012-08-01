@@ -38,6 +38,11 @@ else
 NOISE=
 endif
 
+define systest
+	ERL_FLAGS="-pa ebin -pa .test" \
+		priv/bin/systest -a $(1) -P $(1) $(NOISE) --cover-dir=.test
+endef
+
 .PHONY: all
 all: escriptize
 
@@ -98,13 +103,20 @@ test-dependencies: escriptize test-compile
 
 .PHONY: test-default
 test-default: test-dependencies
-	ERL_FLAGS="-pa ebin -pa .test" \
-	    priv/bin/systest -P $@ $(NOISE)
+	$(call systest,$@)
 
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
-	ERL_FLAGS="-pa ebin -pa .test" \
-		priv/bin/systest -a error_test -P $@ $(NOISE)
+	$(call systest,$@)
+
+.PHONY: test-profile
+ifneq ($(SYSTEST_PROFILE), '')
+test-profile: test-dependencies
+	$(call systest,$(SYSTEST_PROFILE))
+else
+test-profile:
+	$(error you need to specify a SYSTEST_PROFILE to run this target)
+endif
 
 bin/%:
 	mkdir -p deps

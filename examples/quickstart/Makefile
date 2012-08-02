@@ -30,7 +30,7 @@ LOGLEVEL ?= 0
 VERBOSE ?= 'false'
 
 ifneq ($(VERBOSE), 'false')
-NOISE=-L framework -L operator
+NOISE=-L framework -L operator -L sut -L process
 else
 NOISE=
 endif

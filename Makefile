@@ -30,7 +30,7 @@ LATEST_STABLE=$(shell git log stable --oneline -1 --format="%h")
 
 ## rules start here
 
-REBAR=bin/rebar
+REBAR=deps/rebar/rebar
 
 ifneq ($(VERBOSE), 'false')
 NOISE=-L framework -L operator
@@ -118,9 +118,9 @@ test-profile:
 	$(error you need to specify a SYSTEST_PROFILE to run this target)
 endif
 
-bin/%:
+$(REBAR): deps/rebar
+
+deps/rebar:
 	mkdir -p deps
-	mkdir -p bin
-	git clone -b systest https://github.com/hyperthunk/$*.git deps/$*
-	PATH="bin:${PATH}" $(MAKE) -C deps/$*
-	cp deps/$*/$* bin/$*
+	git clone -b systest https://github.com/hyperthunk/rebar.git deps/rebar
+	$(MAKE) -C deps/rebar

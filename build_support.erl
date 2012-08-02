@@ -30,16 +30,14 @@
 pre_compile(Config, _) ->
     case is_base_dir(Config) of
         true ->
-            {ok, [{env, Env}]} = file:consult(filename:join("build",
-                                                            "app.env")),
-            {ok, Banner} = file:read_file(filename:join("build",
-                                                        "banner.txt")),
-            AppEnv = lists:keystore(banner, 1, Env,
-                                    {banner, Banner}),
-            AppVars = {env, AppEnv},
-            
+            {ok, [{env, Env}]} = file:consult(
+                                    filename:join("build", "app.env")),
+            {ok, Banner} = file:read_file(
+                                    filename:join("build", "banner.txt")),
+            AppEnv = lists:keystore(banner, 1, Env, {banner, Banner}),
+            AppVars = {env, AppEnv},            
             ok = file:write_file("app.vars",
-                             io_lib:format("~p.\n", [AppVars]), [write]);
+                        io_lib:format("~p.\n", [AppVars]), [write]);
         false ->
             rebar_log:log(debug, "skipping app.vars generation in ~s~n",
                           [rebar_utils:get_cwd()]),
@@ -91,7 +89,7 @@ static_files(BaseDir) ->
     filelib:wildcard(filename:join([BaseDir, "static", "*.*"])).
 
 doc_files(DocDir) ->
-    filelib:wildcard(filename:join(DocDir, "*.*")) -- 
+    filelib:wildcard(filename:join(DocDir, "*.*")) --
                     [filename:join(DocDir, "README.md"),
                      filename:join(DocDir, "TOC.md")].
 

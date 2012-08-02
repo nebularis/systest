@@ -1,1 +1,5 @@
 {authz_url, "https://localhost:30001/ssos/login"}.
+{scope1, [
+    {scope2, 1000},
+    {scope3, 2000}
+]}.

@@ -31,16 +31,23 @@
 
 settings_merging_test_() ->
     systest:start(),
-    [{setup, fun() ->
-                 os:putenv("USER", "ci")
-             end,
+    [{setup, fun set_user/0,
      ?_assertMatch([{authz_url, "https://localhost:30001/ssos/login"}|_],
                  systest_settings:load("../sample-config/default.settings"))},
-     begin
-         systest_config:set_static(settings,
+     {setup, fun set_user/0,
+      fun() ->
+          systest_config:set_static(settings,
                     systest_settings:load("../sample-config/default.settings")),
-         ?_assertEqual(2000, systest:settings("scope1.scope2"))
-     end].
+          Scope = systest:settings("scope1.scope2"),
+          ?assertEqual(1000, Scope)
+      end},
+     {setup, fun set_user/0,
+      fun() ->
+          systest_config:set_static(settings,
+                    systest_settings:load("../sample-config/default.settings")),
+          Scope = systest:settings("scope1.scope3"),
+          ?assertEqual(2000, Scope)
+      end}].
 
 pre_loaded_config_test_() ->
     {ok, Terms} = file:consult("../sample-config/test.config"),
@@ -165,6 +172,9 @@ path_merge_test() ->
 %%
 %% Utility Functions
 %%
+
+set_user() ->
+    os:putenv("USER", "ci").
 
 test_config() ->
     [

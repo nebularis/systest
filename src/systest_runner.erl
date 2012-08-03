@@ -208,10 +208,13 @@ load_test_targets(Prof, Config) ->
         [] ->
             case ?CONFIG(testcase, Config, undefined) of
                 undefined   -> load_test_targets(Prof);
-                {Suite, TC} -> [{suite, Suite}, {testcase, TC}]
+                {Suite, TC} -> [{suite, Suite},
+                                {testcase, TC},
+                                {dir, test_dir(list_to_atom(Suite))}]
             end;
         Suites ->
-            [{suite, Suites}]
+            [{suite, Suites},
+             {dir, systest_utils:uniq([test_dir(M) || M <- Suites])}]
     end.
 
 load_test_targets(Prof) ->

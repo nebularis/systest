@@ -17,7 +17,11 @@ returned to the calling process.
 
 Once a _test run_ starts, tests can be subdivided into _test suites_, which map
 directly to [_Common Test_ `_SUITE` modules][ct_suites] when that framework is 
-in use. Other testing frameworks (such as [eunit][eunit], may choose to map 
+in use. Other testing frameworks (such as [eunit][eunit]), may choose to map a
+test suite to a module or something other construct - refer to the framework
+documentation to find out.
+
+A _test suite_ will ...
 
 ## Runtime Environment
 

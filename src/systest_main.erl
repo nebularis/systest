@@ -31,6 +31,7 @@ help() ->
               "-h               Show the program options~n"
               "-q, --quiet      Disable header/options output on start~n"
               "-P, --profile    Use the specified test profile~n"
+              "-Z, --target     Use the specified target~n"
               "-L, --logging    Active logging for the specified sub-system~n"
               "-n, --dryrun     Print everything out but don't run any tests~n"
               "-a, --name       Specify (Erlang) node name, "
@@ -84,11 +85,18 @@ unpack(true, {L, _, V}) when V =:= integer orelse
                              help(),
                              erlang:halt(1);
 unpack(V,    {L, _, integer}) -> {L, list_to_integer(V)};
+unpack(V,    {target, _, _})  -> case string:tokens(V, ":") of
+                                     [Suite] ->
+                                         {testsuite, [Suite]};
+                                     [Suite, Case] ->
+                                         {testcase, {Suite, Case}}
+                                 end;
 unpack(V,    {L, _, string})  -> {L, V};
 unpack(V,    {L, _, flag})    -> {L, V}.
 
 opt_spec() ->
     [{profile,          'P', string},
+     {target,           'Z', string},
      {logging,          'L', string},
      {dryrun,           'n', flag},
      {dump,             'X', flag},

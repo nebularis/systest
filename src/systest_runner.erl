@@ -22,6 +22,12 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
+%% @doc This module handles the execution of <i>test runs</i>, and provides a
+%% custom OTP behaviour that callback module can implement in order to provide
+%% support for different testing frameworks.
+%%
+%% The entry point for client code (executing a test run) is execute/1.
+%% ----------------------------------------------------------------------------
 -module(systest_runner).
 
 -include("systest.hrl").

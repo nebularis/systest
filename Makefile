@@ -25,7 +25,7 @@ VERBOSE ?= 'false'
 SOURCE_DIR=src
 TEST_DIR=test
 EBIN_DIR=ebin
-DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- proplists:get_value(deps, element(2, file:consult("rebar.config")))], halt(0).').
+DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- proplists:get_value(deps, element(2, file:consult("rebar.config")))], halt(0).')
 LATEST_STABLE=$(shell git log stable --oneline -1 --format="%h")
 
 ## rules start here
@@ -39,6 +39,7 @@ NOISE=
 endif
 
 define systest
+	ERL_LIBS="deps:${ERL_LIBS}" \
 	ERL_FLAGS="-pa ebin -pa .test" \
 		priv/bin/systest -a $(1) -P $(1) $(NOISE) --cover-dir=.test
 endef

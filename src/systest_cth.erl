@@ -114,14 +114,13 @@ post_end_per_testcase(TC, Config, Return, State) ->
     Result = check_exceptions(TC, Return),
     case ?CONFIG(TC, Config, undefined) of
         undefined ->
+            stop(TC),
             systest:trace_off(Config),
             {Result, State};
         SutPid ->
             case erlang:is_process_alive(SutPid) of
                 true ->
-                    log(framework, "stopping ~p~n", [SutPid]),
-                    log(framework, "stopped ~p~n",
-                           [systest_sut:stop(SutPid)]);
+                    stop(SutPid);
                 false ->
                     log(framework, "sut ~p is already down~n", [SutPid])
             end,
@@ -131,6 +130,17 @@ post_end_per_testcase(TC, Config, Return, State) ->
 
 terminate(_State) ->
     ok.
+
+stop(Target) ->
+    log(framework, "stopping ~p~n", [Target]),
+    try
+        log(framework, "stopped ~p~n",
+                        [systest_sut:stop(Target)])
+    catch
+        _:Err -> log(framework, "sut ~p stop ignored: ~p~n",
+                                [Target, Err])
+    end.
+
 
 check_exceptions(SutId, Return) ->
     case systest_watchdog:exceptions(SutId) of

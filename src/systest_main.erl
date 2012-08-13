@@ -80,7 +80,7 @@ validate(Options, Spec) ->
      end || {K, V}=RawOpt <- Options].
 
 unpack(true, {L, _, V}) when V =:= integer orelse
-                             V =:= string -> 
+                             V =:= string ->
                              io:format("Argument ~p requires a value!~n", [L]),
                              help(),
                              erlang:halt(1);
@@ -99,6 +99,7 @@ opt_spec() ->
      {target,           'Z', string},
      {logging,          'L', string},
      {dryrun,           'n', flag},
+     {without_cover,    'w', flag},
      {dump,             'X', flag},
      {node,             'a', string},
      {longnames,        'A', flag},

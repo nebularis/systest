@@ -34,6 +34,7 @@ help() ->
               "-Z, --target     Use the specified target~n"
               "-L, --logging    Active logging for the specified sub-system~n"
               "-n, --dryrun     Print everything out but don't run any tests~n"
+              "-w, --no_cover   Disable code coverage~n"
               "-a, --name       Specify (Erlang) node name, "
                                 "default = systest_runner~n"
               "-A, --longnames  Use long instead of short names with -a~n"
@@ -99,7 +100,7 @@ opt_spec() ->
      {target,           'Z', string},
      {logging,          'L', string},
      {dryrun,           'n', flag},
-     {without_cover,    'w', flag},
+     {no_cover,         'w', flag},
      {dump,             'X', flag},
      {node,             'a', string},
      {longnames,        'A', flag},

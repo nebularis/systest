@@ -34,7 +34,7 @@
             systest_config:config()) -> {'ok', file:filename()} |
                                         {error, term()}.
 start(ScratchDir, Config) ->
-    case ?CONFIG(dryrun, Config, ?CONFIG(without_cover, Config, false)) of
+    case ?CONFIG(dryrun, Config, ?CONFIG(no_cover, Config, false)) of
         true  -> {ok, dryrun};
         false -> do_start(ScratchDir, Config)
     end.

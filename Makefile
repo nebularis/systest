@@ -33,7 +33,7 @@ LATEST_STABLE=$(shell git log stable --oneline -1 --format="%h")
 REBAR=bin/rebar
 
 ifneq ($(VERBOSE), 'false')
-NOISE=-L framework -L operator
+NOISE=-L framework -L operator -L sut -L process
 else
 NOISE=
 endif

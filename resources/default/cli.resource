@@ -62,10 +62,16 @@
 ]}.
 
 {detached_proc, [
-    {startup, [{link_to_parent, false},
-               {detached,       true}]},
+    {startup, [
+        {handler, systest_cli},
+        {link_to_parent, false},
+        {detached, true},
+        {rpc_enabled, {true, {init, stop, []}}}
+    ]},
     {flags, [
         {start, [{program, "${settings.base_dir}/resources/test/start-daemon"},
+                 {args, ["${proc.id}"]}]},
+        {stop,  [{program, "${settings.base_dir}/resources/test/stop"},
                  {args, ["${proc.id}"]}]}
     ]}
 ]}.
@@ -73,8 +79,8 @@
 {handling_detached_processes, [
     {sut, [{localhost, [yellow, blue]}]},
     {processes, [
-        {yellow, [global_proc_config, detached_proc]},
-        {blue, [global_proc_config, detached_proc]}
+        {yellow, [detached_proc]},
+        {blue, [detached_proc]}
     ]}
 ]}.
 

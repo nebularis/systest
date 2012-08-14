@@ -136,7 +136,7 @@ verify(Exec2=#execution{profile     = Prof,
 
     Mod = systest_profile:get(framework, Prof),
 
-    Trace = systest_trace:load(Config),
+    _Trace = systest_trace:load(Config),
 
     case quiet(Config) of
         true ->
@@ -150,7 +150,7 @@ verify(Exec2=#execution{profile     = Prof,
                 {"Test Suites", lists:concat([S || {suite, S} <- Targets])},
                 {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
                 {"Base Directory", BaseDir},
-                {"Options", "(user supplied settings....)"}] ++ Config),
+                {section, "Options"}] ++ Config),
 
             Prop = systest_utils:record_to_proplist(Prof, systest_profile),
             systest_utils:print_section("SysTest Profile", Prop)

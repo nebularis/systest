@@ -25,6 +25,7 @@
 -module(systest_main).
 
 -export([run/1, help/0]).
+-import(systest_utils, [record_to_proplist/2]).
 
 help() ->
     io:format("Usage: systest [-P <profile>] [-L <logging>] [-n] [-h]"
@@ -51,6 +52,23 @@ run(["-h"]) ->
     erlang:halt(0);
 run(["check"|Args]) ->
     systest_utils:print_section("Options", parse_args(Args));
+run(["trace"|Args]) ->
+    Options = parse_args(Args),
+    systest:start(),
+    Config = [{base_dir, element(2, file:get_cwd())},
+              {scratch_dir, "/tmp/systest"}|Options],
+    TraceConfig = systest_trace:load(Config),
+    Prop = record_to_proplist(TraceConfig, systest_trace_config),
+    {value, {active, Active}, Prop2} = lists:keytake(active, 1, Prop),
+    systest_utils:print_section("Trace Configuration", Prop2),
+    Traces = [begin
+                  PList = record_to_proplist(T, systest_trace),
+                  {value, {_, TP}, PList2} =
+                        lists:keytake(trace_pattern, 1, PList),
+                  TP2 = record_to_proplist(TP, systest_trace_pattern),
+                  PList2 ++ [{trace_pattern, TP2}]
+              end || T <- Active],
+    [systest_utils:print_section("Active Trace", T) || T <- Traces];
 run(Args) ->
     Options = parse_args(Args),
     application:load(systest),

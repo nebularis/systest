@@ -26,7 +26,7 @@
 
 -include("systest.hrl").
 
--export([make_node/1, make_node/2, as_string/1, abort/2]).
+-export([make_node/1, make_node/2, as_string/1, as_list/1, abort/2]).
 -export([proplist_format/1, strip_suite_suffix/1]).
 -export([proc_id_and_hostname/1, rm_rf/1, find_files/2]).
 -export([with_file/3, with_termfile/2, combine/2, uniq/1]).
@@ -82,6 +82,9 @@ as_string(X) when is_integer(X) -> integer_to_list(X);
 as_string(X) when is_float(X)   -> float_to_list(X);
 as_string(X) when is_binary(X)  -> binary_to_list(X);
 as_string(X)                    -> X.
+
+as_list(X) when is_list(X) -> X;
+as_list(X)                 -> [X].
 
 %% @doc recursive search in Dir for files matching Regex
 %% @end
@@ -143,18 +146,40 @@ record_to_proplist(Rec, Mod) ->
 %% @end
 proplist_format([]) ->
     "";
-proplist_format(L) ->
+proplist_format(Items) ->
+    L = lists:foldl(fun flatten/2, [], lists:reverse(Items)),
     DescrLen = 1 + lists:max([length(as_string(K)) || {K, _V} <- L]),
     Padding = erlang:max(25, DescrLen),
     LenPrefix = "~-" ++ integer_to_list(Padding),
     lists:flatten(
         [begin
-             Fmt = if is_list(V) andalso
-                      is_integer(hd(V)) -> "~s~n";
-                      true -> "~p~n"
-                   end,
-             io_lib:format(LenPrefix ++ "s: " ++ Fmt, [as_string(K), V])
-         end || {K, V} <- L]).
+             case Item of
+                 {section, ItemName} ->
+                     io_lib:format("~s~n", [ItemName]);
+                 {K, [H|_]=V} when is_atom(H) orelse
+                                   is_list(H) ->
+                     Fmt = "~s~n",
+                     Elems = case is_atom(H) of
+                                 true  -> [atom_to_list(I) || I <- V];
+                                 false -> V
+                             end,
+                     Values = string:join(Elems, ", "),
+                     io_lib:format(LenPrefix ++ "s: " ++ Fmt,
+                                   [as_string(K), Values]);
+                 {K, V} ->
+                     Fmt = if is_list(V) andalso
+                              is_integer(hd(V)) -> "~s~n";
+                              true -> "~p~n"
+                           end,
+                     io_lib:format(LenPrefix ++ "s: " ++ Fmt,
+                                   [as_string(K), V])
+             end
+         end || Item <- L]).
+
+flatten({Key, [{_,_}|_]=Item}, Acc) ->
+    Acc ++ [{section, Key}|Item];
+flatten(KVP, Acc) ->
+    [KVP|Acc].
 
 print_heading(S) ->
     io:format(user, "~s~n", [border(S, "-")]).

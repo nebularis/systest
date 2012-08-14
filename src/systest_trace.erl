@@ -61,61 +61,18 @@
 -compile(export_all).
 -define(TRACE_DISABLED, {trace, disabled}).
 
--type sproc()       :: atom().
--type trace_loc()   :: [atom()] | 'all'.    %% nodes
--type call_filter() :: module() |
-                       {module(), atom()} |
-                       {module(), atom(), integer()} |
-                       {module(), atom(), integer(), term()}.
--type type()        :: 'gc' | 'sched' | 'send' | 'recv' | 'msg' | 'call'.
--type ptarget()     :: pid() | atom() | {'global', atom()} | 'all'.
--type trace_spec()  :: call_filter()              |
-                       type()                     | %% means p(all, [..])
-                       {ptarget(), call_filter()} | %% implies 'c'
-                       {ptarget(), type(), call_filter()}.
+-import(systest_utils, [as_list/1]).
 
-%% {ok,_}=ttb:tp(M,F,A,[{'_',[],[{message,{caller}},{exception_trace}]}]).
-
--type trace_pattern_scope() :: 'global' | 'local'.
-
--record(trace_pattern, {
-    scope       :: trace_pattern_scope(),
-    module      :: module(),
-    function    :: atom(),
-    arity       :: integer() | '_',
-    match_spec  :: term()  %% is there a type spec for this that we can borrow?
-}).
-
--type trace_pattern() :: #trace_pattern{}.
-
--record(trace, {
-    name            :: atom(),
-    scope           :: atom(),  %% scope at which this trace is activated
-    location        :: trace_loc(),
-    process_filter  :: ptarget(),
-    trace_pattern   :: trace_pattern()
-}).
-
--type trace() :: #trace{}.
-
--record(sys_config, {
-    trace_config    :: file:filename(),
-    trace_db_dir    :: file:filename(),
-    trace_data_dir  :: file:filename(),
-    base_config     :: systest_config:config(),
-    active          :: [trace()],
-    flush           :: boolean(),
-    console         :: boolean()
-}).
-
--type sys_config() :: #sys_config{}.
+-include("systest_trace.hrl").
 
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
 -exprecs_vfname([fname, "__", version]).
 
 -compile({parse_transform, exprecs}).
--export_records([trace_pattern, trace, sys_config]).
+-export_records([trace]).
+
+log(F, A) -> io:format(user, F, A).
 
 %convert_history_entry({ttb, tracer, [Nodes, []]}, Acc) ->
 %    Acc#trace_config{locations=Nodes};
@@ -134,37 +91,37 @@ load(Config) ->
     TraceDbDir = filename:join([ScratchDir, "db", "trace"]),
     TraceConfigFile = ?CONFIG(trace_config, Config,
                               default_config_file(BaseDir)),
-    Console = ?CONFIG(trace_console, Console, false),
+    Console = ?CONFIG(trace_console, Config, false),
     Flush = if Console == false -> ?CONFIG(trace_flush, Config, false);
                            true -> false
             end,
 
-    SysConf = #sys_config{trace_config=TraceConfigFile,
-                          trace_db_dir=TraceDbDir,
-                          trace_data_dir=TraceData,
-                          flush=Flush,
-                          console=Console},
+    SysConf = #trace_config{trace_config=TraceConfigFile,
+                            trace_db_dir=TraceDbDir,
+                            trace_data_dir=TraceData,
+                            flush=Flush,
+                            console=Console},
 
-    SysConf2 = find_activated(Config, SysConf).
+    _SysConf2 = find_activated(Config, SysConf).
 
 find_activated(Config, SysConf) ->
+    log("processing ~p~n", [SysConf]),
     {Enabled, _} = apply_flags(Config, SysConf),
-    SysConf#sys_config{active=Enabled}.
+    SysConf#trace_config{active=Enabled}.
 
 %% @private
 %% We must take all enabled traces and look up their configuration from the
 %% trace config file (or defaults). Config that is *missing* from these
 %% locations MUST be available in the supplied flags/args, otherwise we bail.
 %% @end
-apply_flags(Config, #sys_config{trace_config=TraceConfigFile}=SC) ->
+apply_flags(Config, #trace_config{trace_config=TraceConfigFile}) ->
     BaseTraceConfig = read_config(TraceConfigFile),
+    log("base trace configuration: ~p~n", [BaseTraceConfig]),
     TraceSettings = override_defaults_with_user_args(BaseTraceConfig, Config),
-    Enabled = proplists:get_all_values(trace_enabled, Config),
+    log("trace settings: ~p~n", [TraceSettings]),
+    Enabled = proplists:get_all_values(trace_enable, Config),
     lists:foldl(
         fun(Flag, {Acc, Base}) ->
-            TraceName = list_to_atom(Flag),
-            {TraceConfig, RemainingBase} = read_trace_config(TraceName, Base),
-            Location = ?CONFIG(location, TraceConfig, 'all'),
             case string:tokens(Flag, "+") of
                 [_] ->
                     %% A simple enable flag that means 'turn on [trace-name]'.
@@ -172,23 +129,37 @@ apply_flags(Config, #sys_config{trace_config=TraceConfigFile}=SC) ->
                     %% with the name, which allows users to define a trace in
                     %% their config file(s) for a given scope and enable it
                     %% with `-T scope_name` on the command line
-                    Trace = #trace{scope=TraceName,
-                                   location=Location,
-                                   type=?REQUIRE(type, TraceConfig),
-                                   spec=?REQUIRE(spec, TraceConfig)},
-                    {[Trace|Acc], RemainingBase};
+                    Trace = build_trace(list_to_atom(Flag), Base),
+                    {[Trace#trace{scope=all}|Acc], Base};
                 [Scope, Target] ->
-                    %% TODO: process the scope also
-                    {Acc, Base}
+                    %% -T scope+target trace flags indicate that for 'Scope'
+                    %% we should enable the trace named 'Target', so....
+                    ScopeName = list_to_atom(Scope),
+                    InitTrace = build_trace(list_to_atom(Target), Base),
+                    {[InitTrace#trace{scope=ScopeName}|Acc], Base}
             end
         end, {[], TraceSettings}, Enabled).
+
+build_trace(TraceName, Base) ->
+    {TraceConfig, _RemainingBase} =
+                read_trace_config(TraceName, Base),
+    log("TraceConfig: ~p~n", [TraceConfig]),
+    TP = systest_trace_pattern:record_fromlist(
+                ?REQUIRE(trace_pattern, TraceConfig)),
+    Location = ?CONFIG(location, TraceConfig, 'all'),
+    #trace{name=TraceName,
+           scope=TraceName,
+           process_filter=?REQUIRE(process_filter, TraceConfig),
+           trace_flags=?REQUIRE(trace_flags, TraceConfig),
+           trace_pattern=TP,
+           location=Location}.
 
 %% @private
 %% flags passed on the command line have a similar structure, but
 %% are prefixed and need reprocessing and merging with whatever
 %% configuration we've been able to load
 %% @end
-maybe_merge_config(TraceConfig, Flag, Config) ->
+maybe_merge_config(_TraceConfig, _Flag, _Config) ->
     %% TraceConfig could be 'noconfig' or proplist() where
     %% --trace-pcall-location has been transformed into a structure
     %% such as `{pcall, [{location, Value}]}`
@@ -201,15 +172,17 @@ maybe_merge_config(TraceConfig, Flag, Config) ->
 %% to the BaseConfig (loaded from a user defined file or the defaults) or
 %% replace any 'settings' for trace 'name' with those passed on the commandline
 %% @end
+override_defaults_with_user_args(BaseConfig, []) ->
+    override_defaults_with_user_args(BaseConfig, BaseConfig);
 override_defaults_with_user_args(BaseConfig, UserConfig) ->
     lists:foldl(
         fun({K, V}, Acc) ->
             case lists:prefix("trace", atom_to_list(K)) of
                 true ->
                     case string:tokens(atom_to_list(K), "-") of
-                        ["trace", Name, Setting]=Parts ->
+                        ["trace", Name, Setting]=_Parts ->
                             TraceKey = list_to_atom(Name),
-                            NewVal = {atom_to_list(Setting), V},
+                            NewVal = user_override(list_to_atom(Setting), V),
                             case lists:keyfind(TraceKey, 1, Acc) of
                                 false ->
                                     lists:keystore(TraceKey, 1, Acc, NewVal);
@@ -224,6 +197,14 @@ override_defaults_with_user_args(BaseConfig, UserConfig) ->
                     Acc
             end
         end, BaseConfig, UserConfig).
+
+user_override(location, Locations) ->
+    NodeNames = [list_to_atom(Node) || Node <- string:tokens(Locations, ",")],
+    {location, NodeNames};
+user_override(pids, Pids) ->
+    {process_filter, [list_to_atom(Pid) || Pid <- string:tokens(Pids, ",")]};
+user_override(TraceKey, Value) ->
+    {TraceKey, Value}.
 
 strip_trace_prefix(FlagName) ->
     lists:sublist(FlagName, 9, length(FlagName) - 7).
@@ -250,13 +231,17 @@ read_trace_config(TraceName, Config) ->
             %% we have to deal with trace_defaults ++ overrides
             %% TODO: this pattern exists in systest_resources also -
             %% we should write one set of routines to handle it...
-            Processed = lists:foldl(fun(C, Acc) ->
-                                        Conf = if is_atom(C) ->
-                                                    ?REQUIRE(C, Config);
-                                                        true -> C
-                                               end,
-                                        Conf ++ Acc
-                                    end, [], Cfg),
+            Processed = 
+                lists:foldl(fun(C, Acc) ->
+                                Conf = if is_atom(C) -> ?REQUIRE(C, Config);
+                                                true -> C
+                                       end,
+                                case is_list(Conf) of
+                                    false -> [Conf|Acc];
+                                    true  -> systest_config:merge(
+                                                as_list(Conf), Acc)
+                                end
+                            end, [], Cfg),
             {Processed, Rest}
     end.
 
@@ -264,15 +249,19 @@ read_trace_config(TraceName, Config) ->
 %    application:get_env(systest, default_config_file);
 read_config(Path) ->
     case filelib:is_regular(Path) of
-        true  -> file:consult(Path);
-        false -> application:get_env(systest, default_trace_config)
+        false -> default_config();
+        true  -> {ok, Data} = file:consult(Path),
+                 systest_config:merge(default_config(), Data)
     end.
+
+default_config() ->
+    {ok, Config} = application:get_env(systest, default_trace_config),
+    Config.
 
 default_config_file(BaseDir) ->
     filename:join([BaseDir, "resources", "trace.config"]).
 
 %%%%%%%%% OLD API %%%%%%%%%%%
-
 
 log_trace_file(TraceFile) ->
     write_trace_file(TraceFile, user).

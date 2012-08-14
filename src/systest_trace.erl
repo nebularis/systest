@@ -58,7 +58,7 @@
 
 -export([debug/2, stop/1]).
 -export([log_trace_file/1, write_trace_file/2]).
-
+-compile(export_all).
 -define(TRACE_DISABLED, {trace, disabled}).
 
 -type sproc()       :: atom().
@@ -90,7 +90,7 @@
 
 -record(trace, {
     name            :: atom(),
-    scope           :: atom(),
+    scope           :: atom(),  %% scope at which this trace is activated
     location        :: trace_loc(),
     process_filter  :: ptarget(),
     trace_pattern   :: trace_pattern()
@@ -140,7 +140,7 @@ load(Config) ->
             end,
 
     SysConf = #sys_config{trace_config=TraceConfigFile,
-                          trace_db_dir=trace_db_dir,
+                          trace_db_dir=TraceDbDir,
                           trace_data_dir=TraceData,
                           flush=Flush,
                           console=Console},
@@ -155,30 +155,28 @@ find_activated(Config, SysConf) ->
 %% We must take all enabled traces and look up their configuration from the
 %% trace config file (or defaults). Config that is *missing* from these
 %% locations MUST be available in the supplied flags/args, otherwise we bail.
+%% @end
 apply_flags(Config, #sys_config{trace_config=TraceConfigFile}=SC) ->
     BaseTraceConfig = read_config(TraceConfigFile),
     TraceSettings = override_defaults_with_user_args(BaseTraceConfig, Config),
     Enabled = proplists:get_all_values(trace_enabled, Config),
     lists:foldl(
         fun(Flag, {Acc, Base}) ->
+            TraceName = list_to_atom(Flag),
+            {TraceConfig, RemainingBase} = read_trace_config(TraceName, Base),
+            Location = ?CONFIG(location, TraceConfig, 'all'),
             case string:tokens(Flag, "+") of
                 [_] ->
                     %% A simple enable flag that means 'turn on [trace-name]'.
                     %% In this case, we look for user-defined config associated
                     %% with the name, which allows users to define a trace in
-                    %% their config file(s) for a given scope and enable it with
-                    %% -T scope_name on the command line
-                    TraceName = list_to_atom(Flag),
-                    {TraceConfig, RemainingBase} =
-                                read_trace_config(TraceName, Base),
-                    Location = ?CONFIG(location, TraceConfig, all),
-                    
+                    %% their config file(s) for a given scope and enable it
+                    %% with `-T scope_name` on the command line
                     Trace = #trace{scope=TraceName,
-                                   location=?CONFIG(location,
-                                                    TraceConfig),
-                                   type     :: trace_type(),
-                                   spec     :: trace_spec()
-                    {Acc, RemainingBase};
+                                   location=Location,
+                                   type=?REQUIRE(type, TraceConfig),
+                                   spec=?REQUIRE(spec, TraceConfig)},
+                    {[Trace|Acc], RemainingBase};
                 [Scope, Target] ->
                     %% TODO: process the scope also
                     {Acc, Base}
@@ -189,16 +187,20 @@ apply_flags(Config, #sys_config{trace_config=TraceConfigFile}=SC) ->
 %% flags passed on the command line have a similar structure, but
 %% are prefixed and need reprocessing and merging with whatever
 %% configuration we've been able to load
+%% @end
 maybe_merge_config(TraceConfig, Flag, Config) ->
-    %% TraceConfig could be 'noconfig' or proplist()
-    %% --trace-pcall-location has been transformed into {pcall, [location]}
+    %% TraceConfig could be 'noconfig' or proplist() where
+    %% --trace-pcall-location has been transformed into a structure
+    %% such as `{pcall, [{location, Value}]}`
+    ok.
 
 %% @private
 %% take the supplied UserConfig and for each trace key (passed on the command
 %% line as --trace-[name]-[setting]=[value] and supplanted during argument
-%% parsing with {'trace-name-setting', value} tuples) we will either add it
+%% parsing with {'trace-name-setting', value} tuples); we will either add it
 %% to the BaseConfig (loaded from a user defined file or the defaults) or
-%% replace any 'settings' for trace 'name' with those passed on the command line
+%% replace any 'settings' for trace 'name' with those passed on the commandline
+%% @end
 override_defaults_with_user_args(BaseConfig, UserConfig) ->
     lists:foldl(
         fun({K, V}, Acc) ->
@@ -229,6 +231,7 @@ strip_trace_prefix(FlagName) ->
 %% @private read the trace config for name, de-referencing aliased config
 %% if necessary - we remove top-level elements, but referenced/aliased are
 %% shared so we don't remove them.
+%% @end
 read_trace_config(TraceName, Config) ->
     case lists:keytake(TraceName, 1, Config) of
         false ->

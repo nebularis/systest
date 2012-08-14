@@ -7,3 +7,5 @@ logs
 .eunit
 priv/bin/systes*
 doc
+.test
+systest

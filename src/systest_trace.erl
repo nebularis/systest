@@ -61,18 +61,17 @@
 -compile(export_all).
 -define(TRACE_DISABLED, {trace, disabled}).
 
--type sproc()       :: atom().
 -type trace_loc()   :: [atom()] | 'all'.    %% nodes
--type call_filter() :: module() |
-                       {module(), atom()} |
-                       {module(), atom(), integer()} |
-                       {module(), atom(), integer(), term()}.
--type type()        :: 'gc' | 'sched' | 'send' | 'recv' | 'msg' | 'call'.
+%-type call_filter() :: module() |
+%                       {module(), atom()} |
+%                       {module(), atom(), integer()} |
+%                       {module(), atom(), integer(), term()}.
+%-type type()        :: 'gc' | 'sched' | 'send' | 'recv' | 'msg' | 'call'.
 -type ptarget()     :: pid() | atom() | {'global', atom()} | 'all'.
--type trace_spec()  :: call_filter()              |
-                       type()                     | %% means p(all, [..])
-                       {ptarget(), call_filter()} | %% implies 'c'
-                       {ptarget(), type(), call_filter()}.
+%-type trace_spec()  :: call_filter()              |
+%                       type()                     | %% means p(all, [..])
+%                       {ptarget(), call_filter()} | %% implies 'c'
+%                       {ptarget(), type(), call_filter()}.
 
 %% {ok,_}=ttb:tp(M,F,A,[{'_',[],[{message,{caller}},{exception_trace}]}]).
 
@@ -93,6 +92,7 @@
     scope           :: atom(),  %% scope at which this trace is activated
     location        :: trace_loc(),
     process_filter  :: ptarget(),
+    spec            :: atom(),
     trace_pattern   :: trace_pattern()
 }).
 
@@ -108,14 +108,14 @@
     console         :: boolean()
 }).
 
--type sys_config() :: #sys_config{}.
+%-type sys_config() :: #sys_config{}.
 
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
 -exprecs_vfname([fname, "__", version]).
 
 -compile({parse_transform, exprecs}).
--export_records([trace_pattern, trace, sys_config]).
+-export_records([trace_pattern]).
 
 %convert_history_entry({ttb, tracer, [Nodes, []]}, Acc) ->
 %    Acc#trace_config{locations=Nodes};
@@ -134,7 +134,7 @@ load(Config) ->
     TraceDbDir = filename:join([ScratchDir, "db", "trace"]),
     TraceConfigFile = ?CONFIG(trace_config, Config,
                               default_config_file(BaseDir)),
-    Console = ?CONFIG(trace_console, Console, false),
+    Console = ?CONFIG(trace_console, Config, false),
     Flush = if Console == false -> ?CONFIG(trace_flush, Config, false);
                            true -> false
             end,
@@ -145,7 +145,7 @@ load(Config) ->
                           flush=Flush,
                           console=Console},
 
-    SysConf2 = find_activated(Config, SysConf).
+    _SysConf2 = find_activated(Config, SysConf).
 
 find_activated(Config, SysConf) ->
     {Enabled, _} = apply_flags(Config, SysConf),
@@ -156,15 +156,12 @@ find_activated(Config, SysConf) ->
 %% trace config file (or defaults). Config that is *missing* from these
 %% locations MUST be available in the supplied flags/args, otherwise we bail.
 %% @end
-apply_flags(Config, #sys_config{trace_config=TraceConfigFile}=SC) ->
+apply_flags(Config, #sys_config{trace_config=TraceConfigFile}) ->
     BaseTraceConfig = read_config(TraceConfigFile),
     TraceSettings = override_defaults_with_user_args(BaseTraceConfig, Config),
     Enabled = proplists:get_all_values(trace_enabled, Config),
     lists:foldl(
         fun(Flag, {Acc, Base}) ->
-            TraceName = list_to_atom(Flag),
-            {TraceConfig, RemainingBase} = read_trace_config(TraceName, Base),
-            Location = ?CONFIG(location, TraceConfig, 'all'),
             case string:tokens(Flag, "+") of
                 [_] ->
                     %% A simple enable flag that means 'turn on [trace-name]'.
@@ -172,23 +169,35 @@ apply_flags(Config, #sys_config{trace_config=TraceConfigFile}=SC) ->
                     %% with the name, which allows users to define a trace in
                     %% their config file(s) for a given scope and enable it
                     %% with `-T scope_name` on the command line
-                    Trace = #trace{scope=TraceName,
-                                   location=Location,
-                                   type=?REQUIRE(type, TraceConfig),
-                                   spec=?REQUIRE(spec, TraceConfig)},
-                    {[Trace|Acc], RemainingBase};
+                    Trace = build_trace(list_to_atom(Flag), Base),
+                    {[Trace|Acc], Base};
                 [Scope, Target] ->
-                    %% TODO: process the scope also
-                    {Acc, Base}
+                    %% -T scope+target trace flags indicate that for 'Scope'
+                    %% we should enable the trace named 'Target', so....
+                    ScopeName = list_to_atom(Scope),
+                    InitTrace = build_trace(list_to_atom(Target), Base),
+                    {[InitTrace#trace{scope=ScopeName}|Acc], Base}
             end
         end, {[], TraceSettings}, Enabled).
+
+build_trace(TraceName, Base) ->
+    {TraceConfig, _RemainingBase} =
+                read_trace_config(TraceName, Base),
+    TP = record_fromlist(?REQUIRE(trace_pattern, TraceConfig),
+                                 'trace_pattern'),
+    Location = ?CONFIG(location, TraceConfig, 'all'),
+    #trace{scope=TraceName,
+           process_filter=?REQUIRE(process_filter, TraceConfig),
+           spec=?REQUIRE(spec, TraceConfig),
+           trace_pattern=TP,
+           location=Location}.
 
 %% @private
 %% flags passed on the command line have a similar structure, but
 %% are prefixed and need reprocessing and merging with whatever
 %% configuration we've been able to load
 %% @end
-maybe_merge_config(TraceConfig, Flag, Config) ->
+maybe_merge_config(_TraceConfig, _Flag, _Config) ->
     %% TraceConfig could be 'noconfig' or proplist() where
     %% --trace-pcall-location has been transformed into a structure
     %% such as `{pcall, [{location, Value}]}`
@@ -207,7 +216,7 @@ override_defaults_with_user_args(BaseConfig, UserConfig) ->
             case lists:prefix("trace", atom_to_list(K)) of
                 true ->
                     case string:tokens(atom_to_list(K), "-") of
-                        ["trace", Name, Setting]=Parts ->
+                        ["trace", Name, Setting]=_Parts ->
                             TraceKey = list_to_atom(Name),
                             NewVal = {atom_to_list(Setting), V},
                             case lists:keyfind(TraceKey, 1, Acc) of

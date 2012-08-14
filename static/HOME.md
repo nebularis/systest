@@ -3,6 +3,9 @@
 This is the *SysTest* wiki. Below you will find links to information about 
 the tool and accessing its API documentation.
 
+The user guide is still a work in progress, but you can (and should) read the
+[[QuickStart|quickstart]] if you want to get going immediately.
+
 ## User Guide
 
 The user guide consists of four sections, which should be read together.

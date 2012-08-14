@@ -216,6 +216,7 @@ handle_info({'EXIT', Pid, Reason}=Ev, State=#sut{id=Sut}) ->
     {stop, {proc_exit, Pid, Reason}, clear_pending(Ev, State)}.
 
 terminate(_Reason, _State) ->
+    unregister(self()),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -316,6 +317,13 @@ build_procs(Identity, Sut, {Host, Procs}, Config) ->
                                      {name, N}|Config]) || N <- Procs].
 
 start_host(Identity, Sut, {localhost, Procs}, Config) ->
+    case net_kernel:longnames() of
+        true ->
+            systest_log:log("unable to infer 'hostname' using longnames~n", []),
+            throw({longnames, invalid_hostname});
+        false ->
+            ok
+    end,
     {ok, Hostname} = inet:gethostname(),
     start_host(Identity, Sut, {list_to_atom(Hostname), Procs}, Config);
 start_host(Identity, Sut,

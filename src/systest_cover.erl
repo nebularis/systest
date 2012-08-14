@@ -34,7 +34,7 @@
             systest_config:config()) -> {'ok', file:filename()} |
                                         {error, term()}.
 start(ScratchDir, Config) ->
-    case ?CONFIG(dryrun, Config, false) of
+    case ?CONFIG(dryrun, Config, ?CONFIG(no_cover, Config, false)) of
         true  -> {ok, dryrun};
         false -> do_start(ScratchDir, Config)
     end.
@@ -50,10 +50,7 @@ do_start(ScratchDir, Config) ->
                      false ->
                          []
                  end,
-    SearchDirs = case proplists:get_all_values('cover-dir', Config) of
-                     []      -> ["ebin"];
-                     CovDirs -> CovDirs
-                 end,
+    SearchDirs = proplists:get_all_values('cover-dir', Config),
     {ok, Cwd} = file:get_cwd(),
     Dirs = [case filename:pathtype(Dir) of
                 relative -> filename:join(Cwd, Dir);
@@ -87,7 +84,7 @@ report_cover(_Dir, dryrun, _Config) ->
 report_cover(Dir, Export, Config) ->
     io:nl(),
     systest_utils:print_heading("Building Code Coverage Results - Please Wait"),
-%    {Summary, SummaryFile} = 
+%    {Summary, SummaryFile} =
 %            case ?CONFIG('cover-summary', Config, user) of
 %                console -> {user, none};
 %                user    -> {user, none};

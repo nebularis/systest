@@ -27,7 +27,7 @@
 -module(systest_env).
 
 -export([default_log_dir/1, default_scratch_dir/0, temp_dir/0]).
--export([is_epmd_contactable/2, hostname/1, fqdn/1]).
+-export([is_epmd_contactable/2, hostname/1]).
 -export([work_directory/3, lookup_env/2, timestamp/0]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
@@ -40,18 +40,6 @@ default_log_dir(Config) ->
 
 default_scratch_dir() ->
     work_directory(temp_dir(), systest, "SYSTEST_SCRATCH_DIR").
-
-fqdn(Host) when is_atom(Host) ->
-    fqdn(atom_to_list(Host));
-fqdn(HostS) when is_list(HostS) ->
-    case net_kernel:longnames() of
-        false ->
-            HostS;
-        true ->
-            InetRc = inet:get_rc(),
-            {domain, Domain} = lists:keyfind(domain, 1, InetRc),
-            string:join([HostS, Domain], ".")
-    end.
 
 hostname(NodeName) ->
     element(2, systest_utils:proc_id_and_hostname(NodeName)).

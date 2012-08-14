@@ -11,6 +11,8 @@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+{systest_error_handling_SUITE, [{timetrap_failure, cli_2node_cluster}]}.
+
 {sut_start_scripts_badly_configured, [
     {sut, [{localhost, [badnode]}]},
     {processes, [

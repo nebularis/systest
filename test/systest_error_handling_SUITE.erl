@@ -28,7 +28,7 @@
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
 %% @doc Error Handling Test Suite
-%% This common test suite provides test cases that are configured to 
+%% This common test suite provides test cases that are configured to
 %% deliberately fail, allow us to verify the behaviour of our actual common test
 %% hooks by extending them and checking for expected error conditions.
 %% ----------------------------------------------------------------------------
@@ -47,11 +47,19 @@ suite() -> [{timetrap, {minutes, 2}}].
 
 all() ->
     [sut_start_scripts_badly_configured,
+     timetrap_failure,
      failing_sut_on_start_hook].
 
 %%
 %% Test Case Definitions
 %%
+
+timetrap_failure() ->
+    [{timetrap, {seconds, 10}}].
+
+timetrap_failure(_) ->
+    %% timer:sleep(60 * 1000).
+    ok.
 
 sut_start_scripts_badly_configured() ->
     [{userdata, [{doc, "Attempts to start a cli node for a non-existent script."

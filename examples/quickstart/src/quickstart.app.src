@@ -1,0 +1,12 @@
+{application, quickstart,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { quickstart_app, []}},
+  {env, []}
+ ]}.

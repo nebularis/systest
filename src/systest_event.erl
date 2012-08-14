@@ -45,24 +45,27 @@ descriptor(Other) ->
 console(Msg, Args) ->
     systest_log:log(Msg, Args).
 
+framework(Msg, Args) ->
+    systest_log:log(framework, Msg, Args).
+
 init([]) ->
     {ok, []}.
 
 handle_event(#event{name=tc_start, data={Suite,FuncOrGroup}}, State) ->
     case FuncOrGroup of
         init_per_suite ->
-            console("starting test suite ~p~n", [Suite]);
+            framework("starting test suite ~p~n", [Suite]);
         end_per_suite ->
             ok;
         {Conf,GroupName,_GroupProperties} ->
             case Conf of
                 init_per_group ->
-                    console("starting test case group ~p~n", [GroupName]);
+                    framework("starting test case group ~p~n", [GroupName]);
                 end_per_group ->
                     ok
             end;
         Func ->
-            console("starting ~p test case ~p~n", [Suite, Func])
+            framework("starting ~p test case ~p~n", [Suite, Func])
     end,
     {ok, State};
 handle_event(#event{name=tc_done,
@@ -70,7 +73,11 @@ handle_event(#event{name=tc_done,
     {N, Desc} = descriptor(FuncOrGroup),
     case Result of
         ok ->
-            console("~s ~p completed successfully~n", [Desc, N]);
+            LogF = case is_ct_wrap_function(N) of
+                       true  -> fun framework/2;
+                       false -> fun console/2
+                   end,
+            LogF("~s ~p completed successfully~n", [Desc, N]);
         {skipped, SkipReason} ->
             case SkipReason of
                 {require_failed, {_, Key}} ->
@@ -118,6 +125,14 @@ fail_info({failed,{_Suite,end_per_testcase,FailInfo}}) ->
     io_lib:format("end_per_testcase failure: ~s", [fail_info(FailInfo)]);
 fail_info(Other) ->
     io_lib:format("Fail Info ~p", [Other]).
+
+is_ct_wrap_function(init_per_testcase)  -> true;
+is_ct_wrap_function(init_per_group)     -> true;
+is_ct_wrap_function(init_per_suite)     -> true;
+is_ct_wrap_function(end_per_testcase)   -> true;
+is_ct_wrap_function(end_per_group)      -> true;
+is_ct_wrap_function(end_per_suite)      -> true;
+is_ct_wrap_function(_)                  -> false.
 
 %%
 %% @private

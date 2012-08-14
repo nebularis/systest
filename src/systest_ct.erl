@@ -75,10 +75,14 @@ run(RunSpec, DryRun) ->
         {error, _}=Error ->
             Error;
         _Other ->
-            case application:get_env(systest, failures) of
-                undefined    -> ok;
-                {ok, 0}      -> ok;
-                {ok, Failed} -> {error, {failures, Failed}}
+            try
+                case application:get_env(systest, failures) of
+                    undefined    -> ok;
+                    {ok, 0}      -> ok;
+                    {ok, Failed} -> {error, {failures, Failed}}
+                end
+            after
+                application:set_env(systest, failures, undefined)
             end
     end.
 

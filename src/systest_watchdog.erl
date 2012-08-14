@@ -173,8 +173,6 @@ handle_info({'EXIT', Pid, Reason},
                 _Other ->
                     %% the sut has crashed (reason /= normal)
                     ets:insert(ET, [{SutId, crashed, Reason}])
-                    %% we want common_test to fail the current scope!!!
-                    % ct:abort_current_testcase(Reason)
             end,
 
             handle_down(Sut, NT),

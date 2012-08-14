@@ -33,9 +33,7 @@
 -include("systest.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--export([pre_init_per_testcase/3,
-         post_init_per_suite/4,
-         pre_end_per_suite/3]).
+-compile(export_all).
 
 pre_init_per_testcase(TC=sut_start_scripts_badly_configured, Config, State) ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
@@ -58,7 +56,21 @@ pre_init_per_testcase(TC=failing_sut_on_start_hook, Config, State) ->
             {Config, State};
         Other ->
             {{fail, Other}, State}
-    end.
+    end;
+pre_init_per_testcase(TC, Config, State) ->
+    Return = systest_cth:pre_init_per_testcase(TC, Config, State),
+    true = erlang:is_process_alive(whereis(TC)),
+    Return.
+
+post_end_per_testcase(TC=timetrap_failure, Config, Return, State) ->
+    Pid = whereis(TC),
+    true = erlang:is_process_alive(Pid),
+    Result = systest_cth:post_end_per_testcase(TC, Config, Return, State),
+    undefined = whereis(TC),
+    false = erlang:is_process_alive(Pid),
+    Result;
+post_end_per_testcase(TC, Config, Return, State) ->
+    systest_cth:post_end_per_testcase(TC, Config, Return, State).
 
 post_init_per_suite(_Suite, _Config, Return, State) ->
     {Return, State}.

@@ -30,16 +30,27 @@
 -record(node, {id, name, ip_addr, port}).
 
 settings_merging_test_() ->
-    [{setup, fun() ->
-                 os:putenv("USER", "ci")
-             end,
-     ?_assertMatch([{authz_url, "https://localhost:30001/ssos/login"}],
-                   systest_settings:load("../samples/default.settings"))}].
+    systest:start(),
+    [{setup, fun set_user/0,
+     ?_assertMatch([{authz_url, "https://localhost:30001/ssos/login"}|_],
+                 systest_settings:load("../sample-config/default.settings"))},
+     {setup, fun set_user/0,
+      fun() ->
+          systest_config:set_static(settings,
+                    systest_settings:load("../sample-config/default.settings")),
+          Scope = systest:settings("scope1.scope2"),
+          ?assertEqual(1000, Scope)
+      end},
+     {setup, fun set_user/0,
+      fun() ->
+          systest_config:set_static(settings,
+                    systest_settings:load("../sample-config/default.settings")),
+          Scope = systest:settings("scope1.scope3"),
+          ?assertEqual(2000, Scope)
+      end}].
 
 pre_loaded_config_test_() ->
-    systest:start(),
-    systest_config:start_link(),
-    {ok, Terms} = file:consult("../samples/test.config"),
+    {ok, Terms} = file:consult("../sample-config/test.config"),
     systest_config:load_config_terms(resources, Terms),
     [?_assertMatch({handling_detached_processes,
                         [{localhost,[yellow,blue]},{on_start,[]}]},
@@ -52,14 +63,14 @@ pre_loaded_config_test_() ->
                    ?REQUIRE(startup, systest_proc:proc_config(
                                 handling_detached_processes, yellow))),
      ?_assertMatch([
-            {start, [{program, "{{ base_dir }}/resources/test/start"},
+            {start, [{program, "${settings.base_dir}/resources/test/start"},
                      {args, ["${proc.id}"]},
                      {environment, [
                          {"LOGDIR", "%{TMPDIR}/logs/${proc.id}.log"},
                          {"DUMPDIR", "${ct.priv_dir}/dump/${proc.id}.log"},
                          {"PORT", "${proc.user.port}"}
                      ]}]},
-            {stop,  [{program, "{{ base_dir }}/resources/test/stop"},
+            {stop,  [{program, "${settings.base_dir}/resources/test/stop"},
                      {args, ["${proc.id}"]}]}],
                    ?REQUIRE(flags, systest_proc:proc_config(
                                 handling_detached_processes, yellow))),
@@ -161,6 +172,9 @@ path_merge_test() ->
 %%
 %% Utility Functions
 %%
+
+set_user() ->
+    os:putenv("USER", "ci").
 
 test_config() ->
     [

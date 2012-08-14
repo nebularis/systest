@@ -36,6 +36,8 @@
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
 -export([list_processes/1, process_data/2, read_process_user_data/1]).
 -export([write_process_user_data/2, restart_process/2, stop_and_wait/1]).
+-export([stop_no_wait/1, kill_no_wait/1]).
+-export([settings/0, settings/1, config/1, env/1]).
 -export([kill_after/2, kill_after/3, kill_and_wait/1]).
 -export([log/1, log/2]).
 
@@ -109,6 +111,28 @@ start(Scope, Identify, Config) ->
 stop(Scope) when is_pid(Scope) ->
     systest_sut:stop(Scope).
 
+%% config/settings
+
+settings() ->
+    case systest_config:get_static(settings) of
+        {settings, Settings} -> Settings;
+        _                    -> []
+    end.
+
+settings(Key) when is_atom(Key) ->
+    systest_config:read(Key, settings());
+settings(Key) when is_list(Key) ->
+    case lists:member($., Key) of
+        true  -> systest_config:eval(Key, settings());
+        false -> systest_config:read(Key, settings())
+    end.
+
+config(Key) ->
+    systest_config:get_config(Key).
+
+env(Key) ->
+    systest_config:get_env(Key).
+
 %% tracing/debugging
 
 %% @doc Enables trace debugging. See the 
@@ -142,6 +166,16 @@ sigkill(Pid) ->
     systest_log:log(framework, "executing kill -9 ~s~n", [Pid]),
     Result = os:cmd("kill -9 " ++ Pid),
     systest_log:log(framework, Result).
+
+%% @doc Stops the Systest (Operating) Process ProcRef
+%% @end
+stop_no_wait(ProcRef) ->
+    systest_proc:stop(ProcRef).
+
+%% @doc Stops the Systest (Operating) Process ProcRef
+%% @end
+kill_no_wait(ProcRef) ->
+    systest_proc:kill(ProcRef).
 
 %% @doc Instructs the {@link systest_proc. <em>Process</em>} to stop and waits
 %% until it has completed its shutdown and fully stopped. Stopping a 

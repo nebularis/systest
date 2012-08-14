@@ -25,27 +25,27 @@
 -module(build_support).
 
 -export([pre_compile/2, post_compile/2]).
--export(['publish-wiki'/2, post_doc/2, mv_test_beams/2]).
+-export(['publish-wiki'/2, post_doc/2]).
 
 pre_compile(Config, _) ->
-    case is_base_dir() of
+    case is_base_dir(Config) of
         true ->
-            {ok, [{env, Env}]} = file:consult(filename:join("build",
-                                                            "app.env")),
-            {ok, Banner} = file:read_file(filename:join("build",
-                                                        "banner.txt")),
-            AppEnv = lists:keystore(banner, 1, Env,
-                                    {banner, Banner}),
-            AppVars = {env, AppEnv},
-            
-            file:write_file("app.vars",
-                             io_lib:format("~p.\n", [AppVars]), [write]);
+            {ok, [{env, Env}]} = file:consult(
+                                    filename:join("build", "app.env")),
+            {ok, Banner} = file:read_file(
+                                    filename:join("build", "banner.txt")),
+            AppEnv = lists:keystore(banner, 1, Env, {banner, Banner}),
+            AppVars = {env, AppEnv},            
+            ok = file:write_file("app.vars",
+                        io_lib:format("~p.\n", [AppVars]), [write]);
         false ->
+            rebar_log:log(debug, "skipping app.vars generation in ~s~n",
+                          [rebar_utils:get_cwd()]),
             ok
     end.
 
 post_compile(Config, _) ->
-    case is_base_dir() of
+    case is_base_dir(Config) of
         true  -> file:delete("app.vars");
         false -> ok
     end,
@@ -77,26 +77,8 @@ post_doc(Config, _) ->
     rebar_utils:sh("git push origin master", [{cd, Dest}]),
     ok.
 
-mv_test_beams(_, _) ->
-    %% Because rebar WILL NOT output beams into a directory other than 'ebin'
-    Base = rebar_config:get_global(base_dir,
-                            rebar_utils:get_cwd()),
-    TestSources = filelib:wildcard(
-                        filename:join([Base, "test", "*.erl"])),
-    [begin
-         Target = filename:basename(Src, ".erl") ++ ".beam",
-         Source = filename:join([Base, "ebin", Target]),
-         Dest = filename:join([Base, "test-ebin", Target]),
-         rebar_utils:ensure_dir(Dest),
-         case filelib:is_regular(Source) of
-             true  -> ok = file:rename(Source, Dest);
-             false -> ok
-         end
-     end || Src <- TestSources],
-    ok.
-
 wiki_dir(Config) ->
-    filename:absname(rebar_config:get_global(wiki_repo,
+    filename:absname(rebar_config:get_global(Config, wiki_repo,
             rebar_config:get_local(Config, wiki_repo, "../systest.wiki"))).
 
 doc_dir(Config) ->
@@ -107,10 +89,11 @@ static_files(BaseDir) ->
     filelib:wildcard(filename:join([BaseDir, "static", "*.*"])).
 
 doc_files(DocDir) ->
-    filelib:wildcard(filename:join(DocDir, "*.*")) -- 
+    filelib:wildcard(filename:join(DocDir, "*.*")) --
                     [filename:join(DocDir, "README.md"),
                      filename:join(DocDir, "TOC.md")].
 
-is_base_dir() ->
-    rebar_utils:get_cwd() == rebar_config:get_global(base_dir, undefined).
+is_base_dir(Config) ->
+    rebar_utils:get_cwd() == rebar_config:get_xconf(Config,
+                                                    base_dir, undefined).
 

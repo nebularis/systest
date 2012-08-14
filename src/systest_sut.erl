@@ -216,7 +216,7 @@ handle_info({'EXIT', Pid, Reason}=Ev, State=#sut{id=Sut}) ->
     {stop, {proc_exit, Pid, Reason}, clear_pending(Ev, State)}.
 
 terminate(_Reason, _State) ->
-    unregister(self()),
+    catch(unregister(self())),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

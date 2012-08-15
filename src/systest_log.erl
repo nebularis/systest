@@ -104,7 +104,7 @@ activate_logging_subsystem(SubSys, Id, LogBase) ->
     case [H || {_, H} <- Handlers, H =:= SubSys] of
         [] ->
             {error, not_installed};
-        [H|_] ->
+        [H] ->
             gen_event:delete_handler(systest_event_log,
                                      {?MODULE, {framework, Id}}, []),
             case gen_event:call(systest_event_log, {?MODULE, H}, where) of
@@ -155,10 +155,13 @@ init([Id, Mod, Fd]) ->
     {ok, #state{id=Id, mod=Mod, fd=Fd}}.
 
 handle_event({Scope, Fmt, Args},
-             State=#state{id=Id, mod=Mod, fd=Fd}) when Scope == Id ->
+             State=#state{id=Id, mod=Mod, fd=Fd}) when Scope == Id orelse
+                                                       Id == ct ->
     write(Mod, Fd, Id, Fmt, Args),
     {ok, State};
-handle_event({Fmt, Args}, State=#state{id=system, mod=Mod, fd=Fd}) ->
+handle_event({Fmt, Args},
+             State=#state{id=Id, mod=Mod, fd=Fd}) when Id == system orelse
+                                                       Id == ct ->
     write(Mod, Fd, system, Fmt, Args),
     {ok, State};
 handle_event(_Message, State) ->

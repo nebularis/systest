@@ -133,7 +133,7 @@ default_profile(BaseDir) ->
     #profile{ name          = default,
               source        = generated,
               output_dir    = ScratchDir,
-              log_dir       = filename:join(ScratchDir, "logs"),
+              log_dir       = systest_env:default_log_dir(),
               settings_base = filename:join([BaseDir, "resources",
                                             "default.settings"]),
               resources     = glob([BaseDir, "resources", "*.resource"]),

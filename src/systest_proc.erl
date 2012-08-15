@@ -101,8 +101,6 @@ start(Scope, Proc, Config) ->
 -spec start(proc_info()) -> {'ok', pid()} | {'error', term()}.
 start(ProcInfo=#proc{handler=Handler, host=Host,
                      name=Name, config=BaseConf}) ->
-    log(framework, "starting ~p on ~p~n", [Name, Host]),
-
     %% are there hidden traps here, when (for example) we're running
     %% embedded in an archive/escript or similarly esoteric situations?
     %% TODO: perhaps catch(Handler:id(ProcInfo)) would be safer!?
@@ -114,6 +112,7 @@ start(ProcInfo=#proc{handler=Handler, host=Host,
          end,
     NI = set([{config,[{proc, Id}|BaseConf]}], Id),
 
+    log(framework, "starting ~p on ~p~n", [Name, Host]),
     gen_server:start_link(?MODULE, [NI], []).
 
 -spec stop(proc_ref()) -> ok.
@@ -231,8 +230,8 @@ init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
             %% of how this will eventually look
             case Cover of
                 true ->
-                    systest_log:log(framework,
-                                    "starting cover on ~p~n", [Id]),
+                    systest_log:log({framework, Id},
+                                    "starting cover on remote node~n", []),
                     cover:start(Id);
                 _ ->
                     ok

@@ -446,7 +446,7 @@ read_pid(ProcId, Port, Detached, RpcEnabled, Fd) ->
     end.
 
 wait_for_up(NodeId) ->
-    case net_kernel:connect(NodeId) of
+    case net_kernel:hidden_connect_node(NodeId) of
         true    -> ok;
         _       -> erlang:yield(), wait_for_up(NodeId)
     end.

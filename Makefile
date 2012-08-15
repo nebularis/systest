@@ -22,6 +22,7 @@
 ## ----------------------------------------------------------------------------
 LOGLEVEL ?= 0
 VERBOSE ?= 'false'
+NO_COVER ?= 'false'
 SOURCE_DIR=src
 TEST_DIR=test
 EBIN_DIR=ebin
@@ -38,10 +39,16 @@ else
 NOISE=
 endif
 
+ifneq ($(NO_COVER), 'false')
+COVER=-w
+else
+COVER=--cover-dir=.test
+endif
+
 define systest
 	ERL_LIBS="deps:${ERL_LIBS}" \
 	ERL_FLAGS="-pa ebin -pa .test" \
-		priv/bin/systest -a $(1) -P $(1) $(NOISE) --cover-dir=.test
+		priv/bin/systest -a $(1) -P $(1) $(NOISE) $(COVER)
 endef
 
 .PHONY: all

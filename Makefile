@@ -48,7 +48,7 @@ endif
 define systest
 	ERL_LIBS="deps:${ERL_LIBS}" \
 	ERL_FLAGS="-pa ebin -pa .test" \
-		priv/bin/systest -a $(1) -P $(1) $(NOISE) $(COVER) $(FLAGS)
+		priv/bin/systest -a $(1) -P $(1) $(NOISE) $(COVER) $(2)
 endef
 
 .PHONY: all
@@ -100,23 +100,27 @@ test-compile: $(REBAR)
 	$(REBAR) skip_deps=true -C test.config test-compile -v $(LOGLEVEL)
 
 .PHONY: test
-test: escriptize eunit test-default test-error-handling
+test: escriptize eunit test-default test-error-handling test-time-traps
 
 .PHONY: test-dependencies
 test-dependencies: escriptize test-compile
 
 .PHONY: test-default
 test-default: test-dependencies
-	$(call systest,$@)
+	$(call systest,$@,$(FLAGS))
 
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
-	$(call systest,$@)
+	$(call systest,$@,$(FLAGS))
+
+.PHONY: test-time-traps
+test-time-traps: test-dependencies
+	$(call systest,test-error-handling,-Z systest_error_handling_SUITE:timetrap_failure -i)
 
 .PHONY: test-profile
 ifneq ($(SYSTEST_PROFILE), '')
 test-profile: test-dependencies
-	$(call systest,$(SYSTEST_PROFILE))
+	$(call systest,$(SYSTEST_PROFILE),$(FLAGS))
 else
 test-profile:
 	$(error you need to specify a SYSTEST_PROFILE to run this target)

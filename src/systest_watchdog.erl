@@ -38,7 +38,7 @@
 
 %% API Exports
 
--export([start/0, sut_started/2, exceptions/1, reset/0,
+-export([start/0, sut_started/2, exceptions/1, reset/0, stop/0,
          proc_started/2, proc_stopped/2, force_stop/1]).
 
 -export([clear_exceptions/0, dump/0]).
@@ -54,6 +54,9 @@
 
 start() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+stop() ->
+    gen_server:call(?MODULE, stop).
 
 sut_started(Id, Pid) ->
     gen_server:call(?MODULE, {sut_started, Id, Pid}).
@@ -108,11 +111,14 @@ init([]) ->
     OT = ets:new(exception_table, [duplicate_bag, private|?ETS_OPTS]),
     {ok, #state{sut_table=CT, proc_table=NT, exception_table=OT}}.
 
+handle_call(stop, _From, State) ->
+    {stop, normal, State};
 handle_call(reset, _From, State=#state{sut_table=CT,
                                        proc_table=NT,
                                        exception_table=ET}) ->
     CPids = [CPid || {_, CPid} <- ets:tab2list(CT)],
     systest_cleaner:kill_wait(CPids, fun(P) -> erlang:exit(P, reset) end),
+    kill_wait(find_procs(NT)),
     [ets:delete_all_objects(T) || T <- [ET, NT, CT]],
     {reply, ok, State};
 handle_call({force_stop, SutId}, _From,
@@ -185,7 +191,8 @@ handle_info({'EXIT', Pid, Reason},
     end,
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{proc_table=ProcTable}) ->
+    kill_wait(find_procs(ProcTable)),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -205,6 +212,9 @@ report_orphans({SutId, _}, Procs, ET) ->
 find_procs(ProcTable, {SutId, _}) ->
     [P || {{_, P}} <- ets:match_object(ProcTable, {{SutId, '_'}}),
           erlang:is_process_alive(P)].
+
+find_procs(ProcTable) ->
+    [P || {{_, P}} <- ets:tab2list(ProcTable), erlang:is_process_alive(P)].
 
 handle_down(Sut, ProcTable) ->
     kill_wait(find_procs(ProcTable, Sut)).

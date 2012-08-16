@@ -35,6 +35,7 @@ help() ->
               "-L, --logging    Active logging for the specified sub-system~n"
               "-n, --dryrun     Print everything out but don't run any tests~n"
               "-w, --no_cover   Disable code coverage~n"
+              "-i, --ignore     Ignore errors/failures~n"
               "-a, --name       Specify (Erlang) node name, "
                                 "default = systest_runner~n"
               "-A, --longnames  Use long instead of short names with -a~n"
@@ -86,6 +87,12 @@ unpack(true, {L, _, V}) when V =:= integer orelse
                              help(),
                              erlang:halt(1);
 unpack(V,    {L, _, integer}) -> {L, list_to_integer(V)};
+unpack(_,    {ignore,_,flag}) -> {error_handler,
+                                    fun(_, _) ->
+                                      io:format("[passed] all test "
+                                                "cases succeeded or "
+                                                "were explicitly ignored~n")
+                                    end};
 unpack(V,    {target, _, _})  -> case string:tokens(V, ":") of
                                      [Suite] ->
                                          {testsuite, [Suite]};
@@ -101,6 +108,7 @@ opt_spec() ->
      {logging,          'L', string},
      {dryrun,           'n', flag},
      {no_cover,         'w', flag},
+     {ignore,           'i', flag},
      {dump,             'X', flag},
      {node,             'a', string},
      {longnames,        'A', flag},

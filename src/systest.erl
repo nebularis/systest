@@ -29,7 +29,7 @@
 -include("systest.hrl").
 
 -export([main/1, get_system_under_test/1]).
--export([start/0, reset/0, sigkill/1]).
+-export([start/0, stop/0, reset/0, sigkill/1]).
 -export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
 -export([active_sut/1, suts/1, procs/1]).
 -export([trace_on/2, trace_off/1]).
@@ -62,6 +62,9 @@ start() ->
     %% TODO: Don't make this assumption, but *do* by default! :O
     error_logger:tty(false),
     application:start(?MODULE).
+
+stop() ->
+    application:stop(?MODULE).
 
 %% @doc resets the application state
 %% @end

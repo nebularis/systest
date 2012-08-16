@@ -170,6 +170,7 @@ verify(Exec2=#execution{profile     = Prof,
 
     systest_cover:report_cover(CoverBase, Export, Config),
 
+    systest:stop(),
     case Result of
         ok ->
             case ?CONFIG(dryrun, Config, false) of

@@ -180,22 +180,10 @@ joined_sut(ProcRef, SutRef, SiblingProcs) ->
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
-        false -> PFlag = erlang:process_flag(trap_exit, true),
-                 try
-                     link(Owner),
-                      log(framework,
-                          "waiting for ~p to exit from: ~p~n",
-                          [Owner, erlang:process_info(self())]),
-                      ok = ShutdownOp(Owner),
-                      receive
-                          {'EXIT', Owner, _Reason} -> ok;
-                          Other                    -> log(framework,
-                                                          "~p~n", [Other])
-                      end
-                 after
-                     erlang:process_flag(trap_exit, PFlag)
-                 end
-    end.
+        false -> log(framework, "waiting for ~p to exit~n", [Owner]),
+                 systest_cleaner:kill_wait([Owner], ShutdownOp)
+    end,
+    log(framework, "shutdown_and_wait complete~n", []).
 
 %%
 %% Handler facing API

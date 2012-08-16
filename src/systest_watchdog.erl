@@ -85,7 +85,7 @@ proc_stopped(Cid, Pid) ->
     %% NB: if we blocked on accessing the proc_table, we would
     %% very likely deadlock the system - just when automated
     %% cleanup is meant to be leaving a clean environment behind
-    ets:delete(proc_table, {Cid, Pid}).
+    ets:delete(proc_table, {{Cid, Pid}}).
 
 exceptions(SutId) ->
     gen_server:call(?MODULE, {exceptions, SutId}).
@@ -200,16 +200,18 @@ report_orphans(_, [], _) ->
 report_orphans({SutId, _}, Procs, ET) ->
     log(framework, "watchdog detected orphaned procs of dead sut ~p: ~p~n",
            [SutId, Procs]),
-    ets:insert(ET, [{SutId, orphan, N} || N <- Procs]).
+    ets:insert(ET, [{SutId, orphan, N} || N <- Procs, is_process_alive(N)]).
 
 find_procs(ProcTable, {SutId, _}) ->
-    [P || {{_, P}} <- ets:match_object(ProcTable, {{SutId, '_'}})].
+    [P || {{_, P}} <- ets:match_object(ProcTable, {{SutId, '_'}}),
+          erlang:is_process_alive(P)].
 
 handle_down(Sut, ProcTable) ->
     kill_wait(find_procs(ProcTable, Sut)).
 
 kill_wait([]) ->
-    log(framework, "no procs to kill~n");
+    log(framework, "watchdog: no procs to kill~n");
 kill_wait(Procs) ->
+    log(framework, "watchdog killing: ~p~n", [Procs]),
     systest_cleaner:kill_wait(Procs, fun systest_proc:kill/1).
 

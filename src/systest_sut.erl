@@ -205,8 +205,8 @@ handle_call(_Msg, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'EXIT', Pid, normal}=Ev, State=#sut{name=Sut}) ->
-    systest_watchdog:proc_stopped(Sut, Pid),
+handle_info({'EXIT', Pid, normal}=Ev, State=#sut{id=Id}) ->
+    systest_watchdog:proc_stopped(Id, Pid),
     {noreply, clear_pending(Ev, State)};
 handle_info({'EXIT', Pid, Reason}=Ev, State=#sut{id=Sut}) ->
     systest_log:log({framework, Sut},
@@ -265,7 +265,7 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
     %% function in a different process. If we put a selective receive block
     %% here, we might well run into unexpected message ordering that could
     %% leave us in an inconsistent state.
-    ProcRefs = [ProcRef || {_, ProcRef} <- Procs],
+    ProcRefs = [ProcRef || {_, ProcRef} <- Procs, is_process_alive(ProcRef)],
     case systest_cleaner:kill_wait(ProcRefs,
                                    fun systest_proc:stop/1, Timeout) of
         Ok when Ok == ok orelse Ok == no_targets ->

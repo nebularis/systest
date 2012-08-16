@@ -268,18 +268,17 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
     ProcRefs = [ProcRef || {_, ProcRef} <- Procs],
     case systest_cleaner:kill_wait(ProcRefs,
                                    fun systest_proc:stop/1, Timeout) of
-        ok ->
-            log({framework, Id}, "stopping...~n", []),
+        Ok when Ok == ok orelse Ok == no_targets ->
             [systest_watchdog:proc_stopped(Id, N) || N <- ProcRefs],
             gen_server:reply(ReplyTo, ok),
             {stop, normal, State};
         {error, {killed, StoppedOk}} ->
-            log({framework, Id}, "halt error: killed~n", []),
+            log(framework, "halt error: killed~n", []),
             Err = {halt_error, orphans, ProcRefs -- StoppedOk},
             gen_server:reply(ReplyTo, Err),
             {stop, Err, State};
         Other ->
-            log({framework, Id}, "halt error: ~p~n", [Other]),
+            log(framework, "halt error: ~p~n", [Other]),
             gen_server:reply(ReplyTo, {error, Other}),
             {stop, {halt_error, Other}, State}
     end.

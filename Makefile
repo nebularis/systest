@@ -54,10 +54,6 @@ endef
 .PHONY: all
 all: escriptize
 
-# the law of unintended consequences: it turns out that our `git describe` foo
-# only produces the latest tag for the current branch, so after moving stable
-# development out of 'master', we no longer get consistent version numbers
-
 .PHONY: info
 info: $(REBAR)
 	$(info SysTest $(shell git describe --abbrev=0 ${LATEST_STABLE}))

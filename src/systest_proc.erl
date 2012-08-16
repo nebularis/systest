@@ -414,9 +414,6 @@ handle_msg(kill, State=#state{activity_state=stopped}, _) ->
     {noreply, State};
 handle_msg(stop, State=#state{activity_state=killed}, _) ->
     {noreply, State};
-%% TODO: consider whether this should be disallowed, or ignored
-% handle_msg(kill, State=#state{activity_state=stopped}, _) ->
-%    {noreply, State};
 handle_msg(stop, State=#state{proc=Proc, handler=Mod,
                               handler_state=ModState}, ReplyTo) ->
     case Proc#proc.on_stop of

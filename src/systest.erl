@@ -167,12 +167,12 @@ sigkill(Pid) ->
     Result = os:cmd("kill -9 " ++ Pid),
     systest_log:log(framework, Result).
 
-%% @doc Stops the Systest (Operating) Process ProcRef
+%% @doc Stops the Systest (Operating) Process <em>ProcRef</em>
 %% @end
 stop_no_wait(ProcRef) ->
     systest_proc:stop(ProcRef).
 
-%% @doc Stops the Systest (Operating) Process ProcRef
+%% @doc Stops the Systest (Operating) Process <em>ProcRef</em>
 %% @end
 kill_no_wait(ProcRef) ->
     systest_proc:kill(ProcRef).

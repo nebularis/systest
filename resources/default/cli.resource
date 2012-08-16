@@ -5,7 +5,8 @@
         {handler, systest_cli},
         {link_to_parent, true},
         {detached, false},
-        {rpc_enabled, {true, {init, stop, []}}}
+        {rpc_enabled, {true, {init, stop, []}}},
+        {cover, true}
     ]},
     {flags, [
         {start, [

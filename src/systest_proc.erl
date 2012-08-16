@@ -230,9 +230,7 @@ init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
             %% of how this will eventually look
             case Cover of
                 true ->
-                    systest_log:log({framework, Id},
-                                    "starting cover on remote node~n", []),
-                    cover:start(Id);
+                    systest_cover:start_cover(Id);
                 _ ->
                     ok
             end,
@@ -467,9 +465,7 @@ stopping_callback(Mod, Func, Proc, Args) ->
     case get(cover, Proc) of
         true ->
             Id = get(id, Proc),
-            systest_log:log(framework,
-                            "stopping cover for ~p~n", [Id]),
-            cover:stop(Id);
+            systest_cover:stop_cover(Id);
         _ ->
             ok
     end,

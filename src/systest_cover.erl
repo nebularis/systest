@@ -28,7 +28,7 @@
 
 -include("systest.hrl").
 
--export([start/2, report_cover/3]).
+-export([start/2, start_cover/1, stop_cover/1, report_cover/3]).
 
 -spec start(file:filename(),
             systest_config:config()) -> {'ok', file:filename()} |
@@ -37,6 +37,26 @@ start(ScratchDir, Config) ->
     case ?CONFIG(dryrun, Config, ?CONFIG(no_cover, Config, false)) of
         true  -> {ok, dryrun};
         false -> do_start(ScratchDir, Config)
+    end.
+
+start_cover(Node) ->
+    do_if_cover_enabled(fun(N) ->
+                            systest_log:log({framework, Node},
+                                    "starting cover on remote node~n", []),
+                            cover:start(N)
+                        end, Node).
+
+stop_cover(Node) ->
+    do_if_cover_enabled(fun(N) ->
+                            systest_log:log({framework, Node},
+                                    "stopping cover on remote node~n", []),
+                            cover:stop(N)
+                        end, Node).
+
+do_if_cover_enabled(Fun, Node) ->
+    case whereis(cover_server) of
+        undefined -> ok;
+        _         -> Fun(Node)
     end.
 
 do_start(ScratchDir, Config) ->

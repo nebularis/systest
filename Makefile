@@ -48,7 +48,7 @@ endif
 define systest
 	ERL_LIBS="deps:${ERL_LIBS}" \
 	ERL_FLAGS="-pa ebin -pa .test" \
-		priv/bin/systest -a $(1) -P $(1) $(NOISE) $(COVER)
+		priv/bin/systest -a $(1) -P $(1) $(NOISE) $(COVER) $(FLAGS)
 endef
 
 .PHONY: all

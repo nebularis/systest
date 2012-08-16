@@ -152,11 +152,12 @@ stop(Target) ->
 
 
 check_exceptions(SutId, Return) ->
+    log(framework, "checking for out of band exceptions in ~p~n", [SutId]),
     case systest_watchdog:exceptions(SutId) of
         [] ->
             Return;
         Ex ->
-            % log("test instance ~p failed!~n", [SutId]),
+            log(framework, "test instance ~p failed!~n", [SutId]),
 
             [begin
                 log("~p: ~p~n", [SutId, Reason])

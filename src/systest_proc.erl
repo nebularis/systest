@@ -28,18 +28,24 @@
 
 -include("systest.hrl").
 
+-type proc_ref() :: pid().
+-type activity_state() :: 'not_started' |
+                          'running'     |
+                          'stopped'     |
+                          'killed'      |
+                          'down'.
 -type proc_info() :: #proc{}.
--export_type([proc_info/0]).
+-export_type([proc_info/0, activity_state/0, proc_ref/0]).
 
 -export([behaviour_info/1]).
 -export([make_proc/3]).
 -export([interact/2]).
--export([proc_id/2, proc_data/1]).
+-export([proc_id/2, proc_data/1, proc_data/2]).
 -export([user_data/1, user_data/2]).
--export([start/1, start/3, stop/1, kill/1]).
+-export([start/1, start/3, stop/1, kill/1, activate/1]).
 -export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
 -export([sigkill/1, kill_after/2, kill_after/3]).
--export([shutdown_and_wait/2, status/1]).
+-export([shutdown_and_wait/2, status/1, activity_state/1]).
 -export([joined_sut/3]).
 -export([status_check/1]).
 
@@ -60,9 +66,6 @@
 
 -compile({parse_transform, exprecs}).
 -export_records([proc]).
-
--type proc_ref() :: pid().
--type activity_state() :: 'running' | 'stopped' | 'killed' | 'down'.
 
 %% our own internal state is separate from that of any handler...
 -record(state, {
@@ -115,6 +118,10 @@ start(ProcInfo=#proc{handler=Handler, host=Host,
     log(framework, "starting ~p on ~p~n", [Name, Host]),
     gen_server:start_link(?MODULE, [NI], []).
 
+-spec activate(proc_ref()) -> ok.
+activate(ProcRef) ->
+    gen_server:call(ProcRef, start).
+
 -spec stop(proc_ref()) -> ok.
 stop(ProcRef) ->
     gen_server:cast(ProcRef, stop).
@@ -155,6 +162,11 @@ kill_and_wait(ProcRef) ->
 status(ProcRef) ->
     safe_call(ProcRef, status, {down, noproc}).
 
+-spec activity_state(proc_ref()) -> activity_state().
+activity_state(ProcRef) ->
+    {ok, State} = gen_server:call(ProcRef, state),
+    State.
+
 -spec interact(proc_ref(), term()) -> term().
 interact(ProcRef, InputData) ->
     gen_server:call(ProcRef, {interaction, InputData}).
@@ -162,6 +174,10 @@ interact(ProcRef, InputData) ->
 -spec proc_data(proc_ref()) -> [{atom(), term()}].
 proc_data(ProcRef) ->
     safe_call(ProcRef, proc_info_list, [{owner, ProcRef}]).
+
+-spec proc_data(proc_ref(), atom()) -> term().
+proc_data(ProcRef, Field) ->
+    gen_server:call(ProcRef, {proc_info_get, Field}).
 
 -spec user_data(proc_ref()) -> [{atom(), term()}].
 user_data(ProcRef) ->
@@ -198,9 +214,39 @@ status_check(Node) when is_atom(Node) ->
 %% OTP gen_server API
 %%
 
-init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
+init([ProcInfo=#proc{auto_start=false}]) ->
+    {ok, #state{proc=ProcInfo, activity_state=not_started}};
+init([ProcInfo]) ->
     process_flag(trap_exit, true),
+    do_start(ProcInfo).
 
+handle_call(state, _From, State=#state{activity_state=ActivityState}) ->
+    {reply, {ok, ActivityState}, State};
+handle_call(Msg, From, State) ->
+    handle_msg(Msg, State, From).
+
+handle_cast(Msg, State) ->
+    handle_msg(Msg, State).
+
+handle_info(Info, State) ->
+    handle_msg(Info, State).
+
+terminate(_Reason, #state{activity_state=not_started}) ->
+    ok;
+terminate(Reason, #state{proc=Proc,
+                         handler=Mod,
+                         handler_state=ModState}) ->
+    ok = Mod:terminate(Reason, Proc, ModState),
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%
+%% Private API
+%%
+
+do_start(ProcInfo=#proc{handler=Callback, cover=Cover}) ->
     case catch( apply(Callback, init, [ProcInfo]) ) of
         {ok, NI2, HState} when is_record(NI2, proc) ->
 
@@ -246,28 +292,6 @@ init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
             %% init compatible response tuple - construct this for them....
             {stop, Error}
     end.
-
-handle_call(Msg, From, State) ->
-    handle_msg(Msg, State, From).
-
-handle_cast(Msg, State) ->
-    handle_msg(Msg, State).
-
-handle_info(Info, State) ->
-    handle_msg(Info, State).
-
-terminate(Reason, #state{proc=Proc,
-                         handler=Mod,
-                         handler_state=ModState}) ->
-    ok = Mod:terminate(Reason, Proc, ModState),
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-%%
-%% Private API
-%%
 
 safe_call(ProcRef, Msg, Default) ->
     try
@@ -361,14 +385,39 @@ proc_interact(Term, {_, Acc}) ->
 handle_msg(Msg, State) ->
     handle_msg(Msg, State, noreply).
 
-handle_msg(user_data, State=#state{proc=Proc}, _ReplyTo) ->
-    {reply, get(user, Proc), State};
+handle_msg({joined, _Sut, _Procs},
+            State=#state{activity_state=not_started}, _ReplyTo) ->
+    log(framework, "skipping on_join hook for ~p "
+                   "[activity_state = not_started]~n",
+                   [self()]),
+    {reply, ok, State};
+handle_msg({proc_info_get, Field}, State=#state{proc=Proc}, _ReplyTo) ->
+    Value = get(Field, Proc),
+    {reply, {ok, Value}, State};
 handle_msg({user_data, Data}, State=#state{proc=Proc}, _ReplyTo) ->
     {reply, 'ok', State#state{proc=set([{user, Data}], Proc)}};
 handle_msg(proc_info_list, State=#state{proc=Proc}, _ReplyTo) ->
     Attrs = systest_proc:info('proc', fields) -- [config],
     Info = [{K, get(K, Proc)} || K <- Attrs],
     {reply, Info, State};
+handle_msg(user_data, State=#state{proc=Proc}, _ReplyTo) ->
+    {reply, get(user, Proc), State};
+%% NB: this section comprises the activity_state = not_started block
+handle_msg(start, #state{proc=Proc, activity_state=not_started}, _) ->
+    case do_start(Proc) of
+        {stop, _}=Stop -> Stop;
+        {ok, NewState} -> {reply, ok, NewState#state{activity_state=running}}
+    end;
+handle_msg(start, State, _) ->
+    {reply, {error, already_started}, State};
+handle_msg(Msg, State=#state{activity_state=not_started}, _ReplyTo)
+                    when Msg == stop orelse
+                         Msg == kill orelse
+                         Msg == sigkill ->
+    {stop, normal, State};
+handle_msg(_, State=#state{activity_state=not_started}, _ReplyTo) ->
+    {reply, {error, not_started}, State};
+%% NB: every clause below *requires* that activity_state /= not_started
 handle_msg({joined, Sut, Procs}, State=#state{proc=Proc}, _ReplyTo) ->
     log({framework, get(id, Proc)},
         "proc on_join info: ~p~n", [Proc#proc.on_join]),
@@ -520,6 +569,8 @@ make_proc(Config) ->
     record_fromlist([{scope,      ?REQUIRE(scope, Config)},
                      {host,       ?REQUIRE(host, Config)},
                      {name,       Name},
+                     {auto_start, lookup("startup.activate_on_start",
+                                         Config, true)},
                      {handler,    lookup("startup.handler",
                                          Config, systest_cli)},
                      {link,       lookup("startup.link_to_parent",

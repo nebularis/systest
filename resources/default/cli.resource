@@ -87,3 +87,17 @@
 
 {systest_cli_SUITE, [{all, cli_2node_cluster}]}.
 
+{start_cold, [
+    {startup, [
+        {activate_on_start, false}
+    ]}
+]}.
+
+{manually_starting_processes, [
+    {sut, [{localhost, [n1, n2]}]},
+    {processes, [
+        {n1, [global_proc_config]},
+        {n2, [global_proc_config, start_cold]}
+    ]}
+]}.
+

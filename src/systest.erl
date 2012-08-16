@@ -34,9 +34,10 @@
 -export([active_sut/1, suts/1, procs/1]).
 -export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
--export([list_processes/1, process_data/2, read_process_user_data/1]).
+-export([list_processes/1, process_data/2, process_activity_state/1,
+         read_process_user_data/1]).
 -export([write_process_user_data/2, restart_process/2, stop_and_wait/1]).
--export([stop_no_wait/1, kill_no_wait/1]).
+-export([activate_process/1, stop_no_wait/1, kill_no_wait/1]).
 -export([settings/0, settings/1, config/1, env/1]).
 -export([kill_after/2, kill_after/3, kill_and_wait/1]).
 -export([log/1, log/2]).
@@ -153,6 +154,9 @@ trace_off(Config) ->
 
 %% interactions
 
+activate_process(ProcRef) ->
+    systest_proc:activate(ProcRef).
+
 %% @doc Restarts the specified {@link systest_proc. <em>Process</em>},
 %% which must be registered with the supplied reference to a
 %% {@link systest_sut. <em>System Under Test</em>}.
@@ -266,14 +270,21 @@ procs(SutRef) when is_record(SutRef, sut) ->
 procs(SutRef) when is_pid(SutRef) ->
     systest_sut:procs(SutRef).
 
-%% @doc Returns data for the required Field from a 
-%% {@link systest_proc. <em>Process</em>} record. This function is intended
-%% for use in handler/user callbacks which take a 
-%% {@link systest_proc. <em>Process</em>} record.
+%% @doc Returns data for the required Field from a
+%% {@link systest_proc. <em>Process</em>} record or <em>ProcRef</em>.
+%% The version of this function taking a <em>proc</em> record is 
+%% intended for use in handler/user callbacks, whilst the version that takes
+%% a process identifier (pid) is intended for remote calls.
 %% @end
-process_data(Field, ProcRec) ->
+process_data(Field, ProcRec) when is_record(ProcRec, proc) ->
     %% TODO: the @@doc above should reference the record not the module 
-    systest_proc:get(Field, ProcRec).
+    systest_proc:get(Field, ProcRec);
+process_data(Field, ProcRef) when is_pid(ProcRef) ->
+    {ok, Data} = systest_proc:proc_data(ProcRef, Field),
+    Data.
+
+process_activity_state(ProcRef) ->
+    systest_proc:activity_state(ProcRef).
 
 %% @doc Returns any configured user-data from the given 
 %% {@link systest_proc. <em>Process</em>}.

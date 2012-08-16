@@ -211,7 +211,7 @@ handle_info({'EXIT', Pid, normal}=Ev, State=#sut{id=Id}) ->
 handle_info({'EXIT', Pid, Reason}=Ev, State=#sut{id=Sut}) ->
     systest_log:log({framework, Sut},
                     "unexpected systest process exit "
-                    "from ~p: ~p",
+                    "from ~p: ~p~n",
                     [Pid, Reason]),
     {stop, {proc_exit, Pid, Reason}, clear_pending(Ev, State)}.
 
@@ -340,7 +340,6 @@ start_proc(Identity, Proc) ->
                     [systest_proc:get(name, Proc)]),
     {ok, ProcRef} = systest_proc:start(Proc),
     ok = systest_watchdog:proc_started(Identity, ProcRef),
-    systest_log:log(framework, "process started ok~n", []),
     %% NB: the id field of Proc will *not* be set (correctly)
     %% until after the gen_server has started, so an API call
     %% is necessary rather than using systest_proc:get/2

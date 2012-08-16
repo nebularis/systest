@@ -46,7 +46,7 @@ starting_and_stopping_procs(Config) ->
          ?assertEqual(up,   systest_proc:status(Ref)),
          ?assertEqual(pong, net_adm:ping(Id)),
 
-         ok = systest_proc:stop_and_wait(Ref),
+         ok = systest:stop_and_wait(Ref),
          ?assertEqual(pang, net_adm:ping(Id))
      end || {Id, Ref} <- systest:procs(Sut)],
     ok.
@@ -57,8 +57,13 @@ killing_procs(Config) ->
     systest_sut:log_status(Sut),
     [begin
          ?assertEqual(up, systest_proc:status(Ref)),
-         ok = systest_proc:kill_and_wait(Ref),
-
+         ok = systest:kill_and_wait(Ref),
+         
+         %% NB: the following statement are actually required in this test, as
+         %% without them, we get 'pong' back even though the node in question
+         %% has physically stopped (because the port that launched it exited)
+         rpc:call(Id, io, format, ["~p~n", [nodes()]]),
+         timer:sleep(1000),
          ?assertEqual(pang, net_adm:ping(Id))
      end || {Id, Ref} <- systest:procs(Sut)],
     ok.

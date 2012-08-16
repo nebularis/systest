@@ -101,3 +101,5 @@
     ]}
 ]}.
 
+{systest_proc_SUITE, [{restarting_manually_started_processes,
+                        manually_starting_processes}]}.

@@ -67,3 +67,23 @@ manually_starting_processes(Config) ->
     ?assertEqual(pong, net_adm:ping(Id2)),
     ?assertEqual(running, systest:process_activity_state(Ref2)),
     ok.
+
+restarting_manually_started_processes(Config) ->
+    Sut = systest:get_system_under_test(Config),
+    [{Id1, _Ref1}, {Id2, Ref2}] = systest:list_processes(Sut),
+    %% process 1 has been started
+    ?assertEqual(pong, net_adm:ping(Id1)),
+    
+    %% process 2 has not (yet), but we know what its node id *will*
+    %% look like once it is activated manually (below)
+    ?assertEqual(pang, net_adm:ping(Id2)),
+    ?assertEqual(not_started, systest:process_activity_state(Ref2)),
+    
+    %% start up the backing module for process 2 (e.g., cli, slave, ssh, etc)
+    ok = systest:activate_process(Ref2),
+    ?assertEqual(pong, net_adm:ping(Id2)),
+    ?assertEqual(running, systest:process_activity_state(Ref2)),
+    
+    ok = systest:stop_and_wait(Ref2),
+    ?assertEqual(pang, net_adm:ping(Id2)),
+    ok.

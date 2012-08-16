@@ -217,7 +217,6 @@ status_check(Node) when is_atom(Node) ->
 init([ProcInfo=#proc{auto_start=false}]) ->
     {ok, #state{proc=ProcInfo, activity_state=not_started}};
 init([ProcInfo]) ->
-    process_flag(trap_exit, true),
     do_start(ProcInfo).
 
 handle_call(state, _From, State=#state{activity_state=ActivityState}) ->
@@ -247,6 +246,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 
 do_start(ProcInfo=#proc{handler=Callback, cover=Cover}) ->
+    process_flag(trap_exit, true),
     case catch( apply(Callback, init, [ProcInfo]) ) of
         {ok, NI2, HState} when is_record(NI2, proc) ->
 

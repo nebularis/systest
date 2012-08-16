@@ -146,10 +146,9 @@ stop(Target) ->
                 ok = systest:stop_scope(Target)
         end
     catch
-        _:Err -> log(system, "sut ~p stop error: ~p~n",
+        _:Err -> log(system, "sut ~p shutdown error: ~p~n",
                              [Target, Err])
     end.
-
 
 check_exceptions(SutId, Return) ->
     log(framework, "checking for out of band exceptions in ~p~n", [SutId]),
@@ -157,7 +156,8 @@ check_exceptions(SutId, Return) ->
         [] ->
             Return;
         Ex ->
-            log(framework, "test instance ~p failed!~n", [SutId]),
+            log(system, "~p failed! Unexpected process exits detected:~n",
+                [SutId]),
 
             [begin
                 log("~p: ~p~n", [SutId, Reason])

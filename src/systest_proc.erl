@@ -276,7 +276,10 @@ do_start(ProcInfo=#proc{handler=Callback, cover=Cover}) ->
             end,
 
             NI3 = NI2#proc{owner=self()},
-            State = #state{proc=NI3, handler=Callback, handler_state=HState},
+            State = #state{proc=NI3,
+                           activity_state=running,
+                           handler=Callback,
+                           handler_state=HState},
 
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#proc.on_start of

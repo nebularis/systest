@@ -32,7 +32,7 @@
 -export([with_file/3, with_termfile/2, combine/2, uniq/1]).
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
 -export([record_to_proplist/2, border/2, print_heading/1, print_section/2]).
--export([ets_dump/1]).
+-export([ets_dump/1, quiet/1]).
 
 abort(Fmt, Args) ->
     io:format(user, "ERROR:  " ++ Fmt, Args),
@@ -68,6 +68,9 @@ with_file(Path, Modes, Handler) ->
         Error ->
             Error
     end.
+
+quiet(Config) ->
+    ?CONFIG(quiet, Config, false).
 
 uniq(List) -> sets:to_list(sets:from_list(List)).
 
@@ -156,10 +159,10 @@ proplist_format(Items) ->
              case Item of
                  {section, ItemName} ->
                      io_lib:format("~s~n", [ItemName]);
-                 {K, [H|_]=V} when is_atom(H) orelse
-                                   is_list(H) ->
+                 {K, [H1,H2|_]=V} when is_atom(H1) andalso is_atom(H2)
+                                   orelse is_list(H1) andalso is_list(H2) ->
                      Fmt = "~s~n",
-                     Elems = case is_atom(H) of
+                     Elems = case is_atom(H1) of
                                  true  -> [atom_to_list(I) || I <- V];
                                  false -> V
                              end,

@@ -85,7 +85,7 @@ set_defaults(Profile) ->
 print_banner(Config) ->
     %% Urgh - could there be an uglier way!?
     %% TODO: refactor this...
-    case quiet(Config) of
+    case systest_utils:quiet(Config) of
         true  -> ok;
         false ->
             {ok, Banner} = application:get_env(systest, banner),
@@ -93,7 +93,7 @@ print_banner(Config) ->
     end.
 
 start_logging(Config) ->
-    SystemLog = case quiet(Config) of
+    SystemLog = case systest_utils:quiet(Config) of
                     true  -> LogName = lists:flatten(
                                 io_lib:format("systest.~s.log",
                                               [systest_env:timestamp()])),
@@ -110,7 +110,7 @@ start_logging(Config) ->
                     is_list(SubSystem) -> list_to_atom(SubSystem);
                                   true -> throw({badarg, SubSystem})
                  end,
-        case quiet(Config) of
+        case systest_utils:quiet(Config) of
             true  -> ok;
             false -> io:format(user, "activating logging sub-system ~p~n",
                                [Target])
@@ -120,9 +120,6 @@ start_logging(Config) ->
     if length(Active) > 0 -> io:nl();
                      true -> ok
     end.
-
-quiet(Config) ->
-    ?CONFIG(quiet, Config, false).
 
 verify(Exec2=#execution{profile     = Prof,
                         base_dir    = BaseDir,
@@ -136,9 +133,10 @@ verify(Exec2=#execution{profile     = Prof,
 
     Mod = systest_profile:get(framework, Prof),
 
-    _Trace = systest_trace:load(Config),
+    Trace = systest_trace:load(Config),
+    systest_config:set_static(tracing, Trace),
 
-    case quiet(Config) of
+    case systest_utils:quiet(Config) of
         true ->
             ok;
         false ->
@@ -153,7 +151,8 @@ verify(Exec2=#execution{profile     = Prof,
                 {section, "Options"}] ++ Config),
 
             Prop = systest_utils:record_to_proplist(Prof, systest_profile),
-            systest_utils:print_section("SysTest Profile", Prop)
+            systest_utils:print_section("SysTest Profile", Prop),
+            systest_trace:print_trace_info(Trace)
     end,
 
     ScratchDir = systest_profile:get(output_dir, Prof),

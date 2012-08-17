@@ -56,7 +56,7 @@
 
 -include("systest.hrl").
 
--export([debug/2, stop/1]).
+-export([debug/2, stop/1, print_trace_info/1]).
 -export([log_trace_file/1, write_trace_file/2]).
 -compile(export_all).
 -define(TRACE_DISABLED, {trace, disabled}).
@@ -101,24 +101,38 @@ load(Config) ->
                             trace_data_dir=TraceData,
                             flush=Flush,
                             console=Console},
+    find_activated(Config, SysConf).
 
-    _SysConf2 = find_activated(Config, SysConf).
+print_trace_info(#trace_config{active=[]}) ->
+    ok;
+print_trace_info(SysConf) ->
+    Prop = systest_utils:record_to_proplist(SysConf, systest_trace_config),
+    {value, {active, Active}, Prop2} = lists:keytake(active, 1, Prop),
+    systest_utils:print_section("Trace Configuration",
+                                lists:keydelete(base_config, 1, Prop2)),
+    Traces = [begin
+                 PList = systest_utils:record_to_proplist(T,
+                                                        systest_trace),
+                 {value, {_, TP}, PList2} =
+                        lists:keytake(trace_pattern, 1, PList),
+                 TP2 = systest_utils:record_to_proplist(TP,
+                                            systest_trace_pattern),
+                 PList2 ++ [{trace_pattern, TP2}]
+              end || T <- Active],
+    [systest_utils:print_section("Active Trace", T) || T <- Traces].
 
-find_activated(Config, SysConf) ->
-    log("processing ~p~n", [SysConf]),
-    {Enabled, _} = apply_flags(Config, SysConf),
-    SysConf#trace_config{active=Enabled}.
+find_activated(Config, SysConf=#trace_config{trace_config=TraceConfigFile}) ->
+    BaseTraceConfig = read_config(TraceConfigFile),
+    {Enabled, _} = apply_flags(Config, BaseTraceConfig),
+    SysConf#trace_config{active=Enabled, base_config=BaseTraceConfig}.
 
 %% @private
 %% We must take all enabled traces and look up their configuration from the
 %% trace config file (or defaults). Config that is *missing* from these
 %% locations MUST be available in the supplied flags/args, otherwise we bail.
 %% @end
-apply_flags(Config, #trace_config{trace_config=TraceConfigFile}) ->
-    BaseTraceConfig = read_config(TraceConfigFile),
-    log("base trace configuration: ~p~n", [BaseTraceConfig]),
+apply_flags(Config, BaseTraceConfig) ->
     TraceSettings = override_defaults_with_user_args(BaseTraceConfig, Config),
-    log("trace settings: ~p~n", [TraceSettings]),
     Enabled = proplists:get_all_values(trace_enable, Config),
     lists:foldl(
         fun(Flag, {Acc, Base}) ->
@@ -143,7 +157,6 @@ apply_flags(Config, #trace_config{trace_config=TraceConfigFile}) ->
 build_trace(TraceName, Base) ->
     {TraceConfig, _RemainingBase} =
                 read_trace_config(TraceName, Base),
-    log("TraceConfig: ~p~n", [TraceConfig]),
     TP = systest_trace_pattern:record_fromlist(
                 ?REQUIRE(trace_pattern, TraceConfig)),
     Location = ?CONFIG(location, TraceConfig, 'all'),

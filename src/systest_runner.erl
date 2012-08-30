@@ -170,6 +170,7 @@ verify(Exec2=#execution{profile     = Prof,
 
     systest_cover:report_cover(CoverBase, Export, Config),
 
+    systest:stop(),
     case Result of
         ok ->
             case ?CONFIG(dryrun, Config, false) of
@@ -308,10 +309,15 @@ maybe_start_net_kernel(Config) ->
     case net_kernel:longnames() of
         ignored ->
             {ok, Host} = inet:gethostname(),
-            EpmdState = systest_env:is_epmd_contactable(Host, 5000),
-            systest_utils:throw_unless(EpmdState == true, runner,
-                "It appears that epmd has not been started yet. "
-                "Please run `epmd -daemon` first and try again.~n", []),
+            case systest_env:is_epmd_contactable(Host, 5000) of
+                {false, Reason} ->
+                    io:format(user, "epmd not contactable on ~s => ~p~n",
+                             [Host, Reason]),
+                    os:cmd("epmd -daemon");
+                true  ->
+                    ok
+            end,
+            io:format(user, "[systest.net] ~s~n", [os:cmd("epmd -names")]),
             if
                 UseLongNames =:= true ->
                     {ok, _} = net_kernel:start([NodeName, longnames]);

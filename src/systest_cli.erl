@@ -58,6 +58,9 @@
     environment
 }).
 
+-define(IS_DYING(State),
+        State =:= killed orelse State =:= stopped).
+
 -include("systest.hrl").
 
 -import(systest_log, [log/2, log/3]).
@@ -211,22 +214,21 @@ handle_msg({Port, {exit_status, Exit}=Rc}, Proc,
     log({framework, Id},
         "os process ~p shut down with error/status code ~p~n",
         [Proc#proc.id, Exit]),
-    ShutdownType = case State of
-                       killed -> normal;
-                       _      -> Rc
+    ShutdownType = case ?IS_DYING(State) of
+                       true  -> normal;
+                       false -> Rc
                    end,
-    {stop, ShutdownType, Sh#sh{state=stopped}};
-handle_msg({Port, closed}, Proc, Sh=#sh{id=Id,
-                                        port=Port,
-                                        state=killed,
-                                        detached=false}) ->
+    {stop, ShutdownType, Sh};
+handle_msg({Port, closed}, Proc,
+            Sh=#sh{id=Id, port=Port,
+                   state=State, detached=false}) when ?IS_DYING(State) ->
     log({framework, Id}, "~p (attached) closed~n", [Port]),
     case Sh#sh.rpc_enabled of
         true ->
             %% to account for a potential timing issue when the calling test
             %% execution process is sitting in `kill_and_wait` - we force a
-            %% call to net_adm:ping/1, which gives the net_kernel time to get
-            %% its knickers in order before proceeding....
+            %% call to net_adm:ping/1, which gives the net_kernel more time to
+            %% to try and its knickers out of a twist before proceeding....
             Id = systest_proc:get(id, Proc),
             systest_proc:status_check(Id);
         false ->
@@ -236,11 +238,13 @@ handle_msg({Port, closed}, Proc, Sh=#sh{id=Id,
 handle_msg({Port, closed}, _Proc, Sh=#sh{id=Id, port=Port}) ->
     log({framework, Id}, "~p closed~n", [Port]),
     {stop, {port_closed, Port}, Sh};
-handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc, Sh=#sh{shutdown_port=Pid,
-                                                       detached=Detached,
-                                                       state=killed,
-                                                       log=Fd,
-                                                       id=Id}) ->
+handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc,
+            Sh=#sh{shutdown_port=SPort,
+                   detached=Detached,
+                   state=State,
+                   log=Fd,
+                   id=Id}) when Pid == SPort andalso
+                                ?IS_DYING(State) ->
     log({framework, Id}, "termination Port completed ok~n"),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     case Detached of
@@ -248,7 +252,9 @@ handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc, Sh=#sh{shutdown_port=Pid,
         false -> Sh
     end;
 handle_msg({'EXIT', Pid, {error, Rc, StopAcc}},
-           _Proc, Sh=#sh{id=Id, shutdown_port=Pid, log=Fd}) ->
+           _Proc, Sh=#sh{id=Id,
+                         shutdown_port=SPort,
+                         log=Fd}) when Pid == SPort ->
     log({framework, Id},
         "termination Port stopped abnormally (status ~p)~n", [Rc]),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
@@ -446,7 +452,7 @@ read_pid(ProcId, Port, Detached, RpcEnabled, Fd) ->
     end.
 
 wait_for_up(NodeId) ->
-    case net_kernel:connect(NodeId) of
+    case net_kernel:hidden_connect_node(NodeId) of
         true    -> ok;
         _       -> erlang:yield(), wait_for_up(NodeId)
     end.

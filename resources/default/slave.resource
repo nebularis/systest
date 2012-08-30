@@ -1,7 +1,8 @@
 
 {sasl_node, [
     {startup, [{handler, systest_slave},
-               {link_to_parent, true}]},
+               {link_to_parent, true},
+               {cover, true}]},
     {flags, [{start, "-boot start_sasl +W w +K true +A30 +P 1048576"
                      " -pa ${settings.base_dir}/ebin "
                      "-systest scratch_dir '{file,\"%{SCRATCH_DIR}\"}' "

@@ -65,10 +65,15 @@ pre_init_per_testcase(TC, Config, State) ->
 post_end_per_testcase(TC=timetrap_failure, Config, Return, State) ->
     Pid = whereis(TC),
     true = erlang:is_process_alive(Pid),
-    Result = systest_cth:post_end_per_testcase(TC, Config, Return, State),
+    systest_cth:post_end_per_testcase(TC, Config, Return, State),
     undefined = whereis(TC),
     false = erlang:is_process_alive(Pid),
-    Result;
+    [] = nodes(),
+    systest_log:log(system,
+                    "Test Case timetrap_failure is expected to fail, "
+                    "however this message indicates that all the "
+                    "required post-conditions have been fulfilled~n", []),
+    {proplists:delete(tc_status, Config), State};
 post_end_per_testcase(TC, Config, Return, State) ->
     systest_cth:post_end_per_testcase(TC, Config, Return, State).
 

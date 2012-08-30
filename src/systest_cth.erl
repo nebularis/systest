@@ -112,20 +112,25 @@ post_end_per_testcase(TC, Config, Return, State) ->
     log(framework, "processing ~p post_end_per_testcase~n", [TC]),
     log(framework, "return: ~p~n", [Return]),
     Result = check_exceptions(TC, Return),
-    case ?CONFIG(TC, Config, undefined) of
-        undefined ->
-            stop(TC),
-            systest:trace_off(Config),
-            {Result, State};
-        SutPid ->
-            case erlang:is_process_alive(SutPid) of
-                true ->
-                    stop(SutPid);
-                false ->
-                    log(framework, "sut ~p is already down~n", [SutPid])
-            end,
-            systest:trace_off(Config),
-            {Result, State}
+    try
+        case ?CONFIG(TC, Config, undefined) of
+            undefined ->
+                stop(TC);
+            SutPid ->
+                case erlang:is_process_alive(SutPid) of
+                    true ->
+                        stop(SutPid);
+                    false ->
+                        log(framework, "sut ~p is already down~n", [SutPid])
+                end
+        end,
+        {Result, State}
+    catch
+        %% a failure in the sut stop procedure should cause the test to fail,
+        %% so that the operator has a useful indication that all is not well
+        _:Error -> {{fail, Error}, State}
+    after
+        systest:trace_off(Config)
     end.
 
 terminate(_State) ->
@@ -134,20 +139,25 @@ terminate(_State) ->
 stop(Target) ->
     log(framework, "stopping ~p~n", [Target]),
     try
-        log(framework, "stopped ~p~n",
-                        [systest_sut:stop(Target)])
+        case is_pid(Target) of
+            true ->
+                ok = systest_sut:stop(Target);
+            false ->
+                ok = systest:stop_scope(Target)
+        end
     catch
-        _:Err -> log(framework, "sut ~p stop ignored: ~p~n",
-                                [Target, Err])
+        _:Err -> log(system, "sut ~p shutdown error: ~p~n",
+                             [Target, Err])
     end.
 
-
 check_exceptions(SutId, Return) ->
+    log(framework, "checking for out of band exceptions in ~p~n", [SutId]),
     case systest_watchdog:exceptions(SutId) of
         [] ->
             Return;
         Ex ->
-            % log("test instance ~p failed!~n", [SutId]),
+            log(system, "~p failed! Unexpected process exits detected:~n",
+                [SutId]),
 
             [begin
                 log("~p: ~p~n", [SutId, Reason])

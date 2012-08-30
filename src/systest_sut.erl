@@ -41,6 +41,7 @@
 -include("systest.hrl").
 
 -import(systest_log, [log/2, log/3]).
+-import(systest_utils, [safe_call/3]).
 
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
@@ -107,7 +108,7 @@ status(SutRef) ->
     gen_server:call(SutRef, status).
 
 procs(SutRef) ->
-    gen_server:call(SutRef, procs).
+    safe_call(SutRef, procs, not_found).
 
 print_status(Sut) ->
     log(lists:flatten([print_status_info(N) || N <- status(Sut)]), []).
@@ -205,13 +206,13 @@ handle_call(_Msg, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'EXIT', Pid, normal}=Ev, State=#sut{name=Sut}) ->
-    systest_watchdog:proc_stopped(Sut, Pid),
+handle_info({'EXIT', Pid, normal}=Ev, State=#sut{id=Id}) ->
+    systest_watchdog:proc_stopped(Id, Pid),
     {noreply, clear_pending(Ev, State)};
 handle_info({'EXIT', Pid, Reason}=Ev, State=#sut{id=Sut}) ->
     systest_log:log({framework, Sut},
                     "unexpected systest process exit "
-                    "from ~p: ~p",
+                    "from ~p: ~p~n",
                     [Pid, Reason]),
     {stop, {proc_exit, Pid, Reason}, clear_pending(Ev, State)}.
 
@@ -237,7 +238,7 @@ clear_pending({'EXIT', Pid, _},
             systest_log:log({framework, Identity},
                             "found ~p~n", [DeadProc]),
             {ProcName, Host} = systest_utils:proc_id_and_hostname(Id),
-            [Proc] = build_procs(SutName, SutName,
+            [Proc] = build_procs(Identity, SutName,
                                  {Host, [ProcName]}, Config),
             NewProc = start_proc(Identity, Proc),
             RemainingProcs = Procs -- [DeadProc],
@@ -265,21 +266,20 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
     %% function in a different process. If we put a selective receive block
     %% here, we might well run into unexpected message ordering that could
     %% leave us in an inconsistent state.
-    ProcRefs = [ProcRef || {_, ProcRef} <- Procs],
+    ProcRefs = [ProcRef || {_, ProcRef} <- Procs, is_process_alive(ProcRef)],
     case systest_cleaner:kill_wait(ProcRefs,
                                    fun systest_proc:stop/1, Timeout) of
-        ok ->
-            log({framework, Id}, "stopping...~n", []),
+        Ok when Ok == ok orelse Ok == no_targets ->
             [systest_watchdog:proc_stopped(Id, N) || N <- ProcRefs],
             gen_server:reply(ReplyTo, ok),
             {stop, normal, State};
         {error, {killed, StoppedOk}} ->
-            log({framework, Id}, "halt error: killed~n", []),
+            log(framework, "halt error: killed~n", []),
             Err = {halt_error, orphans, ProcRefs -- StoppedOk},
             gen_server:reply(ReplyTo, Err),
             {stop, Err, State};
         Other ->
-            log({framework, Id}, "halt error: ~p~n", [Other]),
+            log(framework, "halt error: ~p~n", [Other]),
             gen_server:reply(ReplyTo, {error, Other}),
             {stop, {halt_error, Other}, State}
     end.
@@ -341,7 +341,6 @@ start_proc(Identity, Proc) ->
                     [systest_proc:get(name, Proc)]),
     {ok, ProcRef} = systest_proc:start(Proc),
     ok = systest_watchdog:proc_started(Identity, ProcRef),
-    systest_log:log(framework, "process started ok~n", []),
     %% NB: the id field of Proc will *not* be set (correctly)
     %% until after the gen_server has started, so an API call
     %% is necessary rather than using systest_proc:get/2

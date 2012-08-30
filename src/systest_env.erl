@@ -36,7 +36,7 @@
 -include("systest.hrl").
 
 default_log_dir(Config) ->
-    ?CONFIG(scratch_dir, Config, temp_dir()).
+    ?CONFIG(log_dir, Config, filename:join(default_scratch_dir(), "logs")).
 
 default_scratch_dir() ->
     work_directory(temp_dir(), systest, "SYSTEST_SCRATCH_DIR").

@@ -47,7 +47,6 @@ suite() -> [{timetrap, {minutes, 2}}].
 
 all() ->
     [sut_start_scripts_badly_configured,
-     timetrap_failure,
      failing_sut_on_start_hook].
 
 %%
@@ -58,7 +57,7 @@ timetrap_failure() ->
     [{timetrap, {seconds, 10}}].
 
 timetrap_failure(_) ->
-    %% timer:sleep(60 * 1000).
+    receive never_arrives -> ok end,
     ok.
 
 sut_start_scripts_badly_configured() ->

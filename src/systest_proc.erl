@@ -28,18 +28,24 @@
 
 -include("systest.hrl").
 
+-type proc_ref() :: pid().
+-type activity_state() :: 'not_started' |
+                          'running'     |
+                          'stopped'     |
+                          'killed'      |
+                          'down'.
 -type proc_info() :: #proc{}.
--export_type([proc_info/0]).
+-export_type([proc_info/0, activity_state/0, proc_ref/0]).
 
 -export([behaviour_info/1]).
 -export([make_proc/3]).
 -export([interact/2]).
--export([proc_id/2, proc_data/1]).
+-export([proc_id/2, proc_data/1, proc_data/2]).
 -export([user_data/1, user_data/2]).
--export([start/1, start/3, stop/1, kill/1]).
+-export([start/1, start/3, stop/1, kill/1, activate/1]).
 -export(['kill -9'/1, stop_and_wait/1, kill_and_wait/1]).
 -export([sigkill/1, kill_after/2, kill_after/3]).
--export([shutdown_and_wait/2, status/1]).
+-export([shutdown_and_wait/2, status/1, activity_state/1]).
 -export([joined_sut/3]).
 -export([status_check/1]).
 
@@ -49,6 +55,7 @@
          handle_info/2, terminate/2, code_change/3]).
 
 -import(systest_log, [log/2, log/3]).
+-import(systest_utils, [safe_call/3]).
 
 -ifdef(TEST).
 -export([proc_config/2]).
@@ -60,9 +67,6 @@
 
 -compile({parse_transform, exprecs}).
 -export_records([proc]).
-
--type proc_ref() :: pid().
--type activity_state() :: 'running' | 'stopped' | 'killed' | 'down'.
 
 %% our own internal state is separate from that of any handler...
 -record(state, {
@@ -101,8 +105,6 @@ start(Scope, Proc, Config) ->
 -spec start(proc_info()) -> {'ok', pid()} | {'error', term()}.
 start(ProcInfo=#proc{handler=Handler, host=Host,
                      name=Name, config=BaseConf}) ->
-    log(framework, "starting ~p on ~p~n", [Name, Host]),
-
     %% are there hidden traps here, when (for example) we're running
     %% embedded in an archive/escript or similarly esoteric situations?
     %% TODO: perhaps catch(Handler:id(ProcInfo)) would be safer!?
@@ -114,7 +116,12 @@ start(ProcInfo=#proc{handler=Handler, host=Host,
          end,
     NI = set([{config,[{proc, Id}|BaseConf]}], Id),
 
+    log(framework, "starting ~p on ~p~n", [Name, Host]),
     gen_server:start_link(?MODULE, [NI], []).
+
+-spec activate(proc_ref()) -> ok.
+activate(ProcRef) ->
+    gen_server:call(ProcRef, start).
 
 -spec stop(proc_ref()) -> ok.
 stop(ProcRef) ->
@@ -156,6 +163,11 @@ kill_and_wait(ProcRef) ->
 status(ProcRef) ->
     safe_call(ProcRef, status, {down, noproc}).
 
+-spec activity_state(proc_ref()) -> activity_state().
+activity_state(ProcRef) ->
+    {ok, State} = gen_server:call(ProcRef, state),
+    State.
+
 -spec interact(proc_ref(), term()) -> term().
 interact(ProcRef, InputData) ->
     gen_server:call(ProcRef, {interaction, InputData}).
@@ -163,6 +175,10 @@ interact(ProcRef, InputData) ->
 -spec proc_data(proc_ref()) -> [{atom(), term()}].
 proc_data(ProcRef) ->
     safe_call(ProcRef, proc_info_list, [{owner, ProcRef}]).
+
+-spec proc_data(proc_ref(), atom()) -> term().
+proc_data(ProcRef, Field) ->
+    gen_server:call(ProcRef, {proc_info_get, Field}).
 
 -spec user_data(proc_ref()) -> [{atom(), term()}].
 user_data(ProcRef) ->
@@ -181,22 +197,10 @@ joined_sut(ProcRef, SutRef, SiblingProcs) ->
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
-        false -> PFlag = erlang:process_flag(trap_exit, true),
-                 try
-                     link(Owner),
-                      log(framework,
-                          "waiting for ~p to exit from: ~p~n",
-                          [Owner, erlang:process_info(self())]),
-                      ok = ShutdownOp(Owner),
-                      receive
-                          {'EXIT', Owner, _Reason} -> ok;
-                          Other                    -> log(framework,
-                                                          "~p~n", [Other])
-                      end
-                 after
-                     erlang:process_flag(trap_exit, PFlag)
-                 end
-    end.
+        false -> log(framework, "waiting for ~p to exit~n", [Owner]),
+                 systest_cleaner:kill_wait([Owner], ShutdownOp)
+    end,
+    log(framework, "shutdown_and_wait complete~n", []).
 
 %%
 %% Handler facing API
@@ -211,9 +215,39 @@ status_check(Node) when is_atom(Node) ->
 %% OTP gen_server API
 %%
 
-init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
-    process_flag(trap_exit, true),
+init([ProcInfo=#proc{auto_start=false}]) ->
+    {ok, #state{proc=ProcInfo, activity_state=not_started}};
+init([ProcInfo]) ->
+    do_start(ProcInfo).
 
+handle_call(state, _From, State=#state{activity_state=ActivityState}) ->
+    {reply, {ok, ActivityState}, State};
+handle_call(Msg, From, State) ->
+    handle_msg(Msg, State, From).
+
+handle_cast(Msg, State) ->
+    handle_msg(Msg, State).
+
+handle_info(Info, State) ->
+    handle_msg(Info, State).
+
+terminate(_Reason, #state{activity_state=not_started}) ->
+    ok;
+terminate(Reason, #state{proc=Proc,
+                         handler=Mod,
+                         handler_state=ModState}) ->
+    ok = Mod:terminate(Reason, Proc, ModState),
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%
+%% Private API
+%%
+
+do_start(ProcInfo=#proc{handler=Callback, cover=Cover}) ->
+    process_flag(trap_exit, true),
     case catch( apply(Callback, init, [ProcInfo]) ) of
         {ok, NI2, HState} when is_record(NI2, proc) ->
 
@@ -231,9 +265,7 @@ init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
             %% of how this will eventually look
             case Cover of
                 true ->
-                    systest_log:log(framework,
-                                    "starting cover on ~p~n", [Id]),
-                    cover:start(Id);
+                    systest_cover:start_cover(Id);
                 _ ->
                     ok
             end,
@@ -245,7 +277,10 @@ init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
             end,
 
             NI3 = NI2#proc{owner=self()},
-            State = #state{proc=NI3, handler=Callback, handler_state=HState},
+            State = #state{proc=NI3,
+                           activity_state=running,
+                           handler=Callback,
+                           handler_state=HState},
 
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#proc.on_start of
@@ -260,36 +295,6 @@ init([ProcInfo=#proc{handler=Callback, cover=Cover}]) ->
             %% TODO: do NOT rely on callbacks returning a proper gen_server
             %% init compatible response tuple - construct this for them....
             {stop, Error}
-    end.
-
-handle_call(Msg, From, State) ->
-    handle_msg(Msg, State, From).
-
-handle_cast(Msg, State) ->
-    handle_msg(Msg, State).
-
-handle_info(Info, State) ->
-    handle_msg(Info, State).
-
-terminate(Reason, #state{proc=Proc,
-                         handler=Mod,
-                         handler_state=ModState}) ->
-    ok = Mod:terminate(Reason, Proc, ModState),
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-%%
-%% Private API
-%%
-
-safe_call(ProcRef, Msg, Default) ->
-    try
-        gen_server:call(ProcRef, Msg)
-    catch
-        _:{noproc,{gen_server,call,[ProcRef, Msg]}} ->
-            Default
     end.
 
 proc_id(Host, Name) ->
@@ -376,14 +381,39 @@ proc_interact(Term, {_, Acc}) ->
 handle_msg(Msg, State) ->
     handle_msg(Msg, State, noreply).
 
-handle_msg(user_data, State=#state{proc=Proc}, _ReplyTo) ->
-    {reply, get(user, Proc), State};
+handle_msg({joined, _Sut, _Procs},
+            State=#state{activity_state=not_started}, _ReplyTo) ->
+    log(framework, "skipping on_join hook for ~p "
+                   "[activity_state = not_started]~n",
+                   [self()]),
+    {reply, ok, State};
+handle_msg({proc_info_get, Field}, State=#state{proc=Proc}, _ReplyTo) ->
+    Value = get(Field, Proc),
+    {reply, {ok, Value}, State};
 handle_msg({user_data, Data}, State=#state{proc=Proc}, _ReplyTo) ->
     {reply, 'ok', State#state{proc=set([{user, Data}], Proc)}};
 handle_msg(proc_info_list, State=#state{proc=Proc}, _ReplyTo) ->
     Attrs = systest_proc:info('proc', fields) -- [config],
     Info = [{K, get(K, Proc)} || K <- Attrs],
     {reply, Info, State};
+handle_msg(user_data, State=#state{proc=Proc}, _ReplyTo) ->
+    {reply, get(user, Proc), State};
+%% NB: this section comprises the activity_state = not_started block
+handle_msg(start, #state{proc=Proc, activity_state=not_started}, _) ->
+    case do_start(Proc) of
+        {stop, _}=Stop -> Stop;
+        {ok, NewState} -> {reply, ok, NewState#state{activity_state=running}}
+    end;
+handle_msg(start, State, _) ->
+    {reply, {error, already_started}, State};
+handle_msg(Msg, State=#state{activity_state=not_started}, _ReplyTo)
+                    when Msg == stop orelse
+                         Msg == kill orelse
+                         Msg == sigkill ->
+    {stop, normal, State};
+handle_msg(_, State=#state{activity_state=not_started}, _ReplyTo) ->
+    {reply, {error, not_started}, State};
+%% NB: every clause below *requires* that activity_state /= not_started
 handle_msg({joined, Sut, Procs}, State=#state{proc=Proc}, _ReplyTo) ->
     log({framework, get(id, Proc)},
         "proc on_join info: ~p~n", [Proc#proc.on_join]),
@@ -415,9 +445,6 @@ handle_msg(kill, State=#state{activity_state=stopped}, _) ->
     {noreply, State};
 handle_msg(stop, State=#state{activity_state=killed}, _) ->
     {noreply, State};
-%% TODO: consider whether this should be disallowed, or ignored
-% handle_msg(kill, State=#state{activity_state=stopped}, _) ->
-%    {noreply, State};
 handle_msg(stop, State=#state{proc=Proc, handler=Mod,
                               handler_state=ModState}, ReplyTo) ->
     case Proc#proc.on_stop of
@@ -471,9 +498,7 @@ stopping_callback(Mod, Func, Proc, Args) ->
     case get(cover, Proc) of
         true ->
             Id = get(id, Proc),
-            systest_log:log(framework,
-                            "stopping cover for ~p~n", [Id]),
-            cover:stop(Id);
+            systest_cover:stop_cover(Id);
         _ ->
             ok
     end,
@@ -540,6 +565,8 @@ make_proc(Config) ->
     record_fromlist([{scope,      ?REQUIRE(scope, Config)},
                      {host,       ?REQUIRE(host, Config)},
                      {name,       Name},
+                     {auto_start, lookup("startup.activate_on_start",
+                                         Config, true)},
                      {handler,    lookup("startup.handler",
                                          Config, systest_cli)},
                      {link,       lookup("startup.link_to_parent",

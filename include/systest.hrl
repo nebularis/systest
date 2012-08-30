@@ -64,10 +64,11 @@
 
 %% TODO: deprecate the 'apps' field (merge into flags?)
 -record(proc, {
-    scope       :: atom(),                      %% usually the sut id...
+    scope       :: atom(),                      %% always the sut id...
     host        :: atom(),                      %% host name
     name        :: atom(),                      %% identifying (name)
     handler     :: module(),                    %% backing module
+    auto_start  :: boolean(),                   %% start automatically?
     link        :: boolean(),                   %% use start_link, or just start
     user        :: term(),                      %% user-defined data
     private     :: term(),                      %% handler data...

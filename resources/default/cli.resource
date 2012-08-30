@@ -5,7 +5,8 @@
         {handler, systest_cli},
         {link_to_parent, true},
         {detached, false},
-        {rpc_enabled, {true, {init, stop, []}}}
+        {rpc_enabled, {true, {init, stop, []}}},
+        {cover, true}
     ]},
     {flags, [
         {start, [
@@ -86,3 +87,19 @@
 
 {systest_cli_SUITE, [{all, cli_2node_cluster}]}.
 
+{start_cold, [
+    {startup, [
+        {activate_on_start, false}
+    ]}
+]}.
+
+{manually_starting_processes, [
+    {sut, [{localhost, [n1, n2]}]},
+    {processes, [
+        {n1, [global_proc_config]},
+        {n2, [global_proc_config, start_cold]}
+    ]}
+]}.
+
+{systest_proc_SUITE, [{restarting_manually_started_processes,
+                        manually_starting_processes}]}.

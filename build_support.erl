@@ -86,7 +86,8 @@ doc_dir(Config) ->
                 rebar_config:get_local(Config, edoc_opts, []), "doc")).
 
 static_files(BaseDir) ->
-    filelib:wildcard(filename:join([BaseDir, "static", "*.*"])).
+    filelib:wildcard(filename:join([BaseDir, "static", "*.*"])) ++ 
+	[filename:join(BaseDir, "ROADMAP.md")].
 
 doc_files(DocDir) ->
     filelib:wildcard(filename:join(DocDir, "*.*")) --

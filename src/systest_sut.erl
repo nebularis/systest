@@ -41,6 +41,7 @@
 -include("systest.hrl").
 
 -import(systest_log, [log/2, log/3]).
+-import(systest_utils, [safe_call/3]).
 
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
@@ -107,7 +108,7 @@ status(SutRef) ->
     gen_server:call(SutRef, status).
 
 procs(SutRef) ->
-    gen_server:call(SutRef, procs).
+    safe_call(SutRef, procs, not_found).
 
 print_status(Sut) ->
     log(lists:flatten([print_status_info(N) || N <- status(Sut)]), []).

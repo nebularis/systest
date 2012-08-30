@@ -55,6 +55,7 @@
          handle_info/2, terminate/2, code_change/3]).
 
 -import(systest_log, [log/2, log/3]).
+-import(systest_utils, [safe_call/3]).
 
 -ifdef(TEST).
 -export([proc_config/2]).
@@ -294,14 +295,6 @@ do_start(ProcInfo=#proc{handler=Callback, cover=Cover}) ->
             %% TODO: do NOT rely on callbacks returning a proper gen_server
             %% init compatible response tuple - construct this for them....
             {stop, Error}
-    end.
-
-safe_call(ProcRef, Msg, Default) ->
-    try
-        gen_server:call(ProcRef, Msg)
-    catch
-        _:{noproc,{gen_server,call,[ProcRef, Msg]}} ->
-            Default
     end.
 
 proc_id(Host, Name) ->

@@ -32,7 +32,7 @@
 -export([with_file/3, with_termfile/2, combine/2, uniq/1]).
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
 -export([record_to_proplist/2, border/2, print_heading/1, print_section/2]).
--export([ets_dump/1]).
+-export([ets_dump/1, quiet/1, safe_call/3]).
 
 abort(Fmt, Args) ->
     io:format(user, "ERROR:  " ++ Fmt, Args),
@@ -68,6 +68,9 @@ with_file(Path, Modes, Handler) ->
         Error ->
             Error
     end.
+
+quiet(Config) ->
+    ?CONFIG(quiet, Config, false).
 
 uniq(List) -> sets:to_list(sets:from_list(List)).
 
@@ -108,6 +111,14 @@ rm_rf(Path, ok) ->
                 {ok, FileNames} -> rm_rf(FileNames);
                 {error, Err}    -> {error, {Path, Err}}
             end
+    end.
+
+safe_call(ProcRef, Msg, Default) ->
+    try
+        gen_server:call(ProcRef, Msg)
+    catch
+        _:{noproc,{gen_server,call,[ProcRef, Msg]}} ->
+            Default
     end.
 
 %% @doc make a valid erlang node shortname from Name,

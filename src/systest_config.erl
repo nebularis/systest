@@ -46,6 +46,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-behaviour(gen_server).
+
 -import(systest_utils, [as_string/1]).
 
 -type key_type()    :: 'atom' | 'binary' | 'string'.

@@ -133,8 +133,7 @@ verify(Exec2=#execution{profile     = Prof,
 
     Mod = systest_profile:get(framework, Prof),
 
-    Trace = systest_trace:load(Config),
-    systest_config:set_static(tracing, Trace),
+    systest_trace:start(Config),
 
     case systest_utils:quiet(Config) of
         true ->

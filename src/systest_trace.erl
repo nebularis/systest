@@ -56,10 +56,14 @@
 
 -include("systest.hrl").
 
--export([debug/2, stop/1, print_trace_info/1]).
+-export([debug/2, stop/1, print_trace_info/1, start/1]).
 -export([log_trace_file/1, write_trace_file/2]).
--compile(export_all).
 -define(TRACE_DISABLED, {trace, disabled}).
+
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-behaviour(gen_server).
 
 -import(systest_utils, [as_list/1]).
 
@@ -72,7 +76,7 @@
 -compile({parse_transform, exprecs}).
 -export_records([trace]).
 
-log(F, A) -> io:format(user, F, A).
+-record(state, {init, config}).
 
 %convert_history_entry({ttb, tracer, [Nodes, []]}, Acc) ->
 %    Acc#trace_config{locations=Nodes};
@@ -83,25 +87,15 @@ log(F, A) -> io:format(user, F, A).
 %
 %           end.
 
-load(Config) ->
-    %{trace, {local, File}}
-    BaseDir = ?REQUIRE(base_dir, Config),
-    ScratchDir = ?REQUIRE(scratch_dir, Config),
-    TraceData = filename:join([ScratchDir, "trace"]),
-    TraceDbDir = filename:join([ScratchDir, "db", "trace"]),
-    TraceConfigFile = ?CONFIG(trace_config, Config,
-                              default_config_file(BaseDir)),
-    Console = ?CONFIG(trace_console, Config, false),
-    Flush = if Console == false -> ?CONFIG(trace_flush, Config, false);
-                           true -> false
-            end,
+enable(Scope, Config) ->
+    gen_server:call(?MODULE, {enable, Scope, Config}).
 
-    SysConf = #trace_config{trace_config=TraceConfigFile,
-                            trace_db_dir=TraceDbDir,
-                            trace_data_dir=TraceData,
-                            flush=Flush,
-                            console=Console},
-    find_activated(Config, SysConf).
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+start(Config) ->
+    %{trace, {local, File}}
+    gen_server:call(?MODULE, {start, Config}).
 
 print_trace_info(#trace_config{active=[]}) ->
     ok;
@@ -120,6 +114,83 @@ print_trace_info(SysConf) ->
                  PList2 ++ [{trace_pattern, TP2}]
               end || T <- Active],
     [systest_utils:print_section("Active Trace", T) || T <- Traces].
+
+%%
+%% OTP gen_server API
+%%
+
+init([]) ->
+    {ok, #state{init=false}}.
+
+handle_call({init, _}, _From, State=#state{init=true}) ->
+    {reply, {error, already_initialised}, State};
+handle_call({init, Config}, _From, State=#state{init=false}) ->
+    BaseDir = ?REQUIRE(base_dir, Config),
+    ScratchDir = ?REQUIRE(scratch_dir, Config),
+    TraceData = filename:join([ScratchDir, "trace"]),
+    TraceDbDir = filename:join([ScratchDir, "db", "trace"]),
+    TraceConfigFile = ?CONFIG(trace_config, Config,
+                              default_config_file(BaseDir)),
+    Console = ?CONFIG(trace_console, Config, false),
+    Flush = if Console == false -> ?CONFIG(trace_flush, Config, false);
+                           true -> false
+            end,
+
+    SysConf = #trace_config{trace_config=TraceConfigFile,
+                            trace_db_dir=TraceDbDir,
+                            trace_data_dir=TraceData,
+                            flush=Flush,
+                            console=Console},
+    Trace = find_activated(Config, SysConf),
+    {reply, ok, State#state{config=Trace}};
+handle_call({enable, Scope, Config}, _From, State#state{config=TraceConf}) ->
+    Active = systest_trace_config:get(active, TraceConf),
+    [activate(Trace, TraceConf) || Trace <- Active,
+                                   get(scope, Trace) =:= Scope];
+    {reply, ok, State};
+handle_call(_Request, _From, State) ->
+    {reply, ok, State}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%
+%% Private/Internal API
+%%
+
+activate(#trace{name=Name,
+                scope=SUT,
+                location=Nodes,
+                process_filter=PFilters,
+                trace_flags=Flags,
+                trace_pattern=TP},
+         #trace_config{trace_data_dir=DataDir}) ->
+    [begin
+        systest_log:log("Activating Trace ~p on ~p~n", [Name, Loc]),
+        LogFile = filename:join(DataDir,
+                                lists:flatten(io_lib:format("~p-~p-trace"),
+                                                        [ScratchDir, Name])),
+        systest_log:log(framework, "Tracing ~p to ~s~n", [Name, LogFile]),
+        %% NB: we need to do ttb:stop/0 during 'disable', BUT <<>>>>><>>>>>
+        %%      unfortunately that is going to shut down ALL our tracer, grrrr
+        %%      so we either have to move to the dbg module, OR we can
+        %%      stash the list of 'running' tracers and stop + restart them
+        %%      each time. That sounds completely shit, *however* the stopping
+        %%      shouldn't make any different if it is between sequential test
+        %%      cases. Fuck knows what we do about parallel test cases though.
+        case ttb:tracer(Nodes,
+                        [{file, {local, {wrap, LogFile}}},
+                         ..... need to finish this])
+     end || Loc <- Locations].
 
 find_activated(Config, SysConf=#trace_config{trace_config=TraceConfigFile}) ->
     BaseTraceConfig = read_config(TraceConfigFile),
@@ -166,17 +237,6 @@ build_trace(TraceName, Base) ->
            trace_flags=?REQUIRE(trace_flags, TraceConfig),
            trace_pattern=TP,
            location=Location}.
-
-%% @private
-%% flags passed on the command line have a similar structure, but
-%% are prefixed and need reprocessing and merging with whatever
-%% configuration we've been able to load
-%% @end
-maybe_merge_config(_TraceConfig, _Flag, _Config) ->
-    %% TraceConfig could be 'noconfig' or proplist() where
-    %% --trace-pcall-location has been transformed into a structure
-    %% such as `{pcall, [{location, Value}]}`
-    ok.
 
 %% @private
 %% take the supplied UserConfig and for each trace key (passed on the command

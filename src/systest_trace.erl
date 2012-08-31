@@ -27,6 +27,35 @@
 %% can be supplied on the command line, or stored in configuration files which
 %% are enabled on the comand line instead.
 %%
+%% This framework implements a remote tracing framework based loosely on the OTP
+%% dbg module, with some features inspired by the ttb (Trace Tool Builder)
+%% component of the Observer application. The work of Mats Cronqvist, especially
+%% the restricted debugger (rebug) feature on in his 'eper' suite was also
+%% instrumental in deciding how to approach build this framework, though it was
+%% developed independantly.
+%%
+%% <em>Architecture</em>
+%%
+%% The systest_trace_remote module must be loaded on each node that is to be
+%% traced. This is done using an rpc call and code:load_binary/3 if the module
+%% cannot be loaded via the code path on the remote node. The remote module
+%% provides an interface for rpc calls that map to corresponding functions on
+%% the remote node, all of which deal in the trace primatives from the erlang
+%% module (i.e., trace/3, trace_pattern/2/3, etc). When a tracer is started on
+%% a remote node, the chosen handler is always an ip trace port. Multiple
+%% tracers are currently disallowed.
+%%
+%% The systest_trace_client implementation deals with handling the TCP/IP
+%% traffic sent by a traced node and handling this as per the user's requested
+%% method (e.g., printing to the console or stuffing into trace logs for later
+%% inspection).
+%%
+%% Meanwhile, systest_trace_control deals coordinating and monitoring both the
+%% local and remote trace components and dealing with any necessary house
+%% keeping tasks.
+%%
+%% <em>Usage</em>
+%%
 %% Some examples of command line usage follow.
 %%
 %% 1. trace config + bindings stored in configuration files
@@ -56,8 +85,10 @@
 
 -include("systest.hrl").
 
--export([debug/2, stop/1, print_trace_info/1, start/1]).
--export([log_trace_file/1, write_trace_file/2]).
+-export([debug/2, start_link/0, stop/1, print_trace_info/1, start/1]).
+-export([enable/2, log_trace_file/1, write_trace_file/2]).
+-export([strip_trace_prefix/1]).
+
 -define(TRACE_DISABLED, {trace, disabled}).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -78,14 +109,9 @@
 
 -record(state, {init, config}).
 
-%convert_history_entry({ttb, tracer, [Nodes, []]}, Acc) ->
-%    Acc#trace_config{locations=Nodes};
-%convert_history_entry({ttb, p, [Loc, [timestamp|Spec]]}, Acc) ->
-%    Type = case Spec of
-%               garbage_collection -> gc;
-%               running            -> sched;
-%
-%           end.
+%%
+%% SysTest API - executes on the test control node
+%%
 
 enable(Scope, Config) ->
     gen_server:call(?MODULE, {enable, Scope, Config}).
@@ -143,10 +169,10 @@ handle_call({init, Config}, _From, State=#state{init=false}) ->
                             console=Console},
     Trace = find_activated(Config, SysConf),
     {reply, ok, State#state{config=Trace}};
-handle_call({enable, Scope, Config}, _From, State#state{config=TraceConf}) ->
+handle_call({enable, Scope, _Config}, _From, State=#state{config=TraceConf}) ->
     Active = systest_trace_config:get(active, TraceConf),
     [activate(Trace, TraceConf) || Trace <- Active,
-                                   get(scope, Trace) =:= Scope];
+                                   get(scope, Trace) =:= Scope],
     {reply, ok, State};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -168,17 +194,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 
 activate(#trace{name=Name,
-                scope=SUT,
+                scope=_SUT,
                 location=Nodes,
                 process_filter=PFilters,
-                trace_flags=Flags,
-                trace_pattern=TP},
+                trace_flags=_Flags,
+                trace_pattern=_TP},
          #trace_config{trace_data_dir=DataDir}) ->
     [begin
         systest_log:log("Activating Trace ~p on ~p~n", [Name, Loc]),
         LogFile = filename:join(DataDir,
-                                lists:flatten(io_lib:format("~p-~p-trace"),
-                                                        [ScratchDir, Name])),
+                                lists:flatten(io_lib:format("~p - ~p -trace",
+                                              [scratchDir, Name]))),
         systest_log:log(framework, "Tracing ~p to ~s~n", [Name, LogFile]),
         %% NB: we need to do ttb:stop/0 during 'disable', BUT <<>>>>><>>>>>
         %%      unfortunately that is going to shut down ALL our tracer, grrrr
@@ -187,10 +213,9 @@ activate(#trace{name=Name,
         %%      each time. That sounds completely shit, *however* the stopping
         %%      shouldn't make any different if it is between sequential test
         %%      cases. Fuck knows what we do about parallel test cases though.
-        case ttb:tracer(Nodes,
-                        [{file, {local, {wrap, LogFile}}},
-                         ..... need to finish this])
-     end || Loc <- Locations].
+        ttb:tracer(Nodes,
+                        [{file, {local, {wrap, LogFile}}}])
+     end || Loc <- PFilters].
 
 find_activated(Config, SysConf=#trace_config{trace_config=TraceConfigFile}) ->
     BaseTraceConfig = read_config(TraceConfigFile),
@@ -304,7 +329,7 @@ read_trace_config(TraceName, Config) ->
             %% we have to deal with trace_defaults ++ overrides
             %% TODO: this pattern exists in systest_resources also -
             %% we should write one set of routines to handle it...
-            Processed = 
+            Processed =
                 lists:foldl(fun(C, Acc) ->
                                 Conf = if is_atom(C) -> ?REQUIRE(C, Config);
                                                 true -> C

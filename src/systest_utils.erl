@@ -32,7 +32,8 @@
 -export([with_file/3, with_termfile/2, combine/2, uniq/1]).
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
 -export([record_to_proplist/2, border/2, print_heading/1, print_section/2]).
--export([ets_dump/1, quiet/1, safe_call/3]).
+-export([ets_dump/1, quiet/1, safe_call/3, safe_append/2]).
+-export([remote_load_module/2]).
 
 abort(Fmt, Args) ->
     io:format(user, "ERROR:  " ++ Fmt, Args),
@@ -124,6 +125,9 @@ safe_call(ProcRef, Msg, Default) ->
             Default
     end.
 
+safe_append([], L2) -> L2;
+safe_append(L1, L2) -> L1 ++ L2.
+
 %% @doc make a valid erlang node shortname from Name,
 %% using the current (local) hostname
 %% @end
@@ -192,9 +196,13 @@ flatten({Key, [{_,_}|_]=Item}, Acc) ->
 flatten(KVP, Acc) ->
     [KVP|Acc].
 
+%% @doc print a head with a nice border
+%% @end
 print_heading(S) ->
     io:format(user, "~s~n", [border(S, "-")]).
 
+%% @doc print a <i>section</i>, with heading and proplist to format
+%% @end
 print_section(Heading, Properties) ->
     print_heading(Heading),
     io:format(user, "~s~n", [systest_utils:proplist_format(Properties)]).
@@ -204,8 +212,38 @@ border(S, C) ->
     Border = string:copies(C, Pad),
     io_lib:format("~s~n~s~n~s~n", [Border, string:centre(S, Pad), Border]).
 
+%% @doc dump an ETS table (assumes it is readable from the calling process)
+%% @end
 ets_dump(Tab) ->
     print_section("Table Dump - " ++ as_string(Tab),
                   [{"Name", Tab},
                    {"Ets Info", ets:info(Tab)}|ets:tab2list(Tab)]).
 
+%% @doc ensures that Mod is loaded on Node <em>and</em> that it is up to date
+remote_load_module(Node, Mod) ->
+    case rpc:call(Node, ?MODULE, module_info, [compile]) of
+        {badrpc, {'EXIT',{undef,_}}} ->
+            remote_load_module(Node, remote_load_beam(Node, ?MODULE));
+        {badrpc, Reason} ->
+            {error, Reason};
+        CompileInfo when is_list(CompileInfo) ->
+            case {ftime(CompileInfo), ftime(Mod:module_info(compile))} of
+                {interpreted, _} ->
+                    ok;
+                {FTimeOnDest, FTimeOnHost} when FTimeOnDest < FTimeOnHost ->
+                    %% the old version of the code (residing on the
+                    %% destination node) is out of date, so reload it
+                    remote_load_module(Node, remote_load_beam(Node, ?MODULE));
+                _ ->
+                    ok
+            end
+    end.
+
+remote_load_beam(Node, Mod) ->
+    {Mod, Bin, Fname} = code:get_object_code(Mod),
+    {module, Mod} = rpc:call(Node, code, load_binary, [Mod, Fname, Bin]),
+    Mod.
+
+ftime([])           -> interpreted;
+ftime([{time,T}|_]) -> T;
+ftime([_|T])        -> ftime(T).

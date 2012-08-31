@@ -312,7 +312,7 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
     %% returned from erlang:nodes/0
     if RpcEnabled == true -> net_kernel:hidden_connect_node(Id);
        RpcEnabled /= true -> ok
-    end,  
+    end,
     case read_pid(Id, Port, Detached, RpcEnabled, LogFd) of
         {error, {stopped, Rc}} ->
             {stop, {launch_failure, Rc}};

@@ -150,8 +150,8 @@ verify(Exec2=#execution{profile     = Prof,
                 {section, "Options"}] ++ Config),
 
             Prop = systest_utils:record_to_proplist(Prof, systest_profile),
-            systest_utils:print_section("SysTest Profile", Prop),
-            systest_trace:print_trace_info(Trace)
+            systest_utils:print_section("SysTest Profile", Prop)
+            %% systest_trace:print_trace_info(Trace)
     end,
 
     ScratchDir = systest_profile:get(output_dir, Prof),

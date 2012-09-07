@@ -64,9 +64,10 @@
 -include("systest.hrl").
 
 -import(systest_log, [log/2, log/3]).
+-import(systest_utils, [as_string/1]).
 
 %%
-%% systest_proc API
+% systest_proc API
 %%
 
 init(Proc=#proc{config=Config}) ->
@@ -92,8 +93,8 @@ init(Proc=#proc{config=Config}) ->
             Port = open_port(StartCmd, Detached),
             #exec{environment=Env} = StartCmd,
 
-            if Detached =:= true -> link(Port);
-                            true -> ok
+            if Detached == true -> link(Port);
+                           true -> ok
             end,
 
             on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config,
@@ -116,9 +117,19 @@ init(Proc=#proc{config=Config}) ->
                              start_command=StartCmd,
                              stop_command=StopCmd,
                              state=running},
+
+                    LogInfo = [{pid, Pid},
+                               {port, Port2},
+                               {detached, Detached},
+                               {rpc_enabled, RpcEnabled}],
+                    LogMsg = systest_utils:proplist_format(LogInfo),
                     log(framework,
-                        "external process handler ~p[~p]"
-                        " started at ~p~n", [Scope, Id, self()]),
+                        "external process handler ~p[~p] started:~n~s~n",
+                        [Scope, Id, LogMsg]),
+                    log(framework, "~p [~p] start-command:~n~s~n",
+                        [Scope, Id, format_exec(StartCmd)]),
+                    log(framework, "~p [~p] stop-command:~n~s~n",
+                        [Scope, Id, format_exec(StopCmd)]),
                     {ok, N2, Sh}
                 end);
         StopError ->
@@ -286,6 +297,15 @@ terminate(Reason, _Proc, #sh{port=Port, id=Id, log=Fd}) ->
 %% Private API
 %%
 
+format_exec(#exec{command=Cmd, environment=Env, argv=Argv}) ->
+    systest_utils:proplist_format(
+      [{command, Cmd},
+       {arguments, Argv},
+       {environment,
+        [lists:flatten(
+           io_lib:format("~s=~s",
+                         [K, as_string(V)])) || {K, V} <- Env]}]).
+
 on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
     %% we do the initial receive stuff up-front
     %% just to avoid any initial ordering problems...
@@ -296,15 +316,16 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
                            true ->
                                LogFile = log_file("-stdio.log", Scope,
                                                   Id, Env, Config),
+                               filelib:ensure_dir(LogFile),
                                {ok, Fd2} = file:open(LogFile, [write]),
                                {LogFile, Fd2};
                            false ->
                                {"console", user}
                        end,
 
-    log({framework, Id}, "Reading OS process id from ~p~n", [Port]),
-    log({framework, Id}, "RPC Enabled: ~p~n", [RpcEnabled]),
-    log({framework, Id}, "StdIO Log: ~s~n", [LogName]),
+    log(framework, "[~p] Reading OS process id from ~p~n", [Id, Port]),
+    log(framework, "[~p] RPC Enabled: ~p~n", [Id, RpcEnabled]),
+    log(framework, "[~p] StdIO Log: ~s~n", [Id, LogName]),
 
     %% we make a hidden connection by default, so as to protect
     %% any trace handling that is going on, and to avoid 'messing up'
@@ -312,7 +333,7 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
     %% returned from erlang:nodes/0
     if RpcEnabled == true -> net_kernel:hidden_connect_node(Id);
        RpcEnabled /= true -> ok
-    end,  
+    end,
     case read_pid(Id, Port, Detached, RpcEnabled, LogFd) of
         {error, {stopped, Rc}} ->
             {stop, {launch_failure, Rc}};
@@ -323,11 +344,12 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
     end.
 
 log_file(Suffix, Scope, Id, Env, Config) ->
-    log_to(Suffix, Scope, Id,
-           ?CONFIG(log_dir, Env, systest_env:default_log_dir(Config))).
+    Default = filename:join(systest_env:default_log_dir(Config),
+                            atom_to_list(Scope)),
+    log_to(Suffix, Id, ?CONFIG(log_dir, Env, Default)).
 
-log_to(Suffix, Scope, Id, Dir) ->
-    filename:join(Dir, logfile(Scope, Id) ++ Suffix).
+log_to(Suffix, Id, Dir) ->
+    filename:join(Dir, logfile(Id, Suffix)).
 
 make_exec(FG, Detached, RpcEnabled, Config) ->
     FlagsGroup = atom_to_list(FG),
@@ -370,8 +392,8 @@ open_port(#exec{command=ExecutableCommand,
     RunEnv = [{env, Env}],
     LaunchOpts = [exit_status, hide, stderr_to_stdout,
                   use_stdio, {line, 16384}] ++ RunEnv,
-    log(framework, 
-        "Spawning executable [command = \"~s\", detached = ~p, args = ~p]~n",
+    log(framework,
+        "Spawning executable [command = ~s, detached = ~p, args = ~p]~n",
         [ExecutableCommand, Detached, Args]),
     case Detached of
         false -> erlang:open_port({spawn_executable, ExecutableCommand},
@@ -502,6 +524,5 @@ expand_env_variable(InStr, VarName, RawVarValue) ->
 
 %% proc configuration/setup
 
-logfile(Scope, Id) ->
-    atom_to_list(Scope) ++ "-" ++ atom_to_list(Id).
-
+logfile(Id, Suffix) ->
+    atom_to_list(Id) ++ Suffix.

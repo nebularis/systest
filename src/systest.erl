@@ -74,12 +74,12 @@ reset() ->
 
 %% startup/shutdown
 
-%% @doc starts any resources associated with the supplied Suite. 
+%% @doc starts any resources associated with the supplied Suite.
 %% @end
 start_suite(Suite, Config) ->
     start(systest_utils:strip_suite_suffix(Suite), Config).
 
-%% @doc immediately stops any resources associated with the supplied Scope 
+%% @doc immediately stops any resources associated with the supplied Scope
 %% @end
 stop_scope(Scope) when is_atom(Scope) ->
     systest_watchdog:force_stop(Scope).
@@ -97,7 +97,7 @@ start(Scope, Config) ->
     end.
 
 %% @doc starts any resources associated with the given scope, using the
-%% provided identity when registering them with the testing framework  
+%% provided identity when registering them with the testing framework
 %% @end
 start(Scope, Identify, Config) ->
     try systest_sut:start(Scope, Identify, trace_on(Identify, Config)) of
@@ -139,16 +139,16 @@ env(Key) ->
 
 %% tracing/debugging
 
-%% @doc Enables trace debugging. See the 
+%% @doc Enables trace debugging. See the
 %% <a href="https://github.com/nebularis/systest/wiki/tracing"><em>Tracing/Debugging Guide</em></a>
-%% for more details.   
+%% for more details.
 %% @end
 trace_on(Scope, Config) ->
     systest_trace:debug(Scope, Config).
 
-%% @doc Disables trace debugging. See the 
+%% @doc Disables trace debugging. See the
 %% <a href="https://github.com/nebularis/systest/wiki/tracing"><em>Tracing/Debugging Guide</em></a>
-%% for more details.   
+%% for more details.
 %% @end
 trace_off(Config) ->
     systest_trace:stop(Config).
@@ -185,7 +185,7 @@ kill_no_wait(ProcRef) ->
     systest_proc:kill(ProcRef).
 
 %% @doc Instructs the {@link systest_proc. <em>Process</em>} to stop and waits
-%% until it has completed its shutdown and fully stopped. Stopping a 
+%% until it has completed its shutdown and fully stopped. Stopping a
 %% {@link systest_proc. <em>Process</em>} in this way does <em>not</em> cause
 %% a test case to fail, as the {@link systest_sut. <em>System Under Test</em>}
 %% handler is informed that the shutdown is expected.
@@ -193,7 +193,7 @@ kill_no_wait(ProcRef) ->
 stop_and_wait(ProcRef) ->
     systest_proc:stop_and_wait(ProcRef).
 
-%% @doc Kills the {@link systest_proc. <em>Process</em>} and waits until it has 
+%% @doc Kills the {@link systest_proc. <em>Process</em>} and waits until it has
 %% fully stopped. Killing a {@link systest_proc. <em>Process</em>} in this way
 %% does <em>not</em> cause a test case to fail, as the
 %% {@link systest_sut. <em>System Under Test</em>} handler is informed that the
@@ -202,7 +202,7 @@ stop_and_wait(ProcRef) ->
 kill_and_wait(ProcRef) ->
     systest_proc:kill_and_wait(ProcRef).
 
-%% @doc Sets up a timer that will {@link systest_proc:kill/1. <em>kill</em>} 
+%% @doc Sets up a timer that will {@link systest_proc:kill/1. <em>kill</em>}
 %% the {@link systest_proc. <em>Process</em>} once it expires, and returns
 %% immediately. Killing a {@link systest_proc. <em>Process</em>} in this way
 %% does <em>not</em> cause a test case to fail, as the
@@ -275,12 +275,12 @@ procs(SutRef) when is_pid(SutRef) ->
 
 %% @doc Returns data for the required Field from a
 %% {@link systest_proc. <em>Process</em>} record or <em>ProcRef</em>.
-%% The version of this function taking a <em>proc</em> record is 
+%% The version of this function taking a <em>proc</em> record is
 %% intended for use in handler/user callbacks, whilst the version that takes
 %% a process identifier (pid) is intended for remote calls.
 %% @end
 process_data(Field, ProcRec) when is_record(ProcRec, proc) ->
-    %% TODO: the @@doc above should reference the record not the module 
+    %% TODO: the @@doc above should reference the record not the module
     systest_proc:get(Field, ProcRec);
 process_data(Field, ProcRef) when is_pid(ProcRef) ->
     {ok, Data} = systest_proc:proc_data(ProcRef, Field),
@@ -289,13 +289,13 @@ process_data(Field, ProcRef) when is_pid(ProcRef) ->
 process_activity_state(ProcRef) ->
     systest_proc:activity_state(ProcRef).
 
-%% @doc Returns any configured user-data from the given 
+%% @doc Returns any configured user-data from the given
 %% {@link systest_proc. <em>Process</em>}.
 %% @end
 read_process_user_data(ProcRef) ->
     systest_proc:user_data(ProcRef).
 
-%% @doc Writes the given data (term) to the indicated 
+%% @doc Writes the given data (term) to the indicated
 %% {@link systest_proc. <em>Process</em>}.
 %% @end
 write_process_user_data(ProcRef, Data) ->

@@ -5,7 +5,7 @@
                {cover, true}]},
     {flags, [{start, "-boot start_sasl +W w +K true +A30 +P 1048576"
                      " -pa ${settings.base_dir}/ebin "
-                     "-systest scratch_dir '{file,\"%{SCRATCH_DIR}\"}' "
+                     "-systest scratch_dir '{file,\"${ct.priv_dir}\"}' "
                      "-sasl sasl_error_logger false"}]},
     {on_start, [{systest, write_pid_file, []}]},
     {apps, [{sasl, [{errlog_type, error}]}]}

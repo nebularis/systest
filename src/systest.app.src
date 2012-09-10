@@ -1,6 +1,6 @@
 {application, systest,
  [
-  {description, ""},
+  {description, "Nebularis Systems Testing Utilities"},
   {vsn, {cmd, "git describe --abbrev=0 | sed 's/v//g'"}},
   {registered, []},
   {applications, [

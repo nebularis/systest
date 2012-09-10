@@ -39,7 +39,6 @@ all() ->
     systest_suite:export_all(?MODULE).
 
 starting_and_stopping_procs(Config) ->
-    process_flag(trap_exit, true),
     Sut = systest:active_sut(Config),
     systest_sut:log_status(Sut),
     [begin
@@ -52,13 +51,12 @@ starting_and_stopping_procs(Config) ->
     ok.
 
 killing_procs(Config) ->
-    process_flag(trap_exit, true),
     Sut = systest:active_sut(Config),
     systest_sut:log_status(Sut),
     [begin
          ?assertEqual(up, systest_proc:status(Ref)),
          ok = systest:kill_and_wait(Ref),
-         
+
          %% NB: the following statement are actually required in this test, as
          %% without them, we get 'pong' back even though the node in question
          %% has physically stopped (because the port that launched it exited)
@@ -69,7 +67,6 @@ killing_procs(Config) ->
     ok.
 
 sigkill_on_procs(Config) ->
-    process_flag(trap_exit, true),
     Sut = systest:active_sut(Config),
     systest_sut:log_status(Sut),
     [begin
@@ -80,8 +77,18 @@ sigkill_on_procs(Config) ->
      end || {_, Ref} <- systest:procs(Sut)],
     ok.
 
+handling_attached_processes_with_exec(Config) ->
+    Sut = systest:active_sut(Config),
+    systest_sut:log_status(Sut),
+    [begin
+         ?assertEqual(up, systest_proc:status(Ref)),
+         ok = systest_proc:kill_and_wait(Ref),
+
+         ?assertEqual(pang, net_adm:ping(Id))
+     end || {Id, Ref} <- systest:procs(Sut)],
+    ok.
+
 handling_detached_processes(Config) ->
-    process_flag(trap_exit, true),
     Sut = systest:active_sut(Config),
     systest_sut:log_status(Sut),
     [begin

@@ -38,6 +38,32 @@
     ]}
 ]}.
 
+{fork_proc_config, [
+    {startup, [
+        {handler, systest_cli},
+        {link_to_parent, true},
+        {detached, false},
+        {rpc_enabled, {true, {init, stop, []}}}
+    ]},
+    {flags, [
+        {start, [
+            {program, "${settings.base_dir}/resources/test/start-fork"},
+            {args, ["${proc.id}"]}
+        ]},
+        {stop,  [{program, "${settings.base_dir}/resources/test/stop"},
+                 {args, ["${proc.id}"]}]}
+    ]}
+]}.
+
+{forking_processes, [
+    {sut, [{localhost, [n1, n2]}]},
+    {processes, [
+        {n1, [fork_proc_config]},
+        {n2, [fork_proc_config]},
+        {n3, [fork_proc_config]}
+    ]}
+]}.
+
 {systest_cli_config_example, [
     {sut, [{localhost, [red, green]}]},
     {processes, [
@@ -85,7 +111,9 @@
     ]}
 ]}.
 
-{systest_cli_SUITE, [{all, cli_2node_cluster}]}.
+{systest_cli_SUITE, [{all, cli_2node_cluster},
+                     {handling_attached_processes_with_exec,
+                      forking_processes}]}.
 
 {start_cold, [
     {startup, [

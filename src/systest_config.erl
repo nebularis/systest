@@ -48,7 +48,7 @@
 
 -behaviour(gen_server).
 
--import(systest_utils, [as_string/1]).
+-import(systest_utils, [as_string/1, call/2]).
 
 -type key_type()    :: 'atom' | 'binary' | 'string'.
 -type return_spec() :: 'value' | 'key' | 'path'.
@@ -207,7 +207,7 @@ require(Key, Config) ->
     end.
 
 get_env() ->
-    gen_server:call(?MODULE, list).
+    call(?MODULE, list).
 
 get_env(Key) ->
     lookup(Key).
@@ -219,7 +219,7 @@ require_env(Key) ->
     end.
 
 set_env(Key, Value) ->
-    ok = gen_server:call(?MODULE, {set, Key, Value}).
+    ok = call(?MODULE, {set, Key, Value}).
 
 load_config(Id, Path) ->
     case file:consult(Path) of
@@ -230,13 +230,13 @@ load_config(Id, Path) ->
     end.
 
 load_config_terms(Id, Terms) ->
-    gen_server:call(?MODULE, {load, Id, Terms}).
+    call(?MODULE, {load, Id, Terms}).
 
 load_config_terms(Terms) ->
-    gen_server:call(?MODULE, {load, Terms}).
+    call(?MODULE, {load, Terms}).
 
 dump() ->
-    gen_server:call(?MODULE, dump).
+    call(?MODULE, dump).
 
 require_config(Key) ->
     case get_config(Key) of
@@ -247,7 +247,7 @@ require_config(Key) ->
 get_config(Key) ->
     systest_log:log(framework,
                     "reading config key ~p~n", [Key]),
-    case gen_server:call(?MODULE, {get_config, resources, Key}) of
+    case call(?MODULE, {get_config, resources, Key}) of
         [{Key, Config}] -> Config;
         _               -> noconfig
 
@@ -268,14 +268,14 @@ get_config(Key, Node, Default) ->
 get_static(Key) ->
     systest_log:log(framework,
                     "reading config key ~p~n", [Key]),
-    case gen_server:call(?MODULE, {get_static, Key}) of
+    case call(?MODULE, {get_static, Key}) of
         [Config] -> Config;
         []              -> noconfig;
         Other           -> Other
     end.
 
 set_static(Key, Value) ->
-    gen_server:call(?MODULE, {set_static, Key, Value}).
+    call(?MODULE, {set_static, Key, Value}).
 
 merge([], C2) ->
     C2;

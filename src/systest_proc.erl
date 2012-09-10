@@ -55,7 +55,7 @@
          handle_info/2, terminate/2, code_change/3]).
 
 -import(systest_log, [log/2, log/3]).
--import(systest_utils, [safe_call/3]).
+-import(systest_utils, [safe_call/3, call/2]).
 
 -ifdef(TEST).
 -export([proc_config/2]).
@@ -121,7 +121,7 @@ start(ProcInfo=#proc{handler=Handler, host=Host,
 
 -spec activate(proc_ref()) -> ok.
 activate(ProcRef) ->
-    gen_server:call(ProcRef, start).
+    call(ProcRef, start).
 
 -spec stop(proc_ref()) -> ok.
 stop(ProcRef) ->
@@ -165,12 +165,12 @@ status(ProcRef) ->
 
 -spec activity_state(proc_ref()) -> activity_state().
 activity_state(ProcRef) ->
-    {ok, State} = gen_server:call(ProcRef, state),
+    {ok, State} = call(ProcRef, state),
     State.
 
 -spec interact(proc_ref(), term()) -> term().
 interact(ProcRef, InputData) ->
-    gen_server:call(ProcRef, {interaction, InputData}).
+    call(ProcRef, {interaction, InputData}).
 
 -spec proc_data(proc_ref()) -> [{atom(), term()}].
 proc_data(ProcRef) ->
@@ -178,20 +178,19 @@ proc_data(ProcRef) ->
 
 -spec proc_data(proc_ref(), atom()) -> term().
 proc_data(ProcRef, Field) ->
-    gen_server:call(ProcRef, {proc_info_get, Field}).
+    call(ProcRef, {proc_info_get, Field}).
 
 -spec user_data(proc_ref()) -> [{atom(), term()}].
 user_data(ProcRef) ->
-    gen_server:call(ProcRef, user_data).
+    call(ProcRef, user_data).
 
 -spec user_data(proc_ref(), term()) -> 'ok'.
 user_data(ProcRef, Data) ->
-    gen_server:call(ProcRef, {user_data, Data}).
+    call(ProcRef, {user_data, Data}).
 
 -spec joined_sut(proc_ref(), pid(), [{atom(), pid()}]) -> 'ok'.
 joined_sut(ProcRef, SutRef, SiblingProcs) ->
-    ok = gen_server:call(ProcRef, {joined, SutRef, SiblingProcs},
-                         infinity).
+    ok = call(ProcRef, {joined, SutRef, SiblingProcs}).
 
 %% NB: this *MUST* run on the client
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->

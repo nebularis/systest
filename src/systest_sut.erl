@@ -41,7 +41,7 @@
 -include("systest.hrl").
 
 -import(systest_log, [log/2, log/3]).
--import(systest_utils, [safe_call/3]).
+-import(systest_utils, [safe_call/3, call/2]).
 
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
@@ -105,7 +105,7 @@ restart_proc(SutRef, Proc, Timeout) ->
     end.
 
 status(SutRef) ->
-    gen_server:call(SutRef, status).
+    call(SutRef, status).
 
 procs(SutRef) ->
     safe_call(SutRef, procs, not_found).

@@ -32,7 +32,7 @@
 -export([with_file/3, with_termfile/2, combine/2, uniq/1]).
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
 -export([record_to_proplist/2, border/2, print_heading/1, print_section/2]).
--export([ets_dump/1, quiet/1, safe_call/3]).
+-export([ets_dump/1, quiet/1, safe_call/3, call/2]).
 
 abort(Fmt, Args) ->
     io:format(user, "ERROR:  " ++ Fmt, Args),
@@ -113,11 +113,20 @@ rm_rf(Path, ok) ->
             end
     end.
 
+%% @doc makes a gen_server:call with 'infinity' timeout.
+%% @end
+call(Ref, Msg) ->
+    gen_server:call(Ref, Msg, infinity).
+
+%% @doc makes a gen_server call, falling back to the supplied
+%% Default if ProcRef is invalid (i.e., is a dead pid or
+%% doesn't represent a registered name).
+%% @end
 safe_call(ProcRef, Msg, Default) ->
     try
-        gen_server:call(ProcRef, Msg)
+        call(ProcRef, Msg)
     catch
-        _:{noproc,{gen_server,call,[ProcRef, Msg]}} ->
+        _:{noproc,{gen_server,call,[ProcRef, Msg|_]}} ->
             Default
     end.
 

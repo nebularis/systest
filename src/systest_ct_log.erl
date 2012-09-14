@@ -37,5 +37,5 @@ start() ->
 %% systest_log callback API!
 %%
 
-write_log(_EvId, _Fd, What, Args) ->
-    ct:log(What, Args).
+write_log(EvId, _Fd, What, Args) ->
+    ct:log("[~p] " ++ What, [EvId|Args]).

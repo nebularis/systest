@@ -54,7 +54,8 @@
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2, code_change/3]).
 
--import(systest_log, [log/2, log/3]).
+-import(systest_log, [log/2, log/3,
+                      framework/2, framework/3]).
 -import(systest_utils, [safe_call/3, call/2]).
 
 -ifdef(TEST).
@@ -116,7 +117,7 @@ start(ProcInfo=#proc{handler=Handler, host=Host,
          end,
     NI = set([{config,[{proc, Id}|BaseConf]}], Id),
 
-    log(framework, "starting ~p on ~p~n", [Name, Host]),
+    framework("starting ~p on ~p~n", [Name, Host]),
     gen_server:start_link(?MODULE, [NI], []).
 
 -spec activate(proc_ref()) -> ok.
@@ -137,9 +138,9 @@ kill(ProcRef) ->
 
 -spec sigkill(proc_ref()) -> 'ok'.
 sigkill(ProcRef) ->
-    log(framework,
-        "[WARNING] using SIGKILL is *NOT*"
-        " guaranteed to work with all proc types!~n"),
+    framework(
+      "[WARNING] using SIGKILL is *NOT*"
+      " guaranteed to work with all proc types!~n", []),
     gen_server:cast(ProcRef, sigkill).
 
 -spec kill_after(integer(), proc_ref()) -> 'ok'.
@@ -196,10 +197,10 @@ joined_sut(ProcRef, SutRef, SiblingProcs) ->
 shutdown_and_wait(Owner, ShutdownOp) when is_pid(Owner) ->
     case (Owner == self()) orelse not(is_process_alive(Owner)) of
         true  -> ok;
-        false -> log(framework, "waiting for ~p to exit~n", [Owner]),
+        false -> framework("waiting for ~p to exit~n", [Owner]),
                  systest_cleaner:kill_wait([Owner], ShutdownOp)
     end,
-    log(framework, "shutdown_and_wait complete~n", []).
+    framework("shutdown_and_wait complete~n", []).
 
 %%
 %% Handler facing API
@@ -255,9 +256,9 @@ do_start(ProcInfo=#proc{handler=Callback, cover=Cover}) ->
             LogBase = systest_env:default_log_dir(get(config, NI2)),
             case systest_log:activate_logging_subsystem(process, Id, LogBase) of
                 {error, _} ->
-                    log(framework, "per-process logging is disabled~n", []);
+                    framework("per-process logging is disabled~n", []);
                 {ok, Dest} ->
-                    log(framework, "per-process logging to ~p~n", [Dest])
+                    framework("per-process logging to ~p~n", [Dest])
             end,
 
             %% NB: look at branch 'cover' for details
@@ -314,21 +315,22 @@ apply_hook(Hook, Item, {Proc, HState}) ->
             Existing = get(user, Proc),
             {set([{user, StateL ++ Existing}], Proc), HState};
         {write, Loc, Data} ->
-            log({framework, get(id, Proc)},
-                "~p (argv = ~p, state-update = [~p => ~p])~n",
-                [Hook, Item, Loc, Data]),
+            framework(get(id, Proc),
+                      "~p (argv = ~p, state-update = [~p => ~p])~n",
+                      [Hook, Item, Loc, Data]),
             {systest_proc:set([{Loc, Data}], Proc), HState};
         Other ->
-            log({framework, get(id, Proc)},
+            framework(get(id, Proc),
                 "~p (argv = ~p, response = ~p)~n",
                 [Hook, Item, Other]),
             {Proc, HState}
     end.
 
 on_join(Proc, Sut, Procs, Hooks) ->
-    log({framework, get(id, Proc)},
-        "process has joined system under test: ~p~n",
-        [systest_sut:get(id, Sut)]),
+    framework(get(id, Proc),
+              "process has joined system under test: ~p~n",
+              [systest_sut:get(id, Sut)]),
+
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
     {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
@@ -382,9 +384,9 @@ handle_msg(Msg, State) ->
 
 handle_msg({joined, _Sut, _Procs},
             State=#state{activity_state=not_started}, _ReplyTo) ->
-    log(framework, "skipping on_join hook for ~p "
-                   "[activity_state = not_started]~n",
-                   [self()]),
+    framework("skipping on_join hook for ~p "
+              "[activity_state = not_started]~n",
+              [self()]),
     {reply, ok, State};
 handle_msg({proc_info_get, Field}, State=#state{proc=Proc}, _ReplyTo) ->
     Value = get(Field, Proc),
@@ -414,8 +416,8 @@ handle_msg(_, State=#state{activity_state=not_started}, _ReplyTo) ->
     {reply, {error, not_started}, State};
 %% NB: every clause below *requires* that activity_state /= not_started
 handle_msg({joined, Sut, Procs}, State=#state{proc=Proc}, _ReplyTo) ->
-    log({framework, get(id, Proc)},
-        "proc on_join info: ~p~n", [Proc#proc.on_join]),
+    framework(get(id, Proc),
+              "proc on_join info: ~p~n", [Proc#proc.on_join]),
     case Proc#proc.on_join of
         []    -> {reply, ok, State};
         Hooks -> Proc2 = on_join(Proc, Sut, Procs, Hooks),
@@ -451,7 +453,8 @@ handle_msg(stop, State=#state{proc=Proc, handler=Mod,
         %% TODO: consider whether this is structured correctly - it *feels*
         %% a little hackish - and perhaps having a supervising process deal
         %% with these 'interactions' would be better
-        Shutdown  -> [log({framework, get(id, Proc)},
+        Shutdown  -> [framework(
+                        get(id, Proc),
                         "on_stop (argv = ~p, response = ~p)~n",
                         [In, interact(Proc, In, ModState)]) || In <- Shutdown]
     end,
@@ -483,7 +486,7 @@ handle_msg({interaction, _},
 handle_msg({interaction, InputData},
             State=#state{proc=Proc, handler=Mod,
                          handler_state=ModState}, ReplyTo) ->
-    log({framework, get(id, Proc)}, "handle_interaction: ~p~n", [InputData]),
+    framework(get(id, Proc), "handle_interaction: ~p~n", [InputData]),
     handle_callback(Mod:handle_interaction(InputData,
                                            Proc, ModState), State, ReplyTo);
 %% our catch-all, which defers to Mod:handler_state/3 to see if the
@@ -559,7 +562,7 @@ reply(Reply, ReplyTo, State) ->
 
 make_proc(Config) ->
     Name = ?REQUIRE(name, Config),
-    log(framework, "make process: ~p~n", [Name]),
+    framework("make process: ~p~n", [Name]),
     %% NB: new_proc_info is an exprecs generated function
     record_fromlist([{scope,      ?REQUIRE(scope, Config)},
                      {host,       ?REQUIRE(host, Config)},
@@ -587,9 +590,9 @@ lookup(Key, Config, Default) ->
 
 proc_config(Sut, Proc) ->
     Procs = systest_config:get_config(Sut, processes, []),
-    log(framework, "processes loaded from config: ~p~n", [Procs]),
+    framework("processes loaded from config: ~p~n", [Procs]),
     UserData = systest_config:get_config(Sut, user_data, []),
-    log(framework, "user-data loaded from config: ~p~n", [UserData]),
+    framework("user-data loaded from config: ~p~n", [UserData]),
     %% TODO: should *this* not ?REQUIRE otherwise how do we configure the proc?
     ProcConf = case ?CONFIG(Proc, Procs, undefined) of
                    undefined               -> [];
@@ -599,7 +602,7 @@ proc_config(Sut, Proc) ->
     [{user, UserConf}|ProcConf].
 
 load_config(Refs) ->
-    log(framework, "merging configuration refs: ~p~n", [Refs]),
+    framework("merging configuration refs: ~p~n", [Refs]),
     lists:foldl(fun merge_refs/2, [], Refs).
 
 merge_refs(Ref, []) ->

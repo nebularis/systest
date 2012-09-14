@@ -63,7 +63,8 @@
 
 -include("systest.hrl").
 
--import(systest_log, [log/2, log/3]).
+-import(systest_log, [log/2, log/3,
+                      framework/2, framework/3]).
 -import(systest_utils, [as_string/1]).
 
 %%
@@ -123,13 +124,12 @@ init(Proc=#proc{config=Config}) ->
                                {detached, Detached},
                                {rpc_enabled, RpcEnabled}],
                     LogMsg = systest_utils:proplist_format(LogInfo),
-                    log(framework,
-                        "external process handler ~p[~p] started:~n~s~n",
-                        [Scope, Id, LogMsg]),
-                    log(framework, "~p [~p] start-command:~n~s~n",
-                        [Scope, Id, format_exec(StartCmd)]),
-                    log(framework, "~p [~p] stop-command:~n~s~n",
-                        [Scope, Id, format_exec(StopCmd)]),
+                    framework("external process handler ~p[~p] started:~n~s~n",
+                              [Scope, Id, LogMsg]),
+                    framework("~p [~p] start-command:~n~s~n",
+                              [Scope, Id, format_exec(StartCmd)]),
+                    framework("~p [~p] stop-command:~n~s~n",
+                              [Scope, Id, format_exec(StopCmd)]),
                     {ok, N2, Sh}
                 end);
         StopError ->
@@ -177,8 +177,9 @@ handle_kill(#proc{os_pid=OsPid},
     systest:sigkill(OsPid),
     Sh#sh{state=killed};
 handle_kill(_Proc, Sh=#sh{id=Id, port=Port, detached=false, state=running}) ->
-    log({framework, Id},
-        "kill instruction received - terminating port ~p~n", [Port]),
+    framework(Id,
+              "kill instruction received - "
+              "terminating port ~p~n", [Port]),
     Port ! {self(), close},
     Sh#sh{state=killed}.
 
@@ -188,8 +189,8 @@ handle_kill(_Proc, Sh=#sh{id=Id, port=Port, detached=false, state=running}) ->
 %%                             {rpc_stop, {M,F,A}, NewState} |
 %%                             NewState.
 handle_stop(Proc, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
-    log(framework, "running shutdown hooks for ~p~n",
-        [systest_proc:get(id, Proc)]),
+    framework("running shutdown hooks for ~p~n",
+              [systest_proc:get(id, Proc)]),
     run_shutdown_hook(SC, Sh);
 %% TODO: could this be core proc behaviour?
 handle_stop(_Proc, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->
@@ -218,12 +219,12 @@ handle_msg({Port, {data, {_, Line}}}, _Proc,
     Sh;
 handle_msg({Port, {exit_status, 0}}, _Proc,
             Sh=#sh{id=Id, port=Port, start_command=#exec{command=Cmd}}) ->
-    log({framework, Id}, "program ~s exited normally (status 0)~n", [Cmd]),
+    framework(Id, "program ~s exited normally (status 0)~n", [Cmd]),
     {stop, normal, Sh#sh{state=stopped}};
 handle_msg({Port, {exit_status, Exit}=Rc}, Proc,
              Sh=#sh{id=Id, port=Port, state=State}) ->
-    log({framework, Id},
-        "os process ~p shut down with error/status code ~p~n",
+    framework(Id,
+              "os process ~p shut down with error/status code ~p~n",
         [Proc#proc.id, Exit]),
     ShutdownType = case ?IS_DYING(State) of
                        true  -> normal;
@@ -233,7 +234,7 @@ handle_msg({Port, {exit_status, Exit}=Rc}, Proc,
 handle_msg({Port, closed}, Proc,
             Sh=#sh{id=Id, port=Port,
                    state=State, detached=false}) when ?IS_DYING(State) ->
-    log({framework, Id}, "~p (attached) closed~n", [Port]),
+    framework(Id, "~p (attached) closed~n", [Port]),
     case Sh#sh.rpc_enabled of
         true ->
             %% to account for a potential timing issue when the calling test
@@ -247,7 +248,7 @@ handle_msg({Port, closed}, Proc,
     end,
     {stop, normal, Sh};
 handle_msg({Port, closed}, _Proc, Sh=#sh{id=Id, port=Port}) ->
-    log({framework, Id}, "~p closed~n", [Port]),
+    framework(Id, "~p closed~n", [Port]),
     {stop, {port_closed, Port}, Sh};
 handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc,
             Sh=#sh{shutdown_port=SPort,
@@ -256,7 +257,7 @@ handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc,
                    log=Fd,
                    id=Id}) when Pid == SPort andalso
                                 ?IS_DYING(State) ->
-    log({framework, Id}, "termination Port completed ok~n"),
+    framework(Id, "termination Port completed ok~n"),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     case Detached of
         true  -> {stop, normal, Sh};
@@ -266,22 +267,22 @@ handle_msg({'EXIT', Pid, {error, Rc, StopAcc}},
            _Proc, Sh=#sh{id=Id,
                          shutdown_port=SPort,
                          log=Fd}) when Pid == SPort ->
-    log({framework, Id},
-        "termination Port stopped abnormally (status ~p)~n", [Rc]),
+    framework(Id,
+              "termination Port stopped abnormally (status ~p)~n", [Rc]),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     {stop, termination_port_error, Sh};
 handle_msg(Info, _Proc, Sh=#sh{id=Id, state=St, port=P, shutdown_port=SP}) ->
-    log({framework, Id},
-        "Ignoring Info Message:  ~p~n"
-        "State:                  ~p~n"
-        "Port:                   ~p~n"
-        "Termination Port:       ~p~n",
-        [Info, St, P, SP]),
+    framework(Id,
+              "Ignoring Info Message:  ~p~n"
+              "State:                  ~p~n"
+              "Port:                   ~p~n"
+              "Termination Port:       ~p~n",
+              [Info, St, P, SP]),
     Sh.
 
 %% @doc gives the handler a chance to clean up prior to being fully stopped.
 terminate(Reason, _Proc, #sh{port=Port, id=Id, log=Fd}) ->
-    log({framework, Id}, "terminating due to ~p~n", [Reason]),
+    framework(Id, "terminating due to ~p~n", [Reason]),
     %% TODO: verify that we're not *leaking* ports if we fail to close them
     case Fd of
         user -> ok;
@@ -323,9 +324,9 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
                                {"console", user}
                        end,
 
-    log(framework, "[~p] Reading OS process id from ~p~n", [Id, Port]),
-    log(framework, "[~p] RPC Enabled: ~p~n", [Id, RpcEnabled]),
-    log(framework, "[~p] StdIO Log: ~s~n", [Id, LogName]),
+    framework("[~p] Reading OS process id from ~p~n", [Id, Port]),
+    framework("[~p] RPC Enabled: ~p~n", [Id, RpcEnabled]),
+    framework("[~p] StdIO Log: ~s~n", [Id, LogName]),
 
     %% we make a hidden connection by default, so as to protect
     %% any trace handling that is going on, and to avoid 'messing up'
@@ -392,9 +393,9 @@ open_port(#exec{command=ExecutableCommand,
     RunEnv = [{env, Env}],
     LaunchOpts = [exit_status, hide, stderr_to_stdout,
                   use_stdio, {line, 16384}] ++ RunEnv,
-    log(framework,
-        "Spawning executable [command = ~s, detached = ~p, args = ~p]~n",
-        [ExecutableCommand, Detached, Args]),
+    framework(
+      "Spawning executable [command = ~s, detached = ~p, args = ~p]~n",
+      [ExecutableCommand, Detached, Args]),
     case Detached of
         false -> erlang:open_port({spawn_executable, ExecutableCommand},
                                   [{args, Args}|LaunchOpts]);
@@ -454,7 +455,7 @@ read_pid(ProcId, Port, Detached, RpcEnabled, Fd) ->
                             io:format(Fd, "[~p] ~p~n", [ProcId, Other]),
                             read_pid(ProcId, Port, Detached, RpcEnabled, Fd)
                     after 5000 ->
-                        log({framework, ProcId},
+                        framework(ProcId,
                             "timeout waiting for os pid... re-trying~n", []),
                         read_pid(ProcId, Port, Detached, RpcEnabled, Fd)
                     end;
@@ -474,6 +475,7 @@ read_pid(ProcId, Port, Detached, RpcEnabled, Fd) ->
     end.
 
 wait_for_up(NodeId) ->
+    %% TODO: this should not block indefinitely
     case net_kernel:hidden_connect_node(NodeId) of
         true    -> ok;
         _       -> erlang:yield(), wait_for_up(NodeId)

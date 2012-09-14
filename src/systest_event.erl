@@ -29,24 +29,20 @@
 -include("systest.hrl").
 -include_lib("common_test/include/ct_event.hrl").
 
--export([console/2,
-         init/1,
+-export([init/1,
          handle_event/2,
          handle_call/2,
          handle_info/2,
          terminate/2,
          code_change/3]).
 
+-import(systest_log, [console/2,
+                      framework/2]).
+
 descriptor({_Conf, GroupName, _}) ->
     {GroupName, "test case group"};
 descriptor(Other) ->
     {Other, "test case"}.
-
-console(Msg, Args) ->
-    systest_log:log(Msg, Args).
-
-framework(Msg, Args) ->
-    systest_log:log(framework, Msg, Args).
 
 init([]) ->
     {ok, []}.
@@ -54,7 +50,7 @@ init([]) ->
 handle_event(#event{name=tc_start, data={Suite,FuncOrGroup}}, State) ->
     case FuncOrGroup of
         init_per_suite ->
-            framework("starting test suite ~p~n", [Suite]);
+            systest_log:framework("starting test suite ~p~n", [Suite]);
         end_per_suite ->
             ok;
         {Conf,GroupName,_GroupProperties} ->
@@ -74,8 +70,8 @@ handle_event(#event{name=tc_done,
     case Result of
         ok ->
             LogF = case is_ct_wrap_function(N) of
-                       true  -> fun framework/2;
-                       false -> fun console/2
+                       true -> fun systest_log:framework/2;
+                       false -> fun systest_log:console/2
                    end,
             LogF("~s ~p completed successfully~n", [Desc, N]);
         {skipped, SkipReason} ->

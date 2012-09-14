@@ -32,7 +32,9 @@
 
 -include("systest.hrl").
 
--import(systest_log, [log/2, log/3]).
+-import(systest_log, [log/2, log/3,
+                      framework/2,
+                      framework/3]).
 
 -record(state, { runstate='running' :: atom() }).
 
@@ -102,15 +104,15 @@ handle_msg({nodedown, NodeId}, #proc{id=NodeId}, State=#state{runstate=RS}) ->
                    end,
     {stop, ShutdownType, State};
 handle_msg(Info, Proc, State=#state{runstate=RS}) ->
-    log({framework, systest_proc:get(id, Proc)},
-        "[~p] Ignoring Info Message:  ~p~n"
-        "State:                       ~p~n",
-        [?MODULE, Info, RS]),
+    framework(systest_proc:get(id, Proc),
+              "[~p] Ignoring Info Message:  ~p~n"
+              "State:                       ~p~n",
+              [?MODULE, Info, RS]),
     State.
 
 terminate(Reason, Proc, _State) ->
-    log({framework, systest_proc:get(id, Proc)},
-        "Terminating due to ~p~n", [Reason]).
+    framework(systest_proc:get(id, Proc),
+              "Terminating due to ~p~n", [Reason]).
 
 %%
 %% Private API

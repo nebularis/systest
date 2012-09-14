@@ -22,11 +22,11 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
-%% @hidden 
+%% @hidden
 %% Logging Event Handler - provides a gen_event based logging infrastructure
 %% which is very lightweight, at relatively low cost. Whilst we aren't going to
 %% win any prizes for efficiency, we <i>only</i> deal with logging test related
-%% information, so we can probably afford to be relatively lazy here. This 
+%% information, so we can probably afford to be relatively lazy here. This
 %% approach also enables us to remain basically framework agnostic, and does
 %% allow a user (in theory) to provide a custom log handler that delegates to
 %% their own logging framework of choice.

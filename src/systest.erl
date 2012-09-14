@@ -286,6 +286,10 @@ process_data(Field, ProcRef) when is_pid(ProcRef) ->
     {ok, Data} = systest_proc:proc_data(ProcRef, Field),
     Data.
 
+%% @doc Returns the activity_state flag for the supplied
+%% {@link systest_proc. <em>Process</em>} - the the
+%% {@link systest_proc. <i>systest_proc</i>} documentation
+%% for further details.
 process_activity_state(ProcRef) ->
     systest_proc:activity_state(ProcRef).
 

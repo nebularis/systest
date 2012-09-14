@@ -189,7 +189,7 @@ handle_failures(Prof, N, Config) ->
     maybe_dump(Config),
     ProfileName = systest_profile:get(name, Prof),
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
-    ErrorHandler("[failed] Execution Profile ~p: ~p failed test cases~n",
+    ErrorHandler("[failed] Execution Profile ~p: ~p Failed Test Cases~n",
                  [ProfileName, N]).
 
 handle_errors(_Exec, Reason, Config) ->
@@ -317,7 +317,20 @@ maybe_start_net_kernel(Config) ->
                 true  ->
                     ok
             end,
-            io:format(user, "[systest.net] ~s~n", [os:cmd("epmd -names")]),
+            case re:run(os:cmd("epmd -names"), "[^\\n]+",
+                        [global, {capture, all, list}]) of
+                {match, EpmdData} ->
+                    EpmdRunInfo = re:replace(hd(EpmdData),
+                                             "with data:",
+                                             ""),
+                    [begin
+                         io:format(user, "[systest.net] ~s~n",
+                                   [re:replace(hd(re:split(Line, "\\r")),
+                                               "name", "found")])
+                     end || Line <- [EpmdRunInfo|tl(EpmdData)]];
+                _ ->
+                    ok
+            end,
             if
                 UseLongNames =:= true ->
                     {ok, _} = net_kernel:start([NodeName, longnames]);

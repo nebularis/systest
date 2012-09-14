@@ -25,6 +25,7 @@
 %% @doc Module systest_verify_cth
 %% This module extends the default common test hook (systest_cth) to allow for
 %% expected failing test cases.
+%% @end
 %% ----------------------------------------------------------------------------
 -module(systest_error_handling_cth).
 
@@ -39,21 +40,46 @@ pre_init_per_testcase(TC=sut_start_scripts_badly_configured, Config, State) ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
         {{fail,{system_under_test, start, {error,
                     {configuration_not_found, bad_cli}}}},_} ->
-            systest_event:console("ignoring expected sut start failure~n", []),
+            systest_log:console("ignoring expected sut start failure~n", []),
             systest_watchdog:clear_exceptions(),
             {Config, State};
         Other ->
             {{fail, Other}, State}
     end;
-pre_init_per_testcase(TC=failing_sut_on_start_hook, Config, State) ->
+pre_init_per_testcase(TC, Config, State)
+  when TC == failing_proc_on_start_hook orelse
+       TC == failing_sut_on_start_hook ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
         {{fail,{system_under_test, start,
                 {error, {hook_failed,
-                    {local,erlang,error,[]}=What, _}}}},_} ->
-            systest_event:console("ignoring expected sut start failure ~p~n",
-                                  [What]),
+                    {local, erlang, error, _}=What, _}}}},_} ->
+            systest_log:console("ignoring expected start failure ~p~n",
+                                [What]),
             systest_watchdog:clear_exceptions(),
             {Config, State};
+        Other ->
+            {{fail, Other}, State}
+    end;
+pre_init_per_testcase(TC=failing_proc_on_joined_hook,
+                      Config, State) ->
+    case systest_cth:pre_init_per_testcase(TC, Config, State) of
+        {{fail, {system_under_test,start,
+                 {error,
+                  {{hook_failed,
+                    {local, M, F, A}, undef}, _}}}},
+         State} ->
+            systest_log:console("ignoring expected sut start failure "
+                                "(call to undefined mfa ~p:~p/~p)~n",
+                                [M, F, length(A)]),
+            [{_Sut, crashed, Reason}] = systest_watchdog:exceptions(TC),
+            case Reason of
+                {{hook_failed,
+                  {local, M, F, _Args}, undef}, _} ->
+                    systest_watchdog:clear_exceptions(),
+                    {Config, State};
+                Other ->
+                    {{fail, Other}, State}
+            end;
         Other ->
             {{fail, Other}, State}
     end;

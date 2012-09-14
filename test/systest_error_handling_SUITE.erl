@@ -46,8 +46,14 @@
 suite() -> [{timetrap, {minutes, 2}}].
 
 all() ->
+    %% the timetrap_failure test *must* run separately
+    %% from the rest of the SUITE, as the error it generates
+    %% cannot be handled even by a ct_hook, and therefore the
+    %%
     [sut_start_scripts_badly_configured,
-     failing_sut_on_start_hook].
+     failing_proc_on_start_hook,
+     failing_sut_on_start_hook,
+     failing_proc_on_joined_hook].
 
 %%
 %% Test Case Definitions
@@ -71,6 +77,17 @@ sut_start_scripts_badly_configured() ->
 sut_start_scripts_badly_configured(_) ->
     ok.
 
+failing_proc_on_start_hook() ->
+    [{userdata, [{doc, "Fires off a deliberately failing proc on_start hook."
+                       "This testcase should never run, being simply "
+                       "a place-holder for an init_per_testcase that "
+                       "we expect to fail.\n"
+                       "The validation of this failure is performed in "
+                       "the systest_supervision_cth common test hook!"}]}].
+
+failing_proc_on_start_hook(_) ->
+    ok.
+
 failing_sut_on_start_hook() ->
     [{userdata, [{doc, "Fires off a deliberately failing sut on_start hook."
                        "This testcase should never run, being simply "
@@ -82,3 +99,13 @@ failing_sut_on_start_hook() ->
 failing_sut_on_start_hook(_) ->
     ok.
 
+failing_proc_on_joined_hook() ->
+    [{userdata, [{doc, "Fires off a deliberately failing proc on_joined hook."
+                       "This testcase should never run, being simply "
+                       "a place-holder for an init_per_testcase that "
+                       "we expect to fail.\n"
+                       "The validation of this failure is performed in "
+                       "the systest_supervision_cth common test hook!"}]}].
+
+failing_proc_on_joined_hook(_) ->
+    ok.

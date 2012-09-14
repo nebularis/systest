@@ -77,8 +77,10 @@ start_it(How, ScopeId, SutId, Config) ->
         {error, noconfig} ->
             Config;
         {error, {bad_return_value, Return}} ->
+            log_startup_errors(SutId, Return),
             {error, Return};
-        {error, _Other}=Err ->
+        {error, Other}=Err ->
+            log_startup_errors(SutId, Other),
             Err;
         {ok, Pid} ->
             Config2 = systest_config:ensure_value(SutId, Pid, Config),
@@ -157,10 +159,23 @@ init([Scope, Id, Config]) ->
                          end || Proc <- Procs],
                         {ok, Sut}
                     catch
-                        _:Error -> {stop, Error}
+                        throw:{on_start, Reason} ->
+                            {stop, Reason};
+                        _:Err ->
+                            systest_log:log("ERROR: "
+                                            "system under test startup "
+                                            "failed - see the test log(s) "
+                                            "for details~n",
+                                            []),
+                            systest_log:framework(
+                              "sut on_join hooks failed: ~p~n",
+                              [Err]),
+                            {stop, Err}
                     end;
-                Error ->
-                    {stop, Error}
+                {error, Error} ->
+                    {stop, Error};
+                Other ->
+                    {stop, Other}
             end;
         {error, clash} ->
             {stop, name_in_use}
@@ -169,13 +184,20 @@ init([Scope, Id, Config]) ->
 maybe_run_hooks(Id, Sut=#sut{on_start=Hooks}) ->
     case Hooks of
         [{on_start, Run}|_] ->
-            log({framework, Id},
-                "running on_start hooks ~p~n", [Run]),
-            [systest_hooks:run(Sut,
-                               Hook, Sut) || Hook <- Run];
+            framework(Id,
+                      "running on_start hooks ~p~n", [Run]),
+            [try
+                 systest_hooks:run(Sut, Hook, Sut)
+             catch _:Reason ->
+                 systest_log:log("ERROR: "
+                                 "system under test on_start hook(s) "
+                                 "failed - see the test log(s) for details~n",
+                                 []),
+                 throw({on_start, Reason})
+             end || Hook <- Run];
         Other ->
-            log({framework, Id},
-                "ignoring on_start hooks ~p~n", [Other]),
+            framework(Id,
+                      "ignoring SUT on_start hooks ~p~n", [Other]),
             ok
     end.
 
@@ -228,6 +250,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal API
 %%
 
+log_startup_errors(SutId, Return) ->
+    systest_log:log(system,
+                    "ERROR: unable to start ~p~n",
+                    [SutId]),
+    systest_log:framework("sut startup returned ~p~n", [Return]).
+
 clear_pending({'EXIT', Pid, _},
               #sut{id = Identity, name = SutName,
                    config = Config, procs = Procs,
@@ -241,6 +269,7 @@ clear_pending({'EXIT', Pid, _},
             {ProcName, Host} = systest_utils:proc_id_and_hostname(Id),
             [Proc] = build_procs(Identity, SutName,
                                  {Host, [ProcName]}, Config),
+            %% TODO: allow restarts to fail!!
             NewProc = start_proc(Identity, Proc),
             RemainingProcs = Procs -- [DeadProc],
 
@@ -286,7 +315,7 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
     end.
 
 with_sut({Scope, Identity}, Handler, Config) ->
-    case systest_config:sut_config(Scope, Identity) of
+    try systest_config:sut_config(Scope, Identity) of
         {_, noconfig} ->
             noconfig;
         {Alias, SutConfig} ->
@@ -304,6 +333,8 @@ with_sut({Scope, Identity}, Handler, Config) ->
                  procs = Procs,
                  config = Config,
                  on_start = Hooks}
+    catch _:Err ->
+        {error, Err}
     end.
 
 %% TODO: make a Handler:status call to get detailed information back...
@@ -334,18 +365,31 @@ start_host(Identity, Sut,
         true  -> verify_host(Host);
         false -> ok
     end,
-    [start_proc(Identity, Proc) ||
-            Proc <- build_procs(Identity, Sut, HostConf, Config)].
+    [try start_proc(Identity, Proc) of
+         {error, Err} -> throw(Err);
+         Ret          -> Ret
+     catch _:E        -> throw(E)
+     end || Proc <- build_procs(Identity, Sut, HostConf, Config)].
 
 start_proc(Identity, Proc) ->
-    systest_log:log(framework, "handoff to ~p~n",
-                    [systest_proc:get(name, Proc)]),
-    {ok, ProcRef} = systest_proc:start(Proc),
-    ok = systest_watchdog:proc_started(Identity, ProcRef),
-    %% NB: the id field of Proc will *not* be set (correctly)
-    %% until after the gen_server has started, so an API call
-    %% is necessary rather than using systest_proc:get/2
-    {?CONFIG(id, systest_proc:proc_data(ProcRef)), ProcRef}.
+    try
+        case systest_proc:start(Proc) of
+            {ok, ProcRef} ->
+                ok = systest_watchdog:proc_started(Identity, ProcRef),
+
+                %% NB: the id field of Proc will *not* be set (correctly)
+                %% until after the gen_server has started, so an API call
+                %% is necessary rather than using systest_proc:get/2
+                {?CONFIG(id, systest_proc:proc_data(ProcRef)), ProcRef};
+            {error, _}=Error ->
+                Error
+        end
+    catch _:Err ->
+        systest_log:log(system,
+                        "ERROR: ~p unable to start or configure process ~p~n",
+                        [Identity, systest_proc:get(name, Proc)]),
+        throw(Err)
+    end.
 
 verify_host(Host) ->
     case systest_env:is_epmd_contactable(Host, 5000) of

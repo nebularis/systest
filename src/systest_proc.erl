@@ -285,9 +285,13 @@ do_start(ProcInfo=#proc{handler=Callback, cover=Cover}) ->
             %% TODO: validate that these succeed and shutdown when they don't
             case NI2#proc.on_start of
                 []   -> {ok, State};
-                Xtra -> {NI4, _} = lists:foldl(fun apply_startup/2,
-                                               {NI3, HState}, Xtra),
-                        {ok, State#state{proc=NI4}}
+                Xtra -> try
+                            {NI4, _} = lists:foldl(fun apply_startup/2,
+                                                   {NI3, HState}, Xtra),
+                            {ok, State#state{proc=NI4}}
+                        catch
+                            _:{stop, Reason} -> {stop, Reason}
+                        end
             end;
         {error, Err} ->
             {stop, Err};
@@ -300,11 +304,21 @@ do_start(ProcInfo=#proc{handler=Callback, cover=Cover}) ->
 proc_id(Host, Name) ->
     list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)).
 
-apply_startup(Item, ProcState) ->
-    apply_hook(on_start, Item, ProcState).
+apply_startup(Item, {Proc, _}=ProcState) ->
+    try
+        apply_hook(on_start, Item, ProcState)
+    catch
+        _:Reason ->
+            systest_log:log("ERROR: ~p encountered failures whilst processing "
+                            "hook 'on_start' - see the log(s) for details~n",
+                            [get(name, Proc)]),
+            throw({stop, Reason})
+    end.
 
 apply_hook(Hook, Item, {Proc, HState}) ->
-    case interact(Proc, Item, HState) of
+    framework("apply hook ~p to ~p~n",
+              [Hook, get(name, Proc)]),
+    case systest_hooks:run(Proc, Item, HState) of
         {upgrade, Proc2} ->
             {Proc2, HState};
         {store, State} ->
@@ -333,20 +347,24 @@ on_join(Proc, Sut, Procs, Hooks) ->
 
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
-    {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
-                                 apply_hook(on_join,
-                                            {Where, M, F,
-                                             [Sut, Procs]},
-                                            Acc);
-                                ({Where, M, F, A}, Acc) ->
-                                 apply_hook(on_join,
-                                            {Where, M, F,
-                                                [Sut, Procs|A]},
-                                            Acc);
-                                (What, Acc) ->
-                                    throw({What, Acc})
-                             end, {Proc, undefined}, Hooks),
-    Proc2.
+    try
+        {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
+                                         apply_hook(on_join,
+                                                    {Where, M, F,
+                                                     [Sut, Procs]},
+                                                    Acc);
+                                    ({Where, M, F, A}, Acc) ->
+                                         apply_hook(on_join,
+                                                    {Where, M, F,
+                                                     [Sut, Procs|A]},
+                                                    Acc);
+                                    (What, Acc) ->
+                                         throw({What, Acc})
+                                 end, {Proc, undefined}, Hooks),
+        Proc2
+    catch _:Err ->
+        {error, Err}
+    end.
 
 %% TODO: migrate this to systest_hooks....
 
@@ -420,8 +438,16 @@ handle_msg({joined, Sut, Procs}, State=#state{proc=Proc}, _ReplyTo) ->
               "proc on_join info: ~p~n", [Proc#proc.on_join]),
     case Proc#proc.on_join of
         []    -> {reply, ok, State};
-        Hooks -> Proc2 = on_join(Proc, Sut, Procs, Hooks),
-                 {reply, ok, State#state{proc=Proc2}}
+        Hooks -> case on_join(Proc, Sut, Procs, Hooks) of
+                     {error, Reason} ->
+                         log("ERROR: ~p encountered failures whilst "
+                             "processing hook 'on_join' - see "
+                             "the log(s) for details~n",
+                             [get(id, Proc)]),
+                         {stop, Reason, State};
+                     Proc2 ->
+                         {reply, ok, State#state{proc=Proc2}}
+                 end
     end;
 %% down notifications
 handle_msg({nodedown, NodeId},
@@ -550,7 +576,7 @@ handle_callback(CallbackResult,
     end.
 
 reply(Reply, noreply, State) ->
-    %% NB: here we make sute that a handler return value (from handle_callback)
+    %% NB: here we make sure that a handler return value (from handle_callback)
     %% which states {reply, ...} is not *incorrectly* used when the entry point
     %% to this gen_server was handle_cast or handle_info
     {stop, {handler, noreturn, Reply}, State};
@@ -630,4 +656,3 @@ setup(NI, {App, Vars}, HState) ->
     interact(NI, {applicaiton, load, [App]}, HState),
     [interact(NI, {application, set_env,
                     [App, Env, Var]}, HState) || {Env, Var} <- Vars].
-

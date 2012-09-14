@@ -220,7 +220,7 @@ handle_down(Sut, ProcTable) ->
     kill_wait(find_procs(ProcTable, Sut)).
 
 kill_wait([]) ->
-    log(framework, "watchdog: no procs to kill~n");
+    log(framework, "watchdog: no procs to kill~n", []);
 kill_wait(Procs) ->
     log(framework, "watchdog killing: ~p~n", [Procs]),
     systest_cleaner:kill_wait(Procs, fun systest_proc:kill/1).

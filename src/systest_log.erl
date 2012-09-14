@@ -52,6 +52,10 @@
          terminate/2,
          code_change/3]).
 
+-export([framework/2,
+         framework/3,
+         console/2]).
+
 -record(state, {id, mod, fd}).
 
 %%
@@ -78,7 +82,7 @@ start(File) ->
         true  -> start_file(system, File);
         false -> start(system, ?MODULE, File)
     end.
-    
+
 %% @doc Starts a logging handler registered with 'Id', that outputs to File.
 %% @end
 start_file(Id, File) ->
@@ -122,6 +126,15 @@ activate_logging_subsystem(SubSys, Id, LogBase) ->
             end
     end.
 
+console(Msg, Args) ->
+    log(Msg, Args).
+
+framework(Msg, Args) ->
+    log(framework, Msg, Args).
+
+framework(Id, Msg, Args) ->
+    log({framework, Id}, Msg, Args).
+
 %% @doc Writes to the logging handler Scope, formatting Fmt with Args. This
 %% should work in much the same way as io:format/2 does, although this is
 %% implementation dependent to some extent.
@@ -129,7 +142,7 @@ activate_logging_subsystem(SubSys, Id, LogBase) ->
 log(Scope, Fmt, Args) ->
     %% NB: we avoid gen_event:call/3 because it requires {Module, Id} to be
     %% maintained *somewhere* in order to identify a recipient, which is about
-    %% as useful as a chocolate teapot here. Instead we match on id in 
+    %% as useful as a chocolate teapot here. Instead we match on id in
     %% the handle_event callback and filter out unwanted messages that way.
     gen_event:sync_notify(systest_event_log, {Scope, Fmt, Args}).
 

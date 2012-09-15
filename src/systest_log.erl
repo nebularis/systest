@@ -166,12 +166,12 @@ init([Id, Mod, Fd]) ->
     {ok, #state{id=Id, mod=Mod, fd=Fd}}.
 
 handle_event({Scope, Fmt, Args},
-             State=#state{id=Id, mod=Mod, fd=Fd}) when Scope == Id ->
-    write(Mod, Fd, Id, Fmt, Args),
-    {ok, State};
-handle_event({Scope, Fmt, Args},
             State=#state{id=ct, mod=Mod, fd=Fd}) ->
     write(Mod, Fd, Scope, Fmt, Args),
+    {ok, State};
+handle_event({Scope, Fmt, Args},
+             State=#state{id=Id, mod=Mod, fd=Fd}) when Scope == Id ->
+    write(Mod, Fd, Id, Fmt, Args),
     {ok, State};
 handle_event({Fmt, Args},
              State=#state{id=Id, mod=Mod, fd=Fd}) when Id == system orelse

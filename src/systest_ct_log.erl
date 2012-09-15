@@ -30,6 +30,8 @@
 -behaviour(systest_log).
 -export([write_log/4, start/0]).
 
+-import(systest_utils, [as_string/1]).
+
 start() ->
     ok = systest_log:start(ct, systest_ct_log, common_test).
 
@@ -38,4 +40,4 @@ start() ->
 %%
 
 write_log(EvId, _Fd, What, Args) ->
-    ct:log("[~p] " ++ What, [EvId|Args]).
+    ct:log("[" ++ as_string(EvId) ++ "] " ++ as_string(What), Args).

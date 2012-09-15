@@ -77,7 +77,7 @@ post_end_per_suite(Suite, Config, Result, State) ->
     %% TODO: check and see whether there *is* actually an active SUT
     case ?CONFIG(systest_utils:strip_suite_suffix(Suite), Config, undefined) of
         undefined ->
-            log(framework, "no configured suite to stop~n");
+            log(framework, "no configured suite to stop~n", []);
         SutPid ->
             log(framework, "stopping ~p~n", [SutPid]),
             log(framework, "stopped ~p~n",

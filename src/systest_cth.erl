@@ -156,11 +156,11 @@ check_exceptions(SutId, Return) ->
         [] ->
             Return;
         Ex ->
-            log(system, "~p failed! Unexpected process exits detected:~n",
+            log(system, "ERROR ~p failed - unexpected process exits detected:~n",
                 [SutId]),
 
             [begin
-                log("~p: ~p~n", [SutId, Reason])
+                log("ERROR: ~p saw exit: ~p~n ", [SutId, Reason])
              end || {_, _, Reason} <- Ex],
 
             Failures = case Ex of

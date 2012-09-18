@@ -36,17 +36,19 @@
 %% {allow_user_terms, Bool}, {label, ProfileName}
 
 -record(profile, {
-    name                        :: string(),        %% {label, Label}
-    framework = systest_ct      :: module(),
-    source                      :: file:filename(),
-    output_dir                  :: file:filename(),
-    log_dir                     :: file:filename(),
-    settings_base               :: file:filename(),
-    resources        = []       :: [file:filename()],
-    targets          = ["ebin"] :: [testable()],
-    specifications   = []       :: [file:filename()],
-    hooks            = []       :: [term()],
-    default_timetrap            :: {integer(), time_unit()}
+    name                                :: string(),        %% {label, Label}
+    framework           = "systest_ct"  :: module() | string(),
+    source                              :: file:filename(),
+    output_dir                          :: file:filename(),
+    log_dir                             :: file:filename(),
+    settings_base                       :: file:filename(),
+    resources                = []       :: [file:filename()],
+    targets                  = ["ebin"] :: [testable()],
+    specifications           = []       :: [file:filename()],
+    hooks                    = []       :: [term()],
+    aggressive_teardown      = false    :: boolean(),
+    teardown_timetrap        = infinity :: {time_unit(), integer()},
+    default_timetrap                    :: {time_unit(), integer()}
 }).
 
 -exprecs_prefix([operation]).

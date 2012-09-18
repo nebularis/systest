@@ -531,6 +531,8 @@ stopping_callback(Mod, Func, Proc, Args) ->
     case get(cover, Proc) of
         true ->
             Id = get(id, Proc),
+            %% TODO: systest_cover needs to become a gen_server
+            %% so that we can timeout on the call to stop remote cover
             systest_cover:stop_cover(Id);
         _ ->
             ok

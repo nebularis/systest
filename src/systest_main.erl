@@ -36,6 +36,7 @@ help() ->
               "-n, --dryrun     Print everything out but don't run any tests~n"
               "-w, --no_cover   Disable code coverage~n"
               "-i, --ignore     Ignore errors/failures~n"
+              "-I, --ignore_skipped Ignore skipped test cases~n"
               "-a, --name       Specify (Erlang) node name, "
                                 "default = systest_runner~n"
               "-A, --longnames  Use long instead of short names with -a~n"
@@ -109,6 +110,7 @@ opt_spec() ->
      {dryrun,           'n', flag},
      {no_cover,         'w', flag},
      {ignore,           'i', flag},
+     {ignore_skipped,   'I', flag},
      {dump,             'X', flag},
      {node,             'a', string},
      {longnames,        'A', flag},

@@ -11,3 +11,4 @@ app.vars
 systest
 *.erl#
 .#*.erl
+.done

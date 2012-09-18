@@ -324,9 +324,9 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
                                {"console", user}
                        end,
 
-    framework("[~p] Reading OS process id from ~p~n", [Id, Port]),
-    framework("[~p] RPC Enabled: ~p~n", [Id, RpcEnabled]),
-    framework("[~p] StdIO Log: ~s~n", [Id, LogName]),
+    framework("~p Reading OS process id from ~p~n", [Id, Port]),
+    framework("~p RPC Enabled: ~p~n", [Id, RpcEnabled]),
+    framework("~p StdIO Log: ~s~n", [Id, LogName]),
 
     %% we make a hidden connection by default, so as to protect
     %% any trace handling that is going on, and to avoid 'messing up'
@@ -353,6 +353,7 @@ log_to(Suffix, Id, Dir) ->
     filename:join(Dir, logfile(Id, Suffix)).
 
 make_exec(FG, Detached, RpcEnabled, Config) ->
+    %% TODO: error message for the FlagsGroup as a whole if this fails...
     FlagsGroup = atom_to_list(FG),
     %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
     Cmd = systest_config:eval("flags." ++ FlagsGroup ++ ".program", Config,

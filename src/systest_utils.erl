@@ -35,7 +35,7 @@
 -export([ets_dump/1, quiet/1, safe_call/3, call/2]).
 
 abort(Fmt, Args) ->
-    io:format(user, "ERROR:  " ++ Fmt, Args),
+    io:format(user, Fmt, Args),
     erlang:halt(1).
 
 throw_unless(Cond, Msg) ->

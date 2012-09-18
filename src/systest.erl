@@ -272,7 +272,7 @@ list_processes(SutRef) ->
 %% @hidden
 procs(SutRef) when is_record(SutRef, sut) ->
     systest_sut:get(procs, SutRef);
-procs(SutRef) when is_pid(SutRef) ->
+procs(SutRef) ->
     systest_sut:procs(SutRef).
 
 %% @doc Returns data for the required Field from a

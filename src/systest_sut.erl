@@ -75,7 +75,10 @@ start_it(How, ScopeId, SutId, Config) ->
     case apply(gen_server, How, [{local, SutId},
                                  ?MODULE, [ScopeId, SutId, Config], []]) of
         {error, noconfig} ->
-            Config;
+            case lists:keymember(active, 1, Config) of
+                false -> [{active, none}|Config];
+                true  -> Config
+            end;
         {error, {bad_return_value, Return}} ->
             log_startup_errors(SutId, Return),
             {error, Return};

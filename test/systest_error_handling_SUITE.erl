@@ -55,6 +55,9 @@ all() ->
      failing_sut_on_start_hook,
      failing_proc_on_joined_hook].
 
+end_per_testcase(_, _) ->
+    ok.
+
 %%
 %% Test Case Definitions
 %%

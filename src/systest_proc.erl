@@ -479,10 +479,16 @@ handle_msg(stop, State=#state{proc=Proc, handler=Mod,
         %% TODO: consider whether this is structured correctly - it *feels*
         %% a little hackish - and perhaps having a supervising process deal
         %% with these 'interactions' would be better
-        Shutdown  -> [framework(
-                        get(id, Proc),
-                        "on_stop (argv = ~p, response = ~p)~n",
-                        [In, interact(Proc, In, ModState)]) || In <- Shutdown]
+        Shutdown ->
+            [begin
+                 framework(get(id, Proc),
+                           "running on_stop hook: ~p~n",
+                           [In]),
+                 %% TODO: we should really enable timeouts here
+                 framework(get(id, Proc),
+                           "on_stop (response = ~p)~n",
+                           [interact(Proc, In, ModState)])
+             end || In <- Shutdown]
     end,
     handle_callback(stopping_callback(Mod, handle_stop, Proc,
                                       [Proc, ModState]),

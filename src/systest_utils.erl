@@ -171,6 +171,7 @@ proplist_format(L) ->
         [begin
              Fmt = if is_list(V) andalso
                       is_integer(hd(V)) -> "~s~n";
+                      V == [] -> "~s~n";
                       true -> "~p~n"
                    end,
              io_lib:format(LenPrefix ++ "s: " ++ Fmt, [as_string(K), V])

@@ -63,15 +63,19 @@ trace_writer(Trace, Fd) ->
     io:format(Fd, "[TRACE] ~p~n", [Trace]), Fd.
 
 debug(TestCase, Config) ->
-    case load_trace_configuration({ct, TestCase}, Config) of
+    case catch( load_trace_configuration({ct, TestCase}, Config) ) of
         {TraceName, {enabled, TraceTargets}} ->
-            systest_log:log(framework,
+            systest_log:framework(
                 "tracing enabled for ~p: ~p~n",
                 [TestCase, TraceTargets]),
             update_config(Config, TraceName, TraceTargets);
         ?TRACE_DISABLED ->
-            systest_log:log(framework,
+            systest_log:framework(
                 "tracing disabled for ~p~n", [TestCase]),
+            Config;
+        _Other ->
+            systest_log:framework(
+              "tracing disabled for ~p~n", [TestCase]),
             Config
     end.
 

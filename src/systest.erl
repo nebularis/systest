@@ -40,7 +40,7 @@
 -export([activate_process/1, stop_no_wait/1, kill_no_wait/1]).
 -export([settings/0, settings/1, config/1, env/1]).
 -export([kill_after/2, kill_after/3, kill_and_wait/1]).
--export([log/1, log/2]).
+-export([print_sut_info/1, log_sut_info/1, log/1, log/2]).
 
 -ignore_xref([{start, 2},
               {procs, 1},
@@ -306,6 +306,12 @@ write_process_user_data(ProcRef, Data) ->
     systest_proc:user_data(ProcRef, Data).
 
 %% logging
+
+print_sut_info(SUT) ->
+    systest_sut:print_status(SUT).
+
+log_sut_info(SUT) ->
+    systest_sut:log_status(SUT).
 
 log(Message) ->
     log(Message, []).

@@ -26,7 +26,7 @@
 -include("systest.hrl").
 
 -export([load/1, load/2]).
--import(systest_utils, [combine/2, as_list/1]).
+-import(systest_utils, [combine/2]).
 
 -define(lookup(W, D), systest_utils:lookup_env(W, D)).
 

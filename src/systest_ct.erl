@@ -30,6 +30,7 @@
 
 -export([dryrun/1, run/1]).
 
+-include("systest.hrl").
 dryrun(RunSpec) ->
     run(RunSpec, true).
 
@@ -76,14 +77,23 @@ run(RunSpec, DryRun) ->
             Error;
         _Other ->
             try
-                case application:get_env(systest, failures) of
-                    undefined    -> ok;
-                    {ok, 0}      -> ok;
-                    {ok, Failed} -> {error, {failures, Failed}}
+                Config = systest_runner:get(base_config, RunSpec),
+                #results{failed=Failed, skipped=Skipped} =
+                    systest_results:reconciled_test_results(),
+                if Failed > 0 -> {error, {failed, Failed}};
+                         true -> check_skip_ok(Skipped, Config)
                 end
             after
                 application:set_env(systest, failures, undefined)
             end
+    end.
+
+check_skip_ok(0, _) ->
+    ok;
+check_skip_ok(SkipCount, Config) when SkipCount > 0 ->
+    case ?CONFIG(ignore_skipped, Config, false) of
+        true  -> ok;
+        false -> {error, {skipped, SkipCount}}
     end.
 
 run_test(Cfg, Quiet) ->

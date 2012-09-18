@@ -26,8 +26,8 @@
 
 -export([init/0, reconciled_test_results/0,
          test_results/1, add_failed/2,
-         add_passed/2, add_skipped/2, reset/0, test_run/1,
-         add_results/4]).
+         add_passed/2, add_skipped/2, reset/0,
+         test_run/1, add_results/4]).
 
 -include("systest.hrl").
 

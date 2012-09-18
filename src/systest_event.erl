@@ -69,6 +69,7 @@ handle_event(#event{name=tc_done,
     {N, Desc} = descriptor(FuncOrGroup),
     case Result of
         ok ->
+            systest_results:add_passed(?EV_SOURCE, 1),
             LogF = case is_ct_wrap_function(N) of
                        true -> fun systest_log:framework/2;
                        false -> fun systest_log:console/2
@@ -77,15 +78,19 @@ handle_event(#event{name=tc_done,
         {skipped, SkipReason} ->
             case SkipReason of
                 {require_failed, {_, Key}} ->
+                    systest_results:add_skipped(?EV_SOURCE, 1),
                     console("~s ~p failed: "
                             "required config element ~p missing~n",
                             [Desc, N, Key]);
                 {failed, {_Suite, init_per_testcase, FailInfo}} ->
+                    systest_results:add_failed(?EV_SOURCE, 1),
                     failed([N, init_per_testcase], Desc, FailInfo)
             end;
         {failed, FailReason} ->
+            systest_results:add_failed(?EV_SOURCE, 1),
             failed(N, Desc, FailReason);
         {framework_error, Other} ->
+            systest_results:add_failed(?EV_SOURCE, 1),
             failed(N, Desc, Other)
     end,
     {ok, State};
@@ -94,12 +99,11 @@ handle_event(#event{name=tc_auto_skip, data={Suite,Func,Reason}}, State) ->
     {ok, State};
 handle_event(#event{name=test_stats}=Ev, _State) ->
     {ok, Ev};
-handle_event(#event{name=test_done}, #event{data={_Ok, Failed, _Skipped}}=S) ->
-    PreviousFailed = case application:get_env(systest, failures) of
-                         undefined -> 0;
-                         Value     -> Value
-                     end,
-    application:set_env(systest, failures, PreviousFailed + Failed),
+handle_event(#event{name=test_done},
+             #event{data={Passed, Failed, Skipped}}=S) ->
+    EvSource = 'systest_ev_final',
+    systest_results:test_run(EvSource),
+    systest_results:add_results(EvSource, Passed, Skipped, Failed),
     {ok, S};
 handle_event(_Message, State) ->
     {ok, State}.

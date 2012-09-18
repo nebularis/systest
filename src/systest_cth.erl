@@ -38,16 +38,24 @@
 -export([post_end_per_testcase/4]).
 -export([terminate/1]).
 
--import(systest_log, [log/2, log/3]).
+-import(systest_log, [log/2, log/3, framework/2]).
+
+%% TODO: implement systest_sut_lifecycle and move
+%% the test outcome/state tracking there instead
 
 -record(state, {
     auto_start :: boolean(),
-    suite      :: atom()
+    suite      :: atom(),
+    failed     :: integer(),
+    skipped    :: integer(),
+    passed     :: integer()
 }).
+
+-define(SOURCE, 'systest-common-test-hooks').
 
 %% @doc Return a unique id for this CTH.
 id(_Opts) ->
-  systest.
+    systest.
 
 %% @doc Always called before any other callback function. Use this to initiate
 %% any common state.
@@ -61,7 +69,14 @@ init(systest, _Opts) ->
                     undefined -> true;
                     Value     -> Value
                 end,
-    {ok, #state{auto_start=AutoStart}}.
+    systest_results:test_run(?SOURCE),
+%    TeardownTimetrap = ?CONFIG(teardown_timetrap, Opts, infinity),
+%    Timeout = systest_utils:time_to_ms(TeardownTimetrap),
+%    Aggressive = ?CONFIG(aggressive_teardown, Opts, false),
+    {ok, #state{auto_start=AutoStart,
+                failed=0,
+                skipped=0,
+                passed=0}}.
 
 %% @doc Called before init_per_suite is called, this code might start a
 %% SUT, if one is configured for this suite.
@@ -73,7 +88,11 @@ pre_init_per_suite(Suite, Config, State) ->
     {systest:start_suite(Suite, systest:trace_on(Suite, Config)),
                     State#state{suite=Suite}}.
 
-post_end_per_suite(Suite, Config, Result, State) ->
+post_end_per_suite(Suite, Config, Result,
+                   State=#state{failed=Failed,
+                                skipped=Skipped,
+                                passed=Passed}) ->
+    systest_results:add_results(?SOURCE, Passed, Skipped, Failed),
     %% TODO: check and see whether there *is* actually an active SUT
     case ?CONFIG(systest_utils:strip_suite_suffix(Suite), Config, undefined) of
         undefined ->
@@ -108,10 +127,9 @@ pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
     {systest:start(Suite, TC, Config), State}.
 
 post_end_per_testcase(TC, Config, Return, State) ->
-    %% TODO: handle {save_config, Config} return values in st:stop
     log(framework, "processing ~p post_end_per_testcase~n", [TC]),
-    log(framework, "return: ~p~n", [Return]),
-    Result = check_exceptions(TC, Return),
+    log(framework, "~p returned ~p~n", [TC, Return]),
+    {Result, State2} = check_exceptions(TC, Return, State),
     try
         case ?CONFIG(TC, Config, undefined) of
             undefined ->
@@ -124,16 +142,19 @@ post_end_per_testcase(TC, Config, Return, State) ->
                         log(framework, "sut ~p is already down~n", [SutPid])
                 end
         end,
-        {Result, State}
+        {Result, State2}
     catch
         %% a failure in the sut stop procedure should cause the test to fail,
         %% so that the operator has a useful indication that all is not well
-        _:Error -> {{fail, Error}, State}
+        _:Error ->
+            {{fail, Error},
+             State2#state{failed=erlang:min(State#state.failed,
+                                            State2#state.failed)}}
     after
         systest:trace_off(Config)
     end.
 
-terminate(_State) ->
+terminate(_) ->
     ok.
 
 stop(Target) ->
@@ -147,26 +168,41 @@ stop(Target) ->
         end
     catch
         _:Err -> log(system, "sut ~p shutdown error: ~p~n",
-                             [Target, Err])
+                     [Target, Err])
     end.
 
-check_exceptions(SutId, Return) ->
+check_exceptions(SutId, Return,
+                 State=#state{failed=F, skipped=S, passed=P}) ->
     log(framework, "checking for out of band exceptions in ~p~n", [SutId]),
     case systest_watchdog:exceptions(SutId) of
         [] ->
-            Return;
+            case Return of
+                {failed, {_M, _F, {'EXIT', _}=Exit}} ->
+                    {Exit, State#state{failed=F + 1}};
+                {'EXIT',{{_, _}, _}} ->
+                    {Return, State#state{failed=F + 1}};
+                {error, _What} ->
+                    {Return, State#state{failed=F + 1}};
+                {timetrap_timeout, _} ->
+                    {Return, State#state{failed=F + 1}};
+                {skip, _Reason} ->
+                    {Return, State#state{skipped=S + 1}};
+                _ ->
+                    {Return, State#state{passed=P + 1}}
+            end;
         Ex ->
-            log(system, "ERROR ~p failed - unexpected process exits detected:~n",
+            log(system,
+                "ERROR ~p: unexpected process exits "
+                "detected - see the log(s) for details~n",
                 [SutId]),
 
             [begin
-                log("ERROR: ~p saw exit: ~p~n ", [SutId, Reason])
+                 framework("ERROR: ~p saw exit: ~p~n ", [SutId, Reason])
              end || {_, _, Reason} <- Ex],
 
             Failures = case Ex of
                            [E] -> E;
                            _   -> Ex
                        end,
-            {fail, {Return, Failures}}
+            {{fail, {Return, Failures}}, State#state{failed=F + 1}}
     end.
-

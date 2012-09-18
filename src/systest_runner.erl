@@ -177,25 +177,27 @@ verify(Exec2=#execution{profile     = Prof,
                 true  -> io:format("[dryrun] done~n");
                 false -> io:format("[passed] all test cases succeeded~n")
             end;
-        {error,{failures, N}} ->
-            handle_failures(Prof, N, Config);
+        {error,{Failure, _}=F} when Failure == skipped orelse
+                                    Failure == failed ->
+            handle_failures(Prof, F, Config);
         {'EXIT', Reason} ->
             handle_errors(Exec2, Reason, Config);
         Errors ->
             handle_errors(Exec2, Errors, Config)
     end.
 
-handle_failures(Prof, N, Config) ->
+handle_failures(Prof, {How, N}, Config) ->
     maybe_dump(Config),
     ProfileName = systest_profile:get(name, Prof),
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
-    ErrorHandler("[failed] Execution Profile ~p: ~p Failed Test Cases~n",
-                 [ProfileName, N]).
+    ErrorHandler("[failed] test profile ~s "
+                 "completed with ~p ~p test cases~n",
+                 [ProfileName, N, How]).
 
 handle_errors(_Exec, Reason, Config) ->
     maybe_dump(Config),
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
-    ErrorHandler("[error] Framework Encountered Unhandled Errors: ~p~n",
+    ErrorHandler("[error] framework encountered unhandled errors: ~p~n",
                  [Reason]).
 
 maybe_dump(Config) ->

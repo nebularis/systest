@@ -45,6 +45,9 @@ init([]) ->
                 permanent, 5000, worker, [gen_server]},
         {systest_watchdog,
             {systest_watchdog, start, []},
-                permanent, 5000, worker, [gen_server]}
+                permanent, 5000, worker, [gen_server]},
+        {systest_results,
+            {systest_results, init, []},
+                temporary, infinity, worker, dynamic}
     ]}}.
 

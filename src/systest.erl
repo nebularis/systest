@@ -69,7 +69,9 @@ stop() ->
 %% @doc resets the application state
 %% @end
 reset() ->
+    %% both these operations are synchronous
     systest_watchdog:reset(),
+    systest_results:reset(),
     ok.
 
 %% startup/shutdown

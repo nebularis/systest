@@ -33,6 +33,7 @@
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
 -export([record_to_proplist/2, border/2, print_heading/1, print_section/2]).
 -export([ets_dump/1, quiet/1, safe_call/3, call/2]).
+-export([time_to_ms/1]).
 
 abort(Fmt, Args) ->
     io:format(user, Fmt, Args),
@@ -193,4 +194,12 @@ ets_dump(Tab) ->
     print_section("Table Dump - " ++ as_string(Tab),
                   [{"Name", Tab},
                    {"Ets Info", ets:info(Tab)}|ets:tab2list(Tab)]).
+
+time_to_ms(infinity)           -> infinity;
+time_to_ms({milliseconds, MS}) -> MS;
+time_to_ms({ms, MS})           -> MS;
+time_to_ms({UoM, Val}=TS)      -> case systest_env:is_exported(timer, UoM, 1) of
+                                      true  -> erlang:apply(timer, UoM, [Val]);
+                                      false -> throw({invalid_timespec, TS})
+                                  end.
 

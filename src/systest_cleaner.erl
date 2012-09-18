@@ -68,6 +68,11 @@ kill(Targets, Server) ->
 kill([], _Server, _Timeout) ->
     no_targets;
 kill(Targets, Server, Timeout) ->
+    %% TODO: wouldn't it be clearer just to handle the gen_server
+    %% timeout message instead? ALSO - we could store a ref for
+    %% this client and set a timer using send_after, so that we
+    %% could return the actual victims and outstanding targets,
+    %% which would make logging a bit nicer
     wait = gen_server:call(Server, {kill, Targets}, Timeout),
     receive
         {_Ref, {ok, Killed}} ->
@@ -76,6 +81,8 @@ kill(Targets, Server, Timeout) ->
                 false -> {error, {killed, Targets}}
             end;
         {'EXIT', Server, normal} ->
+            %% is it *possible* that the 'EXIT'
+            %% overtakes the reply?
             ok
     after Timeout -> {error, timeout}
     end.

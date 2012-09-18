@@ -65,7 +65,14 @@ reset() ->
     gen_server:call(?MODULE, reset).
 
 force_stop(Id) ->
-    case gen_server:call(?MODULE, {force_stop, Id}) of
+    force_stop(Id, infinity).
+
+force_stop(Id, Timeout) ->
+    GenServerTimeout = if is_integer(Timeout) -> Timeout * 1.5;
+                                         true -> Timeout
+                       end,
+    case gen_server:call(?MODULE, {force_stop, Id, Timeout},
+                         GenServerTimeout) of
         {error, regname, Id} ->
             log(framework, "ignoring stop for deceased SUT ~p~n", [Id]);
         Ok ->
@@ -121,7 +128,7 @@ handle_call(reset, _From, State=#state{sut_table=CT,
     kill_wait(find_procs(NT)),
     [ets:delete_all_objects(T) || T <- [ET, NT, CT]],
     {reply, ok, State};
-handle_call({force_stop, SutId}, _From,
+handle_call({force_stop, SutId, Timeout}, _From,
             State=#state{sut_table=CT}) ->
     case ets:lookup(CT, SutId) of
         [] ->
@@ -129,9 +136,10 @@ handle_call({force_stop, SutId}, _From,
                 "~p not found in ~p~n", [SutId, ets:tab2list(CT)]),
             {reply, {error, regname, SutId}, State};
         [{SutId, Pid}] ->
-            systest_sut:stop(Pid),
-            log(framework, "force stop complete~n"),
-            {reply, ok, State}
+            %% firstly, this next call can timeout (gen_server wise)
+            Reply = systest_sut:stop(Pid, Timeout),
+            log(framework, "force stop complete: ~p~n", [Reply]),
+            {reply, Reply, State}
     end;
 handle_call({exceptions, SutId}, _From,
             State=#state{exception_table=ET}) ->

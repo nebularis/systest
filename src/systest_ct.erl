@@ -31,6 +31,8 @@
 -export([dryrun/1, run/1]).
 
 -include("systest.hrl").
+-define(PRIORITY, 100000).
+
 dryrun(RunSpec) ->
     run(RunSpec, true).
 
@@ -53,8 +55,7 @@ run(RunSpec, DryRun) ->
 
     HooksEntry = case Hooks of
                      [] ->
-                         {ct_hooks, [cth_log_redirect,
-                                     {systest_cth, [], 100000}]};
+                         {ct_hooks, install_cth(Profile, [cth_log_redirect])};
                      _  ->
                          [begin
                              M = case Hook of
@@ -63,7 +64,13 @@ run(RunSpec, DryRun) ->
                                  end,
                              code:ensure_loaded(M)
                           end || Hook <- Hooks],
-                         {ct_hooks, Hooks}
+                         Hooks3 = case find_hook(Hooks) of
+                                      {true, Hook, Hooks2} ->
+                                          update_cth(Hook, Hooks2, Profile);
+                                      false ->
+                                          install_cth(Profile, Hooks)
+                                  end,
+                         {ct_hooks, Hooks3}
                  end,
 
     case TestFun([{logdir, LogDir},
@@ -88,6 +95,41 @@ run(RunSpec, DryRun) ->
             end
     end.
 
+install_cth(Profile, Hooks) ->
+    case lists:member(do_not_install, Hooks) of
+        false -> update_cth(systest_cth, Hooks, Profile);
+        true  -> lists:delete(do_not_install, Hooks)
+    end.
+
+update_cth(systest_cth, Hooks, Profile) ->
+    TeardownTimetrap = systest_profile:get(teardown_timetrap, Profile),
+    AggressiveTeardown = systest_profile:get(aggressive_teardown, Profile),
+    [{systest_cth,
+      [{teardown_timetrap, TeardownTimetrap},
+       {aggressive_teardown, AggressiveTeardown}], ?PRIORITY}|Hooks];
+update_cth({systest_cth, Opts, Priority}, Hooks, Profile) ->
+    Opts2 = lists:foldl(
+              fun(Opt, Acc) ->
+                 case lists:keymember(Opt, 1, Acc) of
+                     true  -> Acc;
+                     false -> [{Opt, systest_profile:get(Opt, Profile)}|Acc]
+                 end
+              end, Opts, [teardown_timetrap, aggressive_teardown]),
+    [{systest_cth, Opts2, Priority}|Hooks].
+
+find_hook(Hooks) ->
+    case lists:member(systest_cth, Hooks) of
+        true ->
+            {true, systest_cth, lists:delete(systest_cth, Hooks)};
+        false ->
+            case lists:keytake(systest_cth, 1, Hooks) of
+                false ->
+                    false;
+                {value, Hook, Rest} ->
+                    {true, Hook, Rest}
+            end
+    end.
+
 check_skip_ok(0, _) ->
     ok;
 check_skip_ok(SkipCount, Config) when SkipCount > 0 ->
@@ -95,6 +137,7 @@ check_skip_ok(SkipCount, Config) when SkipCount > 0 ->
         true  -> ok;
         false -> {error, {skipped, SkipCount}}
     end.
+
 
 run_test(Cfg, Quiet) ->
     case Quiet of

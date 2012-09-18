@@ -64,11 +64,10 @@
 %% @end
 -spec load(systest_config:config()) -> profile().
 load(Config) ->
-    BaseDir = ?REQUIRE(base_dir, Config),
-    case ?CONFIG(profile, Config, undefined) of
-        undefined -> load_configured_profile_data(Config, BaseDir);
-        Name      -> Profile = load_named_profile_data(Name, BaseDir),
-                     Profile#profile{ name=Name }
+    Profile = load_profile(Config),
+    case ?CONFIG(framework, Config, undefined) of
+        undefined -> Profile;
+        Framework -> set([{framework, Framework}], Profile)
     end.
 
 %%
@@ -86,6 +85,14 @@ load(ProfFile, BaseDir) ->
 %%
 %% Private/Internal API
 %%
+
+load_profile(Config) ->
+    BaseDir = ?REQUIRE(base_dir, Config),
+    case ?CONFIG(profile, Config, undefined) of
+        undefined -> load_configured_profile_data(Config, BaseDir);
+        Name      -> Profile = load_named_profile_data(Name, BaseDir),
+                     Profile#profile{ name=Name }
+    end.
 
 load_configured_profile_data(Config, BaseDir) ->
     case ?CONFIG(systest_profile, Config, undefined) of

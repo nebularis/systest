@@ -134,7 +134,7 @@ verify(Exec2=#execution{profile     = Prof,
     %% so we store it in systest_config as a static config element
     systest_config:set_static(settings, [{base_dir, BaseDir}|Settings]),
 
-    Mod = systest_profile:get(framework, Prof),
+    Mod = get_framework(Prof, Config),
 
     case quiet(Config) of
         true ->
@@ -186,6 +186,17 @@ verify(Exec2=#execution{profile     = Prof,
             handle_errors(Exec2, Errors, Config)
     end.
 
+get_framework(Prof, Config) ->
+    list_to_atom(case ?CONFIG(stand_alone, Config, false) of
+                     true  -> "systest_standalone";
+                     false -> case ?CONFIG(shell, Config, false) of
+                                  true ->
+                                      "systest_shell";
+                                  false ->
+                                      systest_profile:get(framework, Prof)
+                              end
+                 end).
+
 handle_failures(Prof, {How, N}, Config) ->
     maybe_dump(Config),
     ProfileName = systest_profile:get(name, Prof),
@@ -207,17 +218,34 @@ maybe_dump(Config) ->
     end.
 
 load_test_targets(Prof, Config) ->
-    case proplists:get_all_values(testsuite, Config) of
-        [] ->
-            case ?CONFIG(testcase, Config, undefined) of
-                undefined   -> load_test_targets(Prof);
-                {Suite, TC} -> [{suite, Suite},
-                                {testcase, TC},
-                                {dir, test_dir(list_to_atom(Suite))}]
-            end;
-        Suites ->
-            [{suite, Suites},
-             {dir, systest_utils:uniq([test_dir(M) || M <- Suites])}]
+    %% TODO: this explicit handling of a known framework is pretty
+    %% awful - we should have a way to delegate to the framework!
+    %% see https://github.com/nebularis/systest/issues/40
+    case get_framework(Prof, Config) of
+        F when F == systest_standalone orelse
+               F == systest_shell ->
+            [];
+        _F ->
+            case proplists:get_all_values(testsuite, Config) of
+                [] ->
+                    case ?CONFIG(testcase, Config, undefined) of
+                        undefined   -> load_test_targets(Prof);
+                        {Mod, Func} -> Suite = list_to_atom(Mod),
+                                       TC = list_to_atom(Func),
+                                       systest_utils:throw_unless(
+                                         systest_env:is_exported(Suite, TC, 1),
+                                         "~p:~p/1 is not a valid test case "
+                                         "- have you checked the code path?~n",
+                                         [Suite, TC]),
+                                       [{suite, Suite},
+                                        {testcase, TC},
+                                        {dir, test_dir(Suite)}]
+                    end;
+                [Configured] ->
+                    Suite = list_to_atom(lists:flatten(Configured)),
+                    [{suite, Suite},
+                     {dir, test_dir(Suite)}]
+            end
     end.
 
 load_test_targets(Prof) ->

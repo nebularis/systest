@@ -31,7 +31,11 @@ help() ->
               "-h               Show the program options~n"
               "-q, --quiet      Disable header/options output on start~n"
               "-P, --profile    Use the specified test profile~n"
+              "-F, --framework  Override test framework for current profile~n"
+              "-S,--stand_alone Synonym for `-F systest_standalone'~n"
+              "-s, --shell      Synonym for `-F systest_shell'~n"
               "-Z, --target     Use the specified target~n"
+              "-z, --sut        SUT to run (used with standalone framework)~n"
               "-L, --logging    Active logging for the specified sub-system~n"
               "-n, --dryrun     Print everything out but don't run any tests~n"
               "-w, --no_cover   Disable code coverage~n"
@@ -106,6 +110,10 @@ unpack(V,    {L, _, flag})    -> {L, V}.
 opt_spec() ->
     [{profile,          'P', string},
      {target,           'Z', string},
+     {sut,              'z', string},
+     {framework,        'F', string},
+     {stand_alone,      'S', flag},
+     {shell,            's', flag},
      {logging,          'L', string},
      {dryrun,           'n', flag},
      {no_cover,         'w', flag},

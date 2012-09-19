@@ -101,7 +101,7 @@ handle_call(_Msg, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'EXIT', Pid, _},
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State=#state{targets=Targets, victims=Victims}) ->
     {Client, Nodes} = queue:head(Targets),
     case lists:member(Pid, Nodes) of
@@ -128,9 +128,8 @@ handle_info({'EXIT', Pid, _},
     end.
 
 link_and_kill(Pids, Kill) ->
-    [begin
-        link(P), Kill(P)
-     end || P <- Pids].
+    [erlang:monitor(process, P) || P <- Pids],
+    [Kill(P) || P <- Pids].
 
 terminate(_Reason, _State) ->
     ok.

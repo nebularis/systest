@@ -47,6 +47,8 @@
 -compile({parse_transform, exprecs}).
 -export_records([execution]).
 
+-import(systest_utils, [as_atom/1]).
+
 behaviour_info(callbacks) ->
     [{run, 1}, {dryrun, 1}];
 behaviour_info(_) ->
@@ -187,15 +189,15 @@ verify(Exec2=#execution{profile     = Prof,
     end.
 
 get_framework(Prof, Config) ->
-    list_to_atom(case ?CONFIG(stand_alone, Config, false) of
-                     true  -> "systest_standalone";
-                     false -> case ?CONFIG(shell, Config, false) of
-                                  true ->
-                                      "systest_shell";
-                                  false ->
-                                      systest_profile:get(framework, Prof)
-                              end
-                 end).
+    as_atom(case ?CONFIG(stand_alone, Config, false) of
+                true  -> "systest_standalone";
+                false -> case ?CONFIG(shell, Config, false) of
+                             true ->
+                                 "systest_shell";
+                             false ->
+                                 systest_profile:get(framework, Prof)
+                         end
+            end).
 
 handle_failures(Prof, {How, N}, Config) ->
     maybe_dump(Config),

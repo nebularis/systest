@@ -33,7 +33,7 @@
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
 -export([record_to_proplist/2, border/2, print_heading/1, print_section/2]).
 -export([ets_dump/1, quiet/1, safe_call/3, call/2]).
--export([time_to_ms/1]).
+-export([time_to_ms/1, as_atom/1]).
 
 abort(Fmt, Args) ->
     io:format(user, Fmt, Args),
@@ -81,11 +81,17 @@ combine(V1, V2) when is_list(V1) -> [V2|V1];
 combine(V1, V2) when is_list(V2) -> [V1|V2];
 combine(V1, V2)                  -> [V1,V2].
 
-as_string(X) when is_atom(X)    -> atom_to_list(X);
-as_string(X) when is_integer(X) -> integer_to_list(X);
-as_string(X) when is_float(X)   -> float_to_list(X);
-as_string(X) when is_binary(X)  -> binary_to_list(X);
-as_string(X)                    -> X.
+as_string(X) when is_atom(X)          -> atom_to_list(X);
+as_string(X) when is_integer(X)       -> integer_to_list(X);
+as_string(X) when is_float(X)         -> float_to_list(X);
+as_string(X) when is_binary(X)        -> binary_to_list(X);
+as_string([H|_]=X) when is_integer(H) -> X.
+
+as_atom(X) when is_atom(X)          -> X;
+as_atom([H|_]=X) when is_integer(H) -> list_to_atom(X);
+as_atom(X) when is_binary(X)        -> binary_to_atom(X, utf8);
+as_atom(X) when is_integer(X)       -> as_atom(integer_to_list(X));
+as_atom(X) when is_float(X)         -> as_atom(float_to_list(X)).
 
 %% @doc recursive search in Dir for files matching Regex
 %% @end

@@ -39,8 +39,8 @@
 -import(systest_log, [console/2,
                       framework/2]).
 
-descriptor({_Conf, GroupName, _}) ->
-    {GroupName, "test case group"};
+descriptor({Conf, GroupName, _}) ->
+    {Conf, io_lib:format("group ~p", [GroupName])};
 descriptor(Other) ->
     {Other, "test case"}.
 
@@ -101,6 +101,8 @@ handle_event(#event{name=test_stats}=Ev, _State) ->
     {ok, Ev};
 handle_event(#event{name=test_done},
              #event{data={Passed, Failed, Skipped}}=S) ->
+    %% sometimes test results aren't passed to the listener properly
+    %% or are incomplete - also
     EvSource = 'systest_ev_final',
     systest_results:test_run(EvSource),
     systest_results:add_results(EvSource, Passed, Skipped, Failed),
@@ -127,10 +129,10 @@ fail_info(Other) ->
     io_lib:format("Fail Info ~p", [Other]).
 
 is_ct_wrap_function(init_per_testcase)  -> true;
-is_ct_wrap_function(init_per_group)     -> true;
+%is_ct_wrap_function(init_per_group)     -> true;
 is_ct_wrap_function(init_per_suite)     -> true;
 is_ct_wrap_function(end_per_testcase)   -> true;
-is_ct_wrap_function(end_per_group)      -> true;
+%is_ct_wrap_function(end_per_group)      -> true;
 is_ct_wrap_function(end_per_suite)      -> true;
 is_ct_wrap_function(_)                  -> false.
 

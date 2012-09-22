@@ -207,5 +207,7 @@ time_to_ms({ms, MS})           -> MS;
 time_to_ms({UoM, Val}=TS)      -> case systest_env:is_exported(timer, UoM, 1) of
                                       true  -> erlang:apply(timer, UoM, [Val]);
                                       false -> throw({invalid_timespec, TS})
-                                  end.
+                                  end;
+time_to_ms(MS)
+  when is_integer(MS)          -> MS.
 

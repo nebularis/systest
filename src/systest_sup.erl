@@ -46,6 +46,9 @@ init([]) ->
         {systest_watchdog,
             {systest_watchdog, start, []},
                 permanent, 5000, worker, [gen_server]},
+        {systest_lock_timer,
+            {systest_lock_timer, start_link, []},
+                permanent, 5000, worker, [gen_server]},
         {systest_results,
             {systest_results, init, []},
                 temporary, infinity, worker, dynamic}

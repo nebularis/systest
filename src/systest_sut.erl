@@ -26,7 +26,8 @@
 
 -behaviour(gen_server).
 
--export([start/1, start/2, start_link/2, start/3, start_link/3]).
+-export([start/1, start/2, start_link/2,
+         start/3, start/4, start_link/4, start_link/3]).
 -export([stop/1, stop/2]).
 -export([restart_proc/2, restart_proc/3]).
 -export([procs/1, check_config/2, status/1]).
@@ -40,8 +41,7 @@
 
 -include("systest.hrl").
 
--import(systest_log, [log/2, log/3,
-                      framework/2, framework/3]).
+-import(systest_log, [log/2, framework/2, framework/3]).
 -import(systest_utils, [safe_call/3, call/2]).
 
 -exprecs_prefix([operation]).
@@ -62,7 +62,10 @@ start(SutId, Config) ->
     start(SutId, SutId, Config).
 
 start(ScopeId, SutId, Config) ->
-    start_it(start, ScopeId, SutId, Config).
+    start(ScopeId, SutId, Config, []).
+
+start(ScopeId, SutId, Config, Opts) ->
+    start_it(start, ScopeId, SutId, Config, Opts).
 
 start_link(SutId, Config) ->
     start(SutId, SutId, Config).
@@ -70,10 +73,16 @@ start_link(SutId, Config) ->
 start_link(ScopeId, SutId, Config) ->
     start_it(start_link, ScopeId, SutId, Config).
 
+start_link(ScopeId, SutId, Config, Opts) ->
+    start_it(start_link, ScopeId, SutId, Config, Opts).
+
 start_it(How, ScopeId, SutId, Config) ->
+    start_it(How, ScopeId, SutId, Config, []).
+
+start_it(How, ScopeId, SutId, Config, Opts) ->
     framework("System Under Test: ~p~n", [SutId]),
     case apply(gen_server, How, [{local, SutId},
-                                 ?MODULE, [ScopeId, SutId, Config], []]) of
+                                 ?MODULE, [ScopeId, SutId, Config], Opts]) of
         {error, noconfig} ->
             case lists:keymember(active, 1, Config) of
                 false -> [{active, none}|Config];

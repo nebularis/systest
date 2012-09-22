@@ -37,7 +37,8 @@
 %% Config/Fixture Definitions
 %%
 
-suite() -> [{timetrap, {seconds, 200}}].
+suite() -> [{timetrap, {seconds, 200}},
+            {ct_hooks,[systest_supervision_cth]}].
 
 all() ->
     [suite_nodes_should_be_up_and_running,

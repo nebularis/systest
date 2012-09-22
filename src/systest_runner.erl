@@ -59,14 +59,15 @@ behaviour_info(_) ->
 -spec execute(systest_config:config()) -> 'ok'.
 execute(Config) ->
     systest:start(),
-    start_logging(Config),
-    maybe_start_net_kernel(Config),
     {ok, BaseDir} = file:get_cwd(),
     Exec = build_exec([{base_dir, BaseDir}|Config]),
     BaseDir = Exec#execution.base_dir,
     Prof = Exec#execution.profile,
     DefaultSettings = systest_profile:get(settings_base, Prof),
     Resources = verify_resources(Prof, BaseDir),
+
+    start_logging(Prof, Config),
+    maybe_start_net_kernel(Config),
 
     preload_resources(Resources, Config),
     print_banner(Config),
@@ -94,7 +95,7 @@ print_banner(Config) ->
             io:format("~s~n", [Banner])
     end.
 
-start_logging(Config) ->
+start_logging(Profile, Config) ->
     SystemLog = case quiet(Config) of
                     true  -> LogName = lists:flatten(
                                 io_lib:format("systest.~s.log",
@@ -105,6 +106,12 @@ start_logging(Config) ->
                     false -> user
                 end,
     systest_log:start(SystemLog),
+
+    LogBase = systest_profile:get(log_dir, Profile),
+    {ok, IoDev} = file:open(filename:join(LogBase, "framework-internal.log"),
+                            [write]),
+    systest_log:start_file(internal, IoDev),
+
     Active = proplists:get_all_values(logging, Config),
     [begin
         %% TODO: reinstate logging to different appenders...

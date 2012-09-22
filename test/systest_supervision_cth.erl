@@ -64,6 +64,8 @@ post_end_per_testcase(TC, Config, Return,
     %% the end_per_testcase implementation in the SUITE *should* have shut down
     %% the sut, so here we simply assert that this is the case...
     case ?CONFIG(TC, Config, undefined) of
+        none ->
+            {Return, State};
         undefined ->
             %% the end_per_testcase implementation in the SUITE *should* have
             %% shut down the sut, so here we assert that this is the case..

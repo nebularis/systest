@@ -105,3 +105,12 @@
     skipped = 0 :: integer()
 }).
 
+-record(resource, {
+    handler          :: module(),
+    scope            :: atom(),
+    identity         :: atom(),
+    init_state       :: term(),
+    options          :: term(),
+    singleton = true :: boolean()
+}).
+

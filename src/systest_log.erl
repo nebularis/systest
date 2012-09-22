@@ -54,7 +54,8 @@
 
 -export([framework/2,
          framework/3,
-         console/2]).
+         console/2,
+         internal/2]).
 
 -record(state, {id, mod, fd}).
 
@@ -128,6 +129,9 @@ activate_logging_subsystem(SubSys, Id, LogBase) ->
 
 console(Msg, Args) ->
     log(Msg, Args).
+
+internal(Msg, Args) ->
+    log(internal, Msg, Args).
 
 framework(Msg, Args) ->
     log(framework, Msg, Args).

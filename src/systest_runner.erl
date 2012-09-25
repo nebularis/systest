@@ -103,7 +103,10 @@ start_logging(Profile, Config) ->
                              io:format(user, "quiet: (logging to ~s)~n",
                                        [LogName]),
                              filename:absname(LogName);
-                    false -> user
+                    false -> case ?CONFIG(shell, Config, false) of
+                                 false -> user;
+                                 true  -> systest_shell
+                             end
                 end,
     systest_log:start(SystemLog),
 
@@ -124,7 +127,7 @@ start_logging(Profile, Config) ->
             false -> io:format(user, "activating logging sub-system ~p~n",
                                [Target])
         end,
-        ok = systest_log:start(Target, systest_log, user)
+        ok = systest_log:start(Target, systest_log, SystemLog)
      end || SubSystem <- Active],
     if length(Active) > 0 -> io:nl();
                      true -> ok

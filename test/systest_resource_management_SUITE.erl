@@ -78,14 +78,6 @@ init_per_testcase(_, Config) ->
     Config.
 
 end_per_testcase(_, _Config) ->
-    %% Resource = case ?config(saved_config, Config) of
-    %%                {_SavedBy, [{resource, ResourcePid}|_]} ->
-    %%                    [ResourcePid];
-
-    %%                Other ->
-    %%                    systest:log("no saved resource to release~n", []),
-    %%                    {no_resource, Other}
-    %%            end,
     systest_lock_timer:set_max_lock_timeout(infinity),
     case whereis(perm) of
         undefined ->

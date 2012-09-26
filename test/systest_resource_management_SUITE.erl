@@ -237,11 +237,6 @@ starting_failures_after_max_lock_timeout_remain_locked(_) ->
     ?assertEqual(false,
                  erlang:is_process_alive(Insulator)).
 
-%    receive
-%        {'EXIT', ResourcePid, normal} -> ok;
-%        What -> throw(What)
-%    end.
-
 %% utility functions
 
 bad_arith(K, N) ->

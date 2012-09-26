@@ -29,12 +29,14 @@
          all/0]).
 
 -export([resource_creation/1,
+         resource_shutdown/1,
          active_resource_shutdown/1,
          active_resource_crash/1,
          starting_resource_crash/1,
          starting_max_lock_timeout_exceeded/1,
          starting_failures_after_max_lock_timeout_remain_locked/1,
-         stopping_resource_crash/1]).
+         stopping_resource_crash/1,
+         stopping_resource_non_normal_exit/1]).
 
 -import(systest_test_utils,
         [perm/0,
@@ -89,7 +91,7 @@ end_per_testcase(_, _Config) ->
             end
     end.
 
-resource_creation(_) ->
+resource_creation(Config) ->
     process_flag(trap_exit, true),
     ResourcePid = test_resource(lock_timeout(5000),
                                 wait_return({ms, 2000}),
@@ -98,6 +100,16 @@ resource_creation(_) ->
     ?assertEqual(true, (erlang:is_process_alive(ResourcePid))),
     ?assertEqual(true, (erlang:is_process_alive(whereis(perm)))),
     ?assertEqual(Pid, whereis(perm)),
+    [{resource, ResourcePid}|Config].
+
+resource_shutdown(Config) ->
+    OldConfig = resource_creation(Config),
+    ResourcePid = ?config(resource, OldConfig),
+    ?assertEqual(active, systest_resource:current_state(ResourcePid)),
+
+    unlink(ResourcePid),
+    ?assertEqual(ok, systest_resource:deactivate(ResourcePid)),
+    wait_for(test_element(2, return({stopped, ?MODULE, normal}))),
     ok.
 
 active_resource_shutdown(_) ->
@@ -156,6 +168,15 @@ stopping_resource_crash(_) ->
     wait_for(test_element(2, return({stopped, ?MODULE, shutdown}))),
     ?assertEqual(idle, systest_resource:current_state(ResourcePid)).
 
+stopping_resource_non_normal_exit(_) ->
+    ResourcePid = test_resource(start_noop(),
+                                fun(_) -> kill end),
+    unlink(ResourcePid),
+    activate_resource(ResourcePid),
+    ?assertEqual(ok, systest_resource:deactivate(ResourcePid)),
+    wait_for(test_element(2, return({stopped, ?MODULE, kill}))),
+    ok.
+
 % exit(whereis(perm), shutdown),
 
 %    receive
@@ -172,6 +193,8 @@ starting_max_lock_timeout_exceeded(_) ->
                                 wait_return({ms, 10000}),
                                 stop_noop()),
     ?assertEqual(ok, systest_resource:activate(ResourcePid)),
+    ?assertEqual({locked, starting},
+                 systest_resource:current_state(ResourcePid)),
     wait_for(choose(match_element(2, {max_lock_timeout, ?MODULE, starting}))),
 
     ?assertEqual({locked, permanent},
@@ -242,7 +265,7 @@ wait_return(Timeout, Return) ->
 start_noop() ->
      fun(_) -> {ok, whereis(perm)} end.
 
-stop_noop() -> fun(_) -> ok end.
+stop_noop() -> fun(_) -> normal end.
 
 lock_timeout(Ms) -> {ms, Ms}.
 
@@ -257,11 +280,7 @@ test_resource(Timeout, Start, Stop) ->
 
 test_resource(Timeout, Start, Stop, InitState) ->
     impl ! {set, {Start, Stop}},
-    if Timeout /= infinity ->
-            systest_lock_timer:set_max_lock_timeout(Timeout);
-       true ->
-            ok
-    end,
+    systest_lock_timer:set_max_lock_timeout(Timeout),
     {ok, Pid} = systest_resource:start_link([?MODULE,
                                              ?MODULE,
                                              ?MODULE,

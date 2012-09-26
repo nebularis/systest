@@ -130,20 +130,28 @@ idle(activate, From, SD=#state{resource=Res,
     {reply, ok, starting, SD#state{insulator=InsulatorPid,
                                    clients=Clients2}}.
 
-starting({activate, Ref}, SD=#state{resource=Resource}) ->
+starting({activate, Ref}, SD=#state{resource=Resource,
+                                    insulator=InsulatorPid}) ->
     systest_lock_timer:release(),
     systest_log:framework("resource ~p started~n",
                           [Resource#resource.identity]),
     Id = Resource#resource.identity,
     Clients = reply(SD, starting, {started, Id, Ref}),
+
+    systest_utils:throw_unless(is_process_alive(InsulatorPid),
+                               "insulator pid died unexpectedly"),
+    InsulatorPid ! stop,
+
     case Ref of
         Pid when is_pid(Pid) ->
             erlang:monitor(process, Ref),
             {next_state, active,
-             SD#state{child=Ref, clients=Clients}};
+             SD#state{child=Ref, clients=Clients,
+                      insulator={stopped, InsulatorPid}}};
         Other ->
             {next_state, active,
-             SD=#state{child={noproc, Other}, clients=Clients}}
+             SD=#state{child={noproc, Other}, clients=Clients,
+                       insulator={stopped, InsulatorPid}}}
     end.
 
 active({exit, Pid, Reason}, State=#state{child=Pid})
@@ -168,35 +176,45 @@ active(deactivate, From, SD=#state{resource=Res,
     {reply, ok, stopping, SD#state{insulator=InsulatorPid,
                                    clients=Clients2}}.
 
-%% if the insulator dies before we got the exit signal from the
-%% child (resource) - this is an error condition of sorts, but
-%% should we actually shut down? Well it depends on
-%% the exit reason of the child....
-stopping({exit, Pid, Reason}, SD=#state{child=Pid,
-                                        insulator=undefined})
-  when ?IS_CLEAN_SHUTDOWN(Reason) ->
-    Clients = tagged_reply(stopped, Reason, stopping, SD),
-    {next_state, idle, SD#state{child=undefined,
-                                clients=Clients}};
 stopping({deactivate, Reason}, SD) when ?IS_CLEAN_SHUTDOWN(Reason) ->
     Clients = tagged_reply(stopped, Reason, stopping, SD),
     {next_state, idle, SD#state{clients=Clients}};
 stopping({deactivate, Reason}, SD=#state{resource=Resource}) ->
+    %% when an unexpected deactivation ???????
     Id = Resource#resource.identity,
-    {stop, {stopped, Id, Reason}, SD}.
-
-tagged_reply(Tag, Data, State, StateData=#state{resource=Resource}) ->
+    Clients = tagged_reply(stopped, Reason, stopping, SD),
+    {stop, {stopped, Id, Reason}, SD#state{clients=Clients}};
+%% if the insulator dies before we got the exit signal from the
+%% child (resource) - this is an error condition of sorts, but
+%% should we actually shut down? Well it depends on
+%% the exit reason of the child....
+stopping({exit, Pid, Reason}, SD=#state{child=Pid})
+  when ?IS_CLEAN_SHUTDOWN(Reason) ->
+    %% a clean shutdown after we we're asked to stop means
+    %% that we're good to go and need to release the timeout lock
+    systest_lock_timer:release(),
+    Clients = tagged_reply(stopped, Reason, stopping, SD),
+    {next_state, idle, SD#state{child=undefined,
+                                clients=Clients}};
+stopping({exit, Pid, Reason}, SD=#state{child=Pid,
+                                        resource=Resource})
+  when not( ?IS_CLEAN_SHUTDOWN(Reason) ) ->
+    %% a non-normal shutdown during stopping is a failure though
+    %% and we don't want to lock up this instance as we don't
+    %% really know what's gone wrong - let our parent decide by
+    %% stopping and allowing them to choose how to handle it
+    Clients = tagged_reply(stopped, Reason, stopping, SD),
     Id = Resource#resource.identity,
-    reply(StateData, State, {Tag, Id, Data}).
+    {stop, {stopped, Id, Reason}, SD#state{clients=Clients}}.
 
+%% TODO: child-down should trigger a change even when we're
+%% permanently locked
 perm_locked(_Event, State) ->
     {next_state, perm_locked, State}.
 
 perm_locked(_Event, _From, State) ->
     {reply, {error, {locked, permanent}}, locked, State}.
 
-%handle_event({exit, Pid, Reason}, StateName, State) ->
-%    {next_state, StateName, State};
 handle_event(_Event, StateName, State) ->
     {next_state, StateName, State}.
 
@@ -213,6 +231,14 @@ handle_info({'DOWN', _MRef, process, Pid, Reason},
     %% child is down - we handle this differently for various states...
     gen_fsm:send_event(self(), {exit, Pid, Reason}),
     {next_state, StateName, StateData};
+handle_info({'EXIT', Pid, _Reason},
+            StateName,
+            State=#state{insulator={stopped, InsulatorPid}})
+  when Pid == InsulatorPid ->
+    %% we've already *seen* the insulator stopped, so there's
+    %% not much state adjustment necessary - now we've seen an
+    %% 'EXIT' signal we can stop tracking the pid
+    {next_state, StateName, State#state{insulator=stopped}};
 handle_info({'EXIT', Pid, Reason},
             StateName,
             State=#state{insulator=InsulatorPid,
@@ -221,12 +247,14 @@ handle_info({'EXIT', Pid, Reason},
   when ?IS_LOCKSTATE(StateName) andalso
        Pid == InsulatorPid ->
     %% the insulator died before returning a child pid
-    systest_log:framework("~p insulator process for ~p failed: ~p~n",
+    systest_log:framework("~p insulator process for ~p "
+                          "failed whilst locked: ~p~n",
                           [?MODULE, Resource#resource.identity, Reason]),
     case StateName of
         perm_locked ->
             systest_lock_timer:release(),
-            {next_state, StateName, State#state{insulator=undefined}};
+            {next_state, StateName,
+             State#state{insulator=died}};
         _Other ->
             {stop, {insulator_failed, StateName, Reason}, State}
     end;
@@ -239,14 +267,16 @@ handle_info({'EXIT', Pid, Reason},
        Pid == InsulatorPid ->
     %% the insulator has died whilst we are still locked!
     %% the startup and shutdown behaviour callbacks shouldn't
-    %% really do that, but code can crash right, so we need to
+    %% really do that, but code can crash right, and we need to
     %% see a 'DOWN' for the child before we unlock and go back
-    %% to idle though.
-    systest_log:framework("~p insulator process for ~p died: ~p~n"
+    %% into an idle state
+    systest_log:framework("~p insulator process for ~p "
+                          "died whilst locked: ~p~n"
                           "will wait for ~p to shutdown~n",
                           [?MODULE, Resource#resource.identity,
                            Reason, Child]),
-    {next_state, StateName, State#state{insulator=undefined}};
+    {next_state, StateName, State#state{insulator=died}};
+%% TODO: bad insulator shutdown.....
 handle_info(max_lock_timeout, StateName, SD=#state{resource=Resource})
   when ?IS_LOCKSTATE(StateName) ->
     %% we've exceeded max_lock_timeout, so we become permanently locked
@@ -255,17 +285,15 @@ handle_info(max_lock_timeout, StateName, SD=#state{resource=Resource})
     Id = Resource#resource.identity,
     Clients = reply(SD, StateName, {max_lock_timeout, Id, StateName}),
     {next_state, perm_locked, SD#state{clients=Clients}};
-handle_info(max_lock_timeout, State, SD=#state{resource=Resource}) ->
+handle_info(max_lock_timeout, State, SD) ->
     %% it is entirely possible that the cancellation we send to
     %% systest_lock_timer doesn't arrive fast enough, that the timer
     %% is not cancelled, and we subsequently receive the max-lock-timeout
-    %% signal despite all our efforts not to. In this however, we can happily
-    %% ignore it, as the race is obvious since we're no longer 'locked'
-    systest_log:framework("~p ignoring max_lock_timeout in non-locked "
-                          "state ~p~n", [Resource#resource.identity, State]),
+    %% signal despite all our efforts. In this situation, we can happily
+    %% ignore the timeout
     {next_state, State, SD};
-handle_info(_Info, StateName, State) ->
-    {next_state, StateName, State}.
+handle_info(Info, StateName, State) ->
+    {stop, {unexpected_info, StateName, Info}, State}.
 
 terminate(_Reason, _StateName, _State) ->
     ok.
@@ -277,6 +305,10 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %% Private API
 %%
 
+tagged_reply(Tag, Data, State, StateData=#state{resource=Resource}) ->
+    Id = Resource#resource.identity,
+    reply(StateData, State, {Tag, Id, Data}).
+
 reply(SD, Trigger, Reply) ->
     case dict:find(Trigger, SD#state.clients) of
         error -> SD;
@@ -287,8 +319,10 @@ reply(SD, Trigger, Reply) ->
 insulator(Parent, StateEvent, Resource=#resource{handler=Mod}) ->
     process_flag(trap_exit, true),
     case erlang:apply(Mod, StateEvent, [Resource]) of
-        {ok, Pid} -> gen_fsm:send_event(Parent, {StateEvent, Pid});
-        Other     -> gen_fsm:send_event(Parent, {StateEvent, Other})
+        {ok, Pid} when is_pid(Pid) ->
+            gen_fsm:send_event(Parent, {StateEvent, Pid});
+        Other ->
+            gen_fsm:send_event(Parent, {StateEvent, Other})
     end,
     receive
         stop -> ok

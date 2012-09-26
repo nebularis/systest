@@ -112,11 +112,11 @@ test-default: test-dependencies
 
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
-	$(call systest,$@,$(FLAGS))
+	$(call systest,$@,-c $(FLAGS))
 
 .PHONY: test-time-traps
 test-time-traps: test-dependencies
-	$(call systest,test-error-handling,-Z systest_error_handling_SUITE:timetrap_failure -i)
+	$(call systest,test-error-handling,-Z systest_error_handling_SUITE:timetrap_failure -ci)
 
 .PHONY: test-profile
 ifneq ($(SYSTEST_PROFILE), '')

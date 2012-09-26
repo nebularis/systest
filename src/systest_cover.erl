@@ -65,11 +65,18 @@ do_start(ScratchDir, Config) ->
     CoverBase = filename:join(ScratchDir, "cover"),
     CoverData = filename:join(CoverBase, "data"),
     ImportData = case ?CONFIG('cover-import', Config, false) of
-                     true ->
-                         systest_utils:find_files(CoverData, ".*\\.cover\$");
                      false ->
-                         []
+                         [];
+                     true ->
+                         File = filename:join(CoverData, "cover.export"),
+                         case filelib:is_regular(File) of
+                             true  -> [File];
+                             false -> []
+                         end
                  end,
+
+    CoverImports = ImportData ++ ?CONFIG('cover-import-extra', Config, []),
+
     SearchDirs = proplists:get_all_values('cover-dir', Config),
     {ok, Cwd} = file:get_cwd(),
     Dirs = [case filename:pathtype(Dir) of
@@ -89,7 +96,7 @@ do_start(ScratchDir, Config) ->
     [begin
          systest_log:log(framework, "importing cover data from ~s~n", [F]),
          ok = cover:import(F)
-     end || F <- ImportData],
+     end || F <- CoverImports],
 
     CoverFile = "systest-" ++ systest_env:timestamp() ++ ".cover",
     Export = filename:join(CoverData, CoverFile),
@@ -101,21 +108,18 @@ do_start(ScratchDir, Config) ->
                    systest_config:config()) -> ok.
 report_cover(_Dir, dryrun, _Config) ->
     ok;
-report_cover(Dir, Export, Config) ->
+report_cover(BaseDir, Export, Config) ->
     io:nl(),
     systest_utils:print_heading("Building Code Coverage Results - Please Wait"),
-%    {Summary, SummaryFile} =
-%            case ?CONFIG('cover-summary', Config, user) of
-%                console -> {user, none};
-%                user    -> {user, none};
-%                File    -> {ok, Cwd} = file:get_cwd(),
-%                           Path = filename:join(Cwd, File),
-%                           {ok, Fd} = file:open(Path, [write]),
-%                           {Fd, Path}
-%            end,
+
+    Current = filename:join(BaseDir, "current"),
+    Dir = filename:join(BaseDir,
+                        "run-" ++ systest_env:timestamp()),
+
     ok = filelib:ensure_dir(filename:join(Dir, "foo")),
-    lists:foreach(fun (F) -> file:delete(F) end,
-                  filelib:wildcard(filename:join(Dir, "*.html"))),
+    file:delete(Current),
+    file:make_symlink(Dir, Current),
+
     {CT, NCT, Acc, _} =
         lists:foldl(
             fun (M,{CovTot, NotCovTot, Acc, Cnt}) ->
@@ -153,6 +157,12 @@ report_cover(Dir, Export, Config) ->
     end,
     timer:sleep(1000),
     ok = cover:export(Export),
+
+    %% LastExport is a symlink
+    LastExport = filename:join(filename:dirname(Export), "cover.export"),
+    file:delete(LastExport),
+    file:read_link(LastExport),
+    file:make_symlink(Export, LastExport),
     cover:reset(),
     ok.
 

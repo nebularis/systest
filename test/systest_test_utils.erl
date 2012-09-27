@@ -38,8 +38,11 @@ perm() ->
     receive
         stop ->
             exit(shutdown);
-        {exit, What} ->
-            exit(What);
+        {exit, How} ->
+            exit(How);
+        {exit, From, How2} ->
+            From ! {ok, self(), exiting, How2},
+            exit(How2);
         Other ->
             systest:log("perm received ~p~n", [Other]),
             perm()

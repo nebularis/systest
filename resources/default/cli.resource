@@ -43,6 +43,7 @@
         {handler, systest_cli},
         {link_to_parent, true},
         {detached, false},
+        {exit_on_eof, auto},
         {rpc_enabled, {true, {init, stop, []}}}
     ]},
     {flags, [
@@ -113,6 +114,8 @@
 
 {systest_cli_SUITE, [{all, cli_2node_cluster},
                      {handling_attached_processes_with_exec,
+                      forking_processes},
+                     {generate_exit_on_eof_wrapper,
                       forking_processes}]}.
 
 {start_cold, [

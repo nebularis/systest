@@ -38,24 +38,27 @@
 -export([handle_status/2, handle_interaction/3,
          handle_msg/3, terminate/3]).
 
-%% private record for tracking...
--record(sh, {
-    id,  %% NB: this is just a convenience
-    start_command,
-    stop_command,
-    state,
-    log,
-    rpc_enabled,
-    pid,
-    port,
-    detached,
-    shutdown_port
+-record(exec, {
+    command        :: string(),
+    argv           :: [{string(), string()}],
+    environment    :: [{string(), string()}]
 }).
 
--record(exec, {
-    command,
-    argv,
-    environment
+-type exec() :: #exec{}.
+
+%% private record for tracking...
+-record(sh, {
+    id             :: term(),  %% NB: this is just a convenience
+    start_command  :: exec(),
+    stop_command   :: exec(),
+    state          :: atom(),
+    log            :: file:io_device(),
+    rpc_enabled    :: boolean(),
+    exit_on_eof    :: boolean(),
+    detached       :: boolean(),
+    pid            :: pid(),
+    port           :: port(),
+    shutdown_port  :: port()
 }).
 
 -define(IS_DYING(State),
@@ -67,7 +70,7 @@
 -import(systest_utils, [as_string/1]).
 
 %%
-% systest_proc API
+%% systest_proc API
 %%
 
 init(Proc=#proc{config=Config}) ->
@@ -82,11 +85,12 @@ init(Proc=#proc{config=Config}) ->
 
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
+    ExitOnEof = ?CONFIG(exit_on_eof, Config, auto),
     {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
                                          Startup, {true, default}),
-
-    StartCmd = make_exec(start, Detached, RpcEnabled, Config),
-    StopCmd  = stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, Config),
+    StartCmd = make_exec(start, Detached, RpcEnabled, ExitOnEof, Config),
+    StopCmd = stop_flags(Flags, ShutdownSpec, Detached,
+                         RpcEnabled, ExitOnEof, Config),
 
     case check_command_mode(Detached, RpcEnabled) of
         ok ->
@@ -351,7 +355,7 @@ log_file(Suffix, Scope, Id, Env, Config) ->
 log_to(Suffix, Id, Dir) ->
     filename:join(Dir, logfile(Id, Suffix)).
 
-make_exec(FG, Detached, RpcEnabled, Config) ->
+make_exec(FG, Detached, RpcEnabled, ExitOnEof, Config) ->
     FlagsGroup = atom_to_list(FG),
     %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
     Cmd = systest_config:eval("flags." ++ FlagsGroup ++ ".program", Config,
@@ -368,11 +372,11 @@ make_exec(FG, Detached, RpcEnabled, Config) ->
                Argv      -> Argv
            end,
     RunEnv = [{env, Env}],
-    ExecutableCommand = maybe_patch_command(Cmd, RunEnv, Args,
-                                            Detached, RpcEnabled),
+    ExecutableCommand = patch_command(Cmd, RunEnv, Args,
+                                      Detached, ExitOnEof, RpcEnabled),
     #exec{command=ExecutableCommand, argv=Args, environment=Env}.
 
-stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, Config) ->
+stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, ExitOnEof, Config) ->
     case ?CONFIG(stop, Flags, undefined) of
         undefined ->
             case RpcEnabled of
@@ -383,7 +387,7 @@ stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, Config) ->
         {call, M, F, Argv} ->
             {M, F, Argv};
         _Spec ->
-            make_exec(stop, Detached, RpcEnabled, Config)
+            make_exec(stop, Detached, RpcEnabled, ExitOnEof, Config)
     end.
 
 
@@ -395,11 +399,12 @@ open_port(#exec{command=ExecutableCommand,
     log(framework,
         "Spawning executable [command = ~s, detached = ~p, args = ~p]~n",
         [ExecutableCommand, Detached, Args]),
-    case Detached of
-        false -> erlang:open_port({spawn_executable, ExecutableCommand},
-                                  [{args, Args}|LaunchOpts]);
-        true  -> erlang:open_port({spawn, ExecutableCommand}, LaunchOpts)
-    end.
+    erlang:open_port({spawn, ExecutableCommand}, LaunchOpts).
+%    case Detached of
+%        false -> erlang:open_port({spawn_executable, ExecutableCommand},
+%                                  [{args, Args}|LaunchOpts]);
+%        true  -> erlang:open_port({spawn, ExecutableCommand}, LaunchOpts)
+%    end.
 
 run_shutdown_hook(Exec, Sh=#sh{detached=Detached}) ->
     Pid= spawn_link(fun() ->
@@ -487,20 +492,43 @@ check_command_mode(true, false) ->
 check_command_mode(_, _) ->
     ok.
 
-maybe_patch_command(Cmd, _, _, false, true) ->
-    Cmd;
-maybe_patch_command(Cmd, Env, Args, Detached, RpcEnabled) when Detached orelse
-                                                               RpcEnabled ->
-    %% TODO: reconsider this, as I'm not convinced it behaves properly....
-    case os:type() of
-        {win32, _} ->
-            %% TODO: the argv conversion thing here....
-            "cmd /q /c " ++ lists:foldl(fun({Key, Value}, Acc) ->
-                                        expand_env_variable(Acc, Key, Value)
-                                        end, Cmd, Env);
-        _ ->
-            Exec = string:join([Cmd|Args], " "),
-            "/usr/bin/env sh -c \"echo $$; exec " ++ Exec ++ "\""
+patch_command(Cmd, Env, Args, Detached, ExitOnEof, RpcSettings) ->
+    RpcEnabled = case RpcSettings of
+                     {true, _Shutdown} -> true;
+                     Other             -> Other
+                 end,
+    case {Detached, RpcEnabled, ExitOnEof} of
+        {true, false, _} ->
+            throw({illegal_config, detached_proc_requires_rpc_enabled});
+        {_, false, false} ->
+            throw({illegal_config, non_rpc_proc_requires_exit_on_eof});
+        {false, _, true} ->
+            Cmd;    %% we *assume* that setting {exit_on_eof, true} means
+                    %% that the operator knows what they're doing!
+        {false, true, false} ->
+            Cmd;    %% we handle shutdown with {rpc, ShutDownHook} for this case
+        {false, _, auto} ->
+            case os:type() of
+                {win32, _} ->
+                    throw({illegal_config,
+                           win32_attached_proc_requires_exit_on_eof});
+                _ ->
+                    Exec = string:join([Cmd|Args], " "),
+                    "/usr/bin/env sh -c \"(cat; kill 0) | " ++ Exec ++ " \""
+            end;
+        {true, true, _} ->
+            case os:type() of
+                {win32, _} ->
+                    %% TODO: the argv conversion thing here....
+                    "cmd /q /c " ++ lists:foldl(
+                                      fun({Key, Value}, Acc) ->
+                                          expand_env_variable(Acc, Key,
+                                                              Value)
+                                      end, Cmd, Env);
+                _ ->
+                    Exec = string:join([Cmd|Args], " "),
+                    "/usr/bin/env sh -c \"echo $$; exec " ++ Exec ++ "\""
+            end
     end.
 
 %%

@@ -88,6 +88,20 @@ handling_attached_processes_with_exec(Config) ->
      end || {Id, Ref} <- systest:procs(Sut)],
     ok.
 
+generate_exit_on_eof_wrapper(Config) ->
+    Sut = systest:get_system_under_test(Config),
+    [{Id, Ref}|_] = systest:list_processes(Sut),
+    systest_utils:remote_load(Id, ?MODULE),
+    ?assertMatch({module, ?MODULE},
+                 rpc:call(Id, code, ensure_loaded,
+                          [?MODULE])),
+    Pid = rpc:call(Id, ?MODULE, write_to_sout, []),
+    ?assertEqual(true, rpc:call(Id, erlang,
+                                is_process_alive, [Pid])),
+    systest:kill_and_wait(Ref),
+    ?assertEqual(pang, net_adm:ping(Id)),
+    ok.
+
 handling_detached_processes(Config) ->
     Sut = systest:active_sut(Config),
     systest_sut:log_status(Sut),
@@ -98,3 +112,11 @@ handling_detached_processes(Config) ->
          ?assertEqual(pang, net_adm:ping(Id))
      end || {Id, Ref} <- systest:procs(Sut)],
     ok.
+
+write_to_sout() ->
+    spawn(fun() -> write_sout() end).
+
+write_sout() ->
+    io:format(user, "sdtout here I am!~n", []),
+    write_sout().
+

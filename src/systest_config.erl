@@ -66,41 +66,93 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 sut_config(Scope, Identity) ->
-    case is_configured_explicitly(Identity) of
-        {true, Config} ->
-            {Identity, Config};
+    {Id, Sut} = case is_configured_explicitly(Identity) of
+                    {true, Config} ->
+                        {Identity, Config};
+                    false ->
+                        case search({Identity, 'all'},
+                                    get_config(Scope, []),
+                                    search_options([{key_func,
+                                                     fun(X) -> X end}])) of
+                            Bad when Bad =:= not_found orelse
+                                     Bad =:= undefined ->
+                                systest_log:log(framework,
+                                                "no config at ~p.(~p|all)~n",
+                                                [Scope, Identity]),
+                                {Identity, extract_sut_config(Identity)};
+                            Alias when is_atom(Alias) ->
+                                {Alias, extract_sut_config(Alias)};
+                            Other ->
+                                throw(Other)
+                        end
+                end,
+    {Id, apply_extensions(Sut)}.
+
+%% @private
+apply_extensions(noconfig) ->
+    noconfig;
+apply_extensions(Conf) when is_list(Conf) ->
+    case lists:keytake(sut, 1, Conf) of
+        {value, Sut, Conf2} ->
+            {SutConfig, ExtraProcs, UserData} =
+                case Sut of
+                    {sut, Extends, ProcConf} ->
+                        %% For each reference, we want to get the
+                        %% list of target processes and merge the
+                        %% whole lot together. We also need to find
+                        %% each referenced process so we can put
+                        %% together a proper list of those too
+                        apply_extensions(Extends, ProcConf);
+                    {sut, Extends, Excludes, ProcConf} ->
+                        %% In this case we strip out some of the imported
+                        %% configuration, based on 'Excludes'
+                        apply_extensions(Extends, Excludes, ProcConf);
+                    {sut, SutConf} when is_list(SutConf) ->
+                        {SutConf, [], proplists:get_value(user_data, Conf2)}
+                end,
+%            Procs = systest_config:get_config(Sut, processes, []),
+            {value, Procs, Conf3} = lists:keytake(processes, 1, Conf2),
+            ProcConfig = apply_extensions(Procs, ExtraProcs),
+            merge([{user, UserData}],
+                  [{sut, SutConfig},
+                   {processes, ProcConfig}|Conf3]);
         false ->
-            case search({Identity, 'all'},
-                        get_config(Scope, []),
-                        search_options([{key_func, fun(X) -> X end}])) of
-                Bad when Bad =:= not_found orelse
-                         Bad =:= undefined ->
-                    systest_log:log(framework,
-                                    "nothing at ~p.(~p|all)~n",
-                                    [Scope, Identity]),
-                    {Identity, extract_sut_config(Identity)};
-                Alias when is_atom(Alias) ->
-                    {Alias, extract_sut_config(Alias)};
-                Other ->
-                    throw(Other)
-            end
+            Conf
     end.
 
 %% @private
+apply_extensions(Extends, ProcConfig) ->
+    apply_extensions(Extends, [], ProcConfig).
+
+%% @private
+apply_extensions({extends, _Extends}, {excludes, _Excludes}, _ProcConfig) ->
+%    Ancestors =
+%        lists:foldl(fun(Ident, _Acc) ->
+%                            {_Id, Sut} = sut_config(Ident, Ident),
+%                            {value, {sut, SutConfOut}, RestOut} =
+%                                lists:keytake(sut, 1, Sut),
+%                            {value, {sut, SutConfIn}, RestIn
+%                    end, [], Extends),
+    throw(finish_me).
+
+%% @private
 is_configured_explicitly(Identity) ->
-    case get_config(Identity, sut, noconfig) of
+    case extract_sut_config(Identity) of
         noconfig ->
             false;
-        Cfg ->
-            {true, Cfg ++ [{on_start, get_config(Identity, on_start, [])}]}
+        Sut ->
+            {true, Sut}
     end.
 
 extract_sut_config(Identity) ->
     case get_config(Identity, sut, noconfig) of
         noconfig ->
             noconfig;
-        Cfg ->
-            Cfg ++ [{on_start, get_config(Identity, on_start, [])}]
+        Sut ->
+            [{sut, Sut}] ++
+                [begin
+                     {Key, get_config(Identity, Key, [])}
+                 end || Key <- [on_start, user_data, processes]]
     end.
 
 eval(Key, Config) ->
@@ -191,8 +243,9 @@ search_options(Opts) ->
 
 read(Key, Config, Default) ->
     case lists:keyfind(Key, 1, Config) of
-        false        -> Default;
-        {Key, Value} -> Value
+        false                      -> Default;
+        {Key, Value}               -> Value;
+        Entry when is_tuple(Entry) -> Entry
     end.
 
 read(Key, Config) ->
@@ -250,7 +303,6 @@ get_config(Key) ->
     case call(?MODULE, {get_config, resources, Key}) of
         [{Key, Config}] -> Config;
         _               -> noconfig
-
     end.
 
 get_config(Key, Default) ->

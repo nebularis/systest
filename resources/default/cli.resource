@@ -43,7 +43,6 @@
         {handler, systest_cli},
         {link_to_parent, true},
         {detached, false},
-        {exit_on_eof, auto},
         {rpc_enabled, {true, {init, stop, []}}}
     ]},
     {flags, [
@@ -56,12 +55,51 @@
     ]}
 ]}.
 
+{exit_on_eof, [
+    {startup, [{exit_on_eof, auto}]}
+]}.
+
 {forking_processes, [
     {sut, [{localhost, [n1, n2]}]},
     {processes, [
-        {n1, [fork_proc_config]},
-        {n2, [fork_proc_config]},
-        {n3, [fork_proc_config]}
+        {n1, [fork_proc_config, exit_on_eof]},
+        {n2, [fork_proc_config, exit_on_eof]},
+        {n3, [fork_proc_config, exit_on_eof]}
+    ]}
+]}.
+
+{run_proc_config, [
+    {startup, [
+        {handler, systest_cli},
+        {detached, false},
+        {rpc_enabled, false},
+        {exit_on_eof, true}        
+    ]},
+    {flags, [
+        {start, [{program, "${settings.base_dir}/resources/test/pipe-read"},
+                 {args, ["${proc.name}"]},
+                 {environment, [
+                     {"PIPE_DIR", "${ct.priv_dir}/${ct.scope}/.PIPEDIR"}
+                 ]}
+        ]},
+        {stop, [{program, "${settings.base_dir}/resources/test/pipe-write"},
+                {args, ["${proc.name}", "${user.stop_argv}"]},
+                {environment, [
+                     {"PIPE_DIR", "${ct.priv_dir}/${ct.scope}/.PIPEDIR"}
+                ]}
+        ]}
+    ]}
+]}.
+
+{start_explicit, [
+    {sut, []},
+    {processes, [
+        {n1, [run_proc_config]},
+        {n2, [run_proc_config]}
+    ]},
+    {user_data, [
+        {n1, [{stop_argv, "quit"}]},
+        {n2, [{stop_argv, "bang"}]}
     ]}
 ]}.
 
@@ -116,7 +154,11 @@
                      {handling_attached_processes_with_exec,
                       forking_processes},
                      {generate_exit_on_eof_wrapper,
-                      forking_processes}]}.
+                      forking_processes},
+                     {handling_normal_exit_status,
+                      start_explicit},
+                     {handling_non_zero_exit_status,
+                      start_explicit}]}.
 
 {start_cold, [
     {startup, [

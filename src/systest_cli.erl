@@ -41,7 +41,8 @@
 -record(exec, {
     command        :: string(),
     argv           :: [{string(), string()}],
-    environment    :: [{string(), string()}]
+    environment    :: [{string(), string()}],
+    exit_on_eof    :: boolean()
 }).
 
 -type exec() :: #exec{}.
@@ -85,9 +86,13 @@ init(Proc=#proc{config=Config}) ->
 
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
-    ExitOnEof = ?CONFIG(exit_on_eof, Config, auto),
-    {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
-                                         Startup, {true, default}),
+    ExitOnEof = ?CONFIG(exit_on_eof, Startup, false),
+    {RpcEnabled, ShutdownSpec} =
+        case ?CONFIG(rpc_enabled, Startup, {true, default}) of
+            false -> {false, undefined};
+            true  -> {true, default};
+            Other -> Other
+        end,
     StartCmd = make_exec(start, Detached, RpcEnabled, ExitOnEof, Config),
     StopCmd = stop_flags(Flags, ShutdownSpec, Detached,
                          RpcEnabled, ExitOnEof, Config),
@@ -213,27 +218,31 @@ handle_stop(_Proc, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->
 %%                                 {stop, Reason, NewState} |
 %%                                 {NewProc, NewState} |
 %%                                 NewState.
-handle_msg(sigkill, #proc{os_pid=OsPid}, Sh=#sh{state=running}) ->
-    systest:sigkill(OsPid),
-    Sh#sh{state=killed};
+handle_msg(sigkill, Proc=#proc{os_pid=OsPid}, Sh=#sh{state=running}) ->
+    case OsPid of
+        not_available -> {reply, {error, os_pid_not_available}, Proc, Sh};
+        _             -> systest:sigkill(OsPid),
+                         Sh#sh{state=killed}
+    end;
 handle_msg({Port, {data, {_, Line}}}, _Proc,
             Sh=#sh{port=Port, log=LogFd}) ->
     io:format(LogFd, "~s~n", [Line]),
     Sh;
-handle_msg({Port, {exit_status, 0}}, _Proc,
-            Sh=#sh{id=Id, port=Port, start_command=#exec{command=Cmd}}) ->
+handle_msg({Port, {exit_status, 0}=Rc}, _Proc,
+            Sh=#sh{id=Id, port=Port,
+                   state=State, start_command=#exec{command=Cmd}}) ->
     log({framework, Id}, "program ~s exited normally (status 0)~n", [Cmd]),
-    {stop, normal, Sh#sh{state=stopped}};
-handle_msg({Port, {exit_status, Exit}=Rc}, Proc,
-             Sh=#sh{id=Id, port=Port, state=State}) ->
-    log({framework, Id},
-        "os process ~p shut down with error/status code ~p~n",
-        [Proc#proc.id, Exit]),
     ShutdownType = case ?IS_DYING(State) of
                        true  -> normal;
                        false -> Rc
                    end,
-    {stop, ShutdownType, Sh};
+    {stop, ShutdownType, Sh#sh{state=stopped}};
+handle_msg({Port, {exit_status, Exit}=Rc}, Proc,
+           Sh=#sh{id=Id, port=Port}) ->
+    log({framework, Id},
+        "os process ~p shut down with error/status code ~p~n",
+        [Proc#proc.id, Exit]),
+    {stop, Rc, Sh};
 handle_msg({Port, closed}, Proc,
             Sh=#sh{id=Id, port=Port,
                    state=State, detached=false}) when ?IS_DYING(State) ->
@@ -327,7 +336,6 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
                                {"console", user}
                        end,
 
-    log(framework, "[~p] Reading OS process id from ~p~n", [Id, Port]),
     log(framework, "[~p] RPC Enabled: ~p~n", [Id, RpcEnabled]),
     log(framework, "[~p] StdIO Log: ~s~n", [Id, LogName]),
 
@@ -374,7 +382,8 @@ make_exec(FG, Detached, RpcEnabled, ExitOnEof, Config) ->
     RunEnv = [{env, Env}],
     ExecutableCommand = patch_command(Cmd, RunEnv, Args,
                                       Detached, ExitOnEof, RpcEnabled),
-    #exec{command=ExecutableCommand, argv=Args, environment=Env}.
+    #exec{command=ExecutableCommand, argv=Args,
+          environment=Env, exit_on_eof=ExitOnEof}.
 
 stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, ExitOnEof, Config) ->
     case ?CONFIG(stop, Flags, undefined) of
@@ -391,20 +400,23 @@ stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, ExitOnEof, Config) ->
     end.
 
 
-open_port(#exec{command=ExecutableCommand,
-                argv=Args, environment=Env}, Detached) ->
+open_port(#exec{command=ExecutableCommand, argv=Args,
+                environment=Env, exit_on_eof=ExitOnEof}, Detached) ->
     RunEnv = [{env, Env}],
     LaunchOpts = [exit_status, hide, stderr_to_stdout,
                   use_stdio, {line, 16384}] ++ RunEnv,
     log(framework,
         "Spawning executable [command = ~s, detached = ~p, args = ~p]~n",
         [ExecutableCommand, Detached, Args]),
-    erlang:open_port({spawn, ExecutableCommand}, LaunchOpts).
-%    case Detached of
-%        false -> erlang:open_port({spawn_executable, ExecutableCommand},
-%                                  [{args, Args}|LaunchOpts]);
-%        true  -> erlang:open_port({spawn, ExecutableCommand}, LaunchOpts)
-%    end.
+    case {Detached, ExitOnEof} of
+        {false, auto} ->
+            erlang:open_port({spawn, ExecutableCommand}, LaunchOpts);
+        {false, _} ->
+            erlang:open_port({spawn_executable, ExecutableCommand},
+                             [{args, Args}|LaunchOpts]);
+        {true, _} ->
+            erlang:open_port({spawn, ExecutableCommand}, LaunchOpts)
+    end.
 
 run_shutdown_hook(Exec, Sh=#sh{detached=Detached}) ->
     Pid= spawn_link(fun() ->
@@ -472,9 +484,14 @@ read_pid(ProcId, Port, Detached, RpcEnabled, Fd) ->
         false ->
             %% NB: detached + rpc_disabled is currently disallowed, so we don't
             %% cater for {detached, Pid} here at all.
-            receive
-                {Port, {data, {eol, Pid}}} -> {Port, Pid, Fd};
-                {Port, {exit_status, Rc}}  -> {error, {stopped, Rc}}
+            case Detached of
+                true ->
+                    receive
+                        {Port, {data, {eol, Pid}}} -> {Port, Pid, Fd};
+                        {Port, {exit_status, Rc}}  -> {error, {stopped, Rc}}
+                    end;
+                false ->
+                    {Port, not_available, Fd}
             end
     end.
 

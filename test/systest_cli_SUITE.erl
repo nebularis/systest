@@ -102,6 +102,41 @@ generate_exit_on_eof_wrapper(Config) ->
     ?assertEqual(pang, net_adm:ping(Id)),
     ok.
 
+handling_normal_exit_status(Config) ->
+    Sut = systest:get_system_under_test(Config),
+    ?assertEqual(0, length(systest:list_processes(Sut))),
+    {ok, Hostname} = inet:gethostname(),
+    {ok, Ref} = systest_proc:start(start_explicit, n1,
+                              [{scope, handling_normal_exit_status},
+                               {name, n1},
+                               {host, list_to_atom(Hostname)}|Config]),
+
+    process_flag(trap_exit, true),
+
+    %% sends 'quit' to the pipe - we ignore the stop
+    catch systest:stop_no_wait(Ref),
+    receive
+        {'EXIT', Ref, normal} -> ok;
+        Other                 -> throw({unexpected_exit, Other})
+    end.
+
+handling_non_zero_exit_status(Config) ->
+    Sut = systest:get_system_under_test(Config),
+    ?assertEqual(0, length(systest:list_processes(Sut))),
+    {ok, Hostname} = inet:gethostname(),
+    {ok, Ref} = systest_proc:start(start_explicit, n2,
+                              [{scope, handling_non_zero_exit_status},
+                               {name, n2},
+                               {host, list_to_atom(Hostname)}|Config]),
+
+    process_flag(trap_exit, true),
+    %% sends 'bang' to the pipe - the script runs exit ( 1 )
+    systest:stop_no_wait(Ref),
+    receive
+        {'EXIT', Ref, {exit_status, 1}} -> ok;
+        Other                           -> throw({unexpected_exit, Other})
+    end.
+
 handling_detached_processes(Config) ->
     Sut = systest:active_sut(Config),
     systest_sut:log_status(Sut),
@@ -119,4 +154,3 @@ write_to_sout() ->
 write_sout() ->
     io:format(user, "sdtout here I am!~n", []),
     write_sout().
-

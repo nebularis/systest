@@ -111,6 +111,14 @@ handling_normal_exit_status(Config) ->
                                {name, n1},
                                {host, list_to_atom(Hostname)}|Config]),
 
+    %% oh man, we need an API for reading things like 'start.environment'!!!
+    PrivDir = ?config(priv_dir, Config),
+    Scope = "handling_normal_exit_status",
+    PipeDir = filename:join([PrivDir, Scope, ".PIPEDIR"]),
+
+    filelib:ensure_dir(filename:join(PipeDir, "foo")),
+    ?assertEqual(true, filelib:is_dir(PipeDir)),
+
     process_flag(trap_exit, true),
 
     %% sends 'quit' to the pipe - we ignore the stop
@@ -128,6 +136,14 @@ handling_non_zero_exit_status(Config) ->
                               [{scope, handling_non_zero_exit_status},
                                {name, n2},
                                {host, list_to_atom(Hostname)}|Config]),
+
+    %% oh man, we need an API for reading things like 'start.environment'!!!
+    PrivDir = ?config(priv_dir, Config),
+    Scope = "handling_non_zero_exit_status",
+    PipeDir = filename:join([PrivDir, Scope, ".PIPEDIR"]),
+
+    filelib:ensure_dir(filename:join(PipeDir, "foo")),
+    ?assertEqual(true, filelib:is_dir(PipeDir)),
 
     process_flag(trap_exit, true),
     %% sends 'bang' to the pipe - the script runs exit ( 1 )

@@ -21,8 +21,6 @@
 ## IN THE SOFTWARE.
 ## ----------------------------------------------------------------------------
 
-include ./common.mk
-
 LOGLEVEL ?= 0
 SOURCE_DIR=src
 TEST_DIR=test
@@ -107,3 +105,6 @@ bin/%:
 	git clone -b systest https://github.com/hyperthunk/$*.git deps/$*
 	PATH="bin:${PATH}" $(MAKE) -C deps/$*
 	cp deps/$*/$* bin/$*
+
+include build/common.mk
+

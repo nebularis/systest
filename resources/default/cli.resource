@@ -38,6 +38,28 @@
     ]}
 ]}.
 
+{bad_rpc_detached_mismatch, [
+    {startup, [{detached, true}, {rpc_enabled, false}]}
+]}.
+
+{bad_rpc_exit_eof_mismatch, [
+    {startup, [{rpc_enabled, false}, {exit_on_eof, false}]}
+]}.
+
+{bad_rpc_combo, [
+    {sut, [{localhost, [n1]}]},
+    {processes, [
+        {n1, [global_proc_config, bad_rpc_detached_mismatch]}
+    ]}
+]}.
+
+{bad_eof_combo, [
+    {sut, [{localhost, [n1]}]},
+    {processes, [
+        {n1, [global_proc_config, bad_rpc_exit_eof_mismatch]}
+    ]}
+]}.
+
 {fork_proc_config, [
     {startup, [
         {handler, systest_cli},
@@ -73,7 +95,7 @@
         {handler, systest_cli},
         {detached, false},
         {rpc_enabled, false},
-        {exit_on_eof, true}        
+        {exit_on_eof, true}
     ]},
     {flags, [
         {start, [{program, "${settings.base_dir}/resources/test/pipe-read"},
@@ -88,6 +110,27 @@
                      {"PIPE_DIR", "${ct.priv_dir}/${ct.scope}/.PIPEDIR"}
                 ]}
         ]}
+    ]}
+]}.
+
+{rpc_proc_config, [
+    {startup, [
+        {handler, systest_cli},
+        {detached, false},
+        {rpc_enabled, {true, {erlang, halt, []}}}
+    ]},
+    {flags, [
+        {start, [
+            {program, "${settings.base_dir}/resources/test/start"},
+            {args, ["${proc.id}"]}
+        ]}
+    ]}
+]}.
+
+{rpc_stop_enabled, [
+    {sut, [{localhost, [n1]}]},
+    {processes, [
+        {n1, [rpc_proc_config]}
     ]}
 ]}.
 
@@ -151,6 +194,8 @@
 ]}.
 
 {systest_cli_SUITE, [{all, cli_2node_cluster},
+                     {detached_config_handling_failure, no_config},
+                     {rpc_exit_config_handling_failure, no_config},
                      {handling_attached_processes_with_exec,
                       forking_processes},
                      {generate_exit_on_eof_wrapper,

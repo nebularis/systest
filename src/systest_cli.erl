@@ -78,7 +78,6 @@ init(Proc=#proc{config=Config}) ->
 
     %% TODO: don't carry all the config around all the time -
     %% e.g., append the {proc, NI} tuple only when needed
-
     Scope = systest_proc:get(scope, Proc),
     Id = systest_proc:get(id, Proc),
     Config = systest_proc:get(config, Proc),
@@ -202,12 +201,10 @@ handle_stop(Proc, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
     run_shutdown_hook(SC, Sh);
 %% TODO: could this be core proc behaviour?
 handle_stop(_Proc, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->
-    %% TODO: this rpc/call logic should move into systest_proc
     Halt = case Shutdown of
                default -> {init, stop, []};
                Custom  -> Custom
            end,
-    % apply(rpc, call, [Proc#proc.id|tuple_to_list(Halt)]),
     {rpc_stop, Halt, Sh#sh{state=stopped}}.
 %% TODO: when rpc_enabled=false and shutdown is undefined???
 
@@ -272,7 +269,7 @@ handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc,
     log({framework, Id}, "termination Port completed ok~n"),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     case Detached of
-        true  -> {stop, normal, Sh};
+        true  -> {stop, normal, Sh};   %% TODO: test this case more thoroughly
         false -> Sh
     end;
 handle_msg({'EXIT', Pid, {error, Rc, StopAcc}},
@@ -282,6 +279,7 @@ handle_msg({'EXIT', Pid, {error, Rc, StopAcc}},
     log({framework, Id},
         "termination Port stopped abnormally (status ~p)~n", [Rc]),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
+    %% TODO: better test coverage for this scenario
     {stop, termination_port_error, Sh};
 handle_msg(Info, _Proc, Sh=#sh{id=Id, state=St, port=P, shutdown_port=SP}) ->
     log({framework, Id},
@@ -310,6 +308,11 @@ terminate(Reason, _Proc, #sh{port=Port, id=Id, log=Fd}) ->
 %% Private API
 %%
 
+format_exec({Mod, Func, Args}) ->
+    systest_utils:proplist_format(
+      [{command, "rpc:call/4"},
+       {arguments, lists:flatten(io_lib:format("[proc.id, ~p, ~p, ~p]",
+                                                [Mod, Func, Args]))}]);
 format_exec(#exec{command=Cmd, environment=Env, argv=Argv}) ->
     systest_utils:proplist_format(
       [{command, Cmd},
@@ -477,22 +480,38 @@ read_pid(ProcId, Port, Detached, RpcEnabled, Fd) ->
                     end;
                 Pid ->
                     case Detached of
-                        false -> {Port, Pid, Fd};
-                        true  -> {detached, Pid, Fd}
+                        false ->
+                            {Port, Pid, Fd};
+                        true  ->
+                            %% we need the shell process to return its os pid
+                            %% *or* to exit ( 0 ) happily....
+                            receive
+                                {Port, {data, {eol, Pid}}} ->
+                                    receive
+                                        {Port, {exit_status, 0}} ->
+                                            ok;
+                                        OtherMsg ->
+                                            throw({port_start_error, OtherMsg})
+                                    after 0 ->
+                                        ok
+                                    end,
+                                    {detached, Pid, Fd};
+                                {Port, {data, {eol, OtherPid}}}
+                                  when OtherPid /= Pid ->
+                                    throw({port_start_error,
+                                           {process_id_mismatch,
+                                            {Pid, OtherPid}}});
+                                {Port, {exit_status, 0}} ->
+                                    {detached, Pid, Fd};
+                                {Port, {exit_status, Rc}} ->
+                                    {error, {stopped, Rc}}
+                            end
                     end
             end;
         false ->
             %% NB: detached + rpc_disabled is currently disallowed, so we don't
             %% cater for {detached, Pid} here at all.
-            case Detached of
-                true ->
-                    receive
-                        {Port, {data, {eol, Pid}}} -> {Port, Pid, Fd};
-                        {Port, {exit_status, Rc}}  -> {error, {stopped, Rc}}
-                    end;
-                false ->
-                    {Port, not_available, Fd}
-            end
+            {Port, not_available, Fd}
     end.
 
 wait_for_up(NodeId) ->

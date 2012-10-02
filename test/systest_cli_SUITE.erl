@@ -102,6 +102,35 @@ generate_exit_on_eof_wrapper(Config) ->
     ?assertEqual(pang, net_adm:ping(Id)),
     ok.
 
+%% TODO: what happens if we run kill/1
+%% on an exit_on_eof = false process ?????
+
+detached_config_handling_failure(Config) ->
+    ?assertEqual({fail,
+                  {system_under_test,start,
+                   {error,
+                    {illegal_config,
+                     detached_proc_requires_rpc_enabled}}}},
+                 systest:start(bad_proc_combo,
+                               bad_rpc_combo,
+                               Config)).
+
+rpc_exit_config_handling_failure(Config) ->
+    ?assertEqual({fail,
+                  {system_under_test,start,
+                   {error,
+                    {illegal_config,
+                     non_rpc_proc_requires_exit_on_eof}}}},
+                 systest:start(bad_proc_combo,
+                               bad_eof_combo,
+                               Config)).
+
+rpc_stop_enabled(Config) ->
+    Sut = systest:get_system_under_test(Config),
+    [{Id, Ref}] = systest:list_processes(Sut),
+    systest:stop_and_wait(Ref),
+    ?assertEqual(pang, net_adm:ping(Id)).
+
 handling_normal_exit_status(Config) ->
     Sut = systest:get_system_under_test(Config),
     ?assertEqual(0, length(systest:list_processes(Sut))),

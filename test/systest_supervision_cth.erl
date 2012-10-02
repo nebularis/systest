@@ -60,7 +60,7 @@ post_end_per_testcase(should_fail_bad_config, _Config,
     %% that are themselves responsible for determining failing test cases
     {ok, State};
 post_end_per_testcase(TC, Config, Return,
-                      State=#ctx{active={TC, Active}}) ->
+                      State=#ctx{active={TC, Active}}) when is_pid(Active) ->
     %% the end_per_testcase implementation in the SUITE *should* have shut down
     %% the sut, so here we simply assert that this is the case...
     case ?CONFIG(TC, Config, undefined) of

@@ -20,9 +20,10 @@
 ## FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 ## IN THE SOFTWARE.
 ## ----------------------------------------------------------------------------
+
+include ./common.mk
+
 LOGLEVEL ?= 0
-VERBOSE ?= 'false'
-NO_COVER ?= 'false'
 SOURCE_DIR=src
 TEST_DIR=test
 EBIN_DIR=ebin
@@ -33,24 +34,6 @@ SYSTEST_PROFILE ?= ''
 ## rules start here
 
 REBAR=bin/rebar
-
-ifneq ($(VERBOSE), 'false')
-NOISE=-L framework -L operator -L sut -L process
-else
-NOISE=
-endif
-
-ifneq ($(NO_COVER), 'false')
-COVER=-w
-else
-COVER=--cover-dir=.test
-endif
-
-define systest
-	ERL_LIBS="deps:${ERL_LIBS}" \
-	ERL_FLAGS="-pa ebin -pa .test" \
-		priv/bin/systest -a $(1) -P $(1) $(NOISE) $(COVER) $(2)
-endef
 
 .PHONY: all
 all: escriptize
@@ -108,24 +91,15 @@ test-dependencies: escriptize test-compile
 
 .PHONY: test-default
 test-default: test-dependencies
-	$(call systest,$@,$(FLAGS))
+	$(call systest,$@,$(SYSTEST_FLAGS))
 
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
-	$(call systest,$@,$(FLAGS))
+	$(call systest,$@,$(SYSTEST_FLAGS))
 
 .PHONY: test-time-traps
 test-time-traps: test-dependencies
 	$(call systest,test-error-handling,-Z systest_error_handling_SUITE:timetrap_failure -i)
-
-.PHONY: test-profile
-ifneq ($(SYSTEST_PROFILE), '')
-test-profile: test-dependencies
-	$(call systest,$(SYSTEST_PROFILE),$(FLAGS))
-else
-test-profile:
-	$(error you need to specify a SYSTEST_PROFILE to run this target)
-endif
 
 bin/%:
 	mkdir -p deps

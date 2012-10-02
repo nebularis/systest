@@ -88,7 +88,7 @@ endif
 .PHONY: test-shell
 ifneq ($(SYSTEST_TARGET), '')
 test-shell: $(SYSTEST_DEPENDS)
-	$(call systest,$(SYSTEST_PROFILE),-s $(SYSTEST_TARGET) $(SYSTEST_FLAGS))
+	$(call systest,$(SYSTEST_PROFILE),-s -z $(SYSTEST_TARGET) $(SYSTEST_FLAGS))
 else
 test-shell:
 	$(error, you need to specify a SYSTEST_TARGET to run this target)

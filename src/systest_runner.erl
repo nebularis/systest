@@ -85,7 +85,7 @@ set_defaults(Profile) ->
 print_banner(Config) ->
     %% Urgh - could there be an uglier way!?
     %% TODO: refactor this...
-    case systest_utils:quiet(Config) of
+    case quiet(Config) of
         true  -> ok;
         false ->
             {ok, Banner} = application:get_env(systest, banner),
@@ -93,7 +93,7 @@ print_banner(Config) ->
     end.
 
 start_logging(Config) ->
-    SystemLog = case systest_utils:quiet(Config) of
+    SystemLog = case quiet(Config) of
                     true  -> LogName = lists:flatten(
                                 io_lib:format("systest.~s.log",
                                               [systest_env:timestamp()])),
@@ -110,7 +110,7 @@ start_logging(Config) ->
                     is_list(SubSystem) -> list_to_atom(SubSystem);
                                   true -> throw({badarg, SubSystem})
                  end,
-        case systest_utils:quiet(Config) of
+        case quiet(Config) of
             true  -> ok;
             false -> io:format(user, "activating logging sub-system ~p~n",
                                [Target])
@@ -120,6 +120,9 @@ start_logging(Config) ->
     if length(Active) > 0 -> io:nl();
                      true -> ok
     end.
+
+quiet(Config) ->
+    ?CONFIG(quiet, Config, false).
 
 verify(Exec2=#execution{profile     = Prof,
                         base_dir    = BaseDir,
@@ -133,9 +136,9 @@ verify(Exec2=#execution{profile     = Prof,
 
     Mod = systest_profile:get(framework, Prof),
 
-    systest_trace:start(Config),
+    _Trace = systest_trace:load(Config),
 
-    case systest_utils:quiet(Config) of
+    case quiet(Config) of
         true ->
             ok;
         false ->
@@ -147,11 +150,10 @@ verify(Exec2=#execution{profile     = Prof,
                 {"Test Suites", lists:concat([S || {suite, S} <- Targets])},
                 {"Test Directories", lists:concat([D || {dir, D} <- Targets])},
                 {"Base Directory", BaseDir},
-                {section, "Options"}] ++ Config),
+                {"Options", "(user supplied settings....)"}] ++ Config),
 
             Prop = systest_utils:record_to_proplist(Prof, systest_profile),
             systest_utils:print_section("SysTest Profile", Prop)
-            %% systest_trace:print_trace_info(Trace)
     end,
 
     ScratchDir = systest_profile:get(output_dir, Prof),
@@ -170,7 +172,6 @@ verify(Exec2=#execution{profile     = Prof,
 
     systest_cover:report_cover(CoverBase, Export, Config),
 
-    systest:stop(),
     case Result of
         ok ->
             case ?CONFIG(dryrun, Config, false) of
@@ -309,15 +310,10 @@ maybe_start_net_kernel(Config) ->
     case net_kernel:longnames() of
         ignored ->
             {ok, Host} = inet:gethostname(),
-            case systest_env:is_epmd_contactable(Host, 5000) of
-                {false, Reason} ->
-                    io:format(user, "epmd not contactable on ~s => ~p~n",
-                             [Host, Reason]),
-                    os:cmd("epmd -daemon");
-                true  ->
-                    ok
-            end,
-            io:format(user, "[systest.net] ~s~n", [os:cmd("epmd -names")]),
+            EpmdState = systest_env:is_epmd_contactable(Host, 5000),
+            systest_utils:throw_unless(EpmdState == true, runner,
+                "It appears that epmd has not been started yet. "
+                "Please run `epmd -daemon` first and try again.~n", []),
             if
                 UseLongNames =:= true ->
                     {ok, _} = net_kernel:start([NodeName, longnames]);

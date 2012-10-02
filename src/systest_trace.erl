@@ -100,12 +100,24 @@
 
 -include("systest_trace.hrl").
 
+-record(sys_config, {
+    trace_config    :: file:filename(),
+    trace_db_dir    :: file:filename(),
+    trace_data_dir  :: file:filename(),
+    base_config     :: systest_config:config(),
+    active          :: [trace()],
+    flush           :: boolean(),
+    console         :: boolean()
+}).
+
+%-type sys_config() :: #sys_config{}.
 -exprecs_prefix([operation]).
 -exprecs_fname(["record_", prefix]).
 -exprecs_vfname([fname, "__", version]).
 
 -compile({parse_transform, exprecs}).
--export_records([trace]).
+% ??? -export_records([trace]).
+-export_records([trace_pattern]).
 
 -record(state, {init, config}).
 
@@ -119,7 +131,16 @@ enable(Scope, Config) ->
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-start(Config) ->
+%convert_history_entry({ttb, tracer, [Nodes, []]}, Acc) ->
+%    Acc#trace_config{locations=Nodes};
+%convert_history_entry({ttb, p, [Loc, [timestamp|Spec]]}, Acc) ->
+%    Type = case Spec of
+%               garbage_collection -> gc;
+%               running            -> sched;
+%
+%           end.
+
+load(Config) ->
     %{trace, {local, File}}
     gen_server:call(?MODULE, {start, Config}).
 
@@ -189,9 +210,13 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+<<<<<<< HEAD
 %%
 %% Private/Internal API
 %%
+=======
+    _SysConf2 = find_activated(Config, SysConf).
+>>>>>>> da1a170e1c33e6243333bc8b1a8bcd6add1d7b90
 
 activate(#trace{name=Name,
                 scope=_SUT,
@@ -227,7 +252,12 @@ find_activated(Config, SysConf=#trace_config{trace_config=TraceConfigFile}) ->
 %% trace config file (or defaults). Config that is *missing* from these
 %% locations MUST be available in the supplied flags/args, otherwise we bail.
 %% @end
+<<<<<<< HEAD
 apply_flags(Config, BaseTraceConfig) ->
+=======
+apply_flags(Config, #sys_config{trace_config=TraceConfigFile}) ->
+    BaseTraceConfig = read_config(TraceConfigFile),
+>>>>>>> da1a170e1c33e6243333bc8b1a8bcd6add1d7b90
     TraceSettings = override_defaults_with_user_args(BaseTraceConfig, Config),
     Enabled = proplists:get_all_values(trace_enable, Config),
     lists:foldl(
@@ -240,7 +270,11 @@ apply_flags(Config, BaseTraceConfig) ->
                     %% their config file(s) for a given scope and enable it
                     %% with `-T scope_name` on the command line
                     Trace = build_trace(list_to_atom(Flag), Base),
+<<<<<<< HEAD
                     {[Trace#trace{scope=all}|Acc], Base};
+=======
+                    {[Trace|Acc], Base};
+>>>>>>> da1a170e1c33e6243333bc8b1a8bcd6add1d7b90
                 [Scope, Target] ->
                     %% -T scope+target trace flags indicate that for 'Scope'
                     %% we should enable the trace named 'Target', so....
@@ -253,6 +287,7 @@ apply_flags(Config, BaseTraceConfig) ->
 build_trace(TraceName, Base) ->
     {TraceConfig, _RemainingBase} =
                 read_trace_config(TraceName, Base),
+<<<<<<< HEAD
     TP = systest_trace_pattern:record_fromlist(
                 ?REQUIRE(trace_pattern, TraceConfig)),
     Location = ?CONFIG(location, TraceConfig, 'all'),
@@ -262,6 +297,27 @@ build_trace(TraceName, Base) ->
            trace_flags=?REQUIRE(trace_flags, TraceConfig),
            trace_pattern=TP,
            location=Location}.
+=======
+    TP = record_fromlist(?REQUIRE(trace_pattern, TraceConfig),
+                                 'trace_pattern'),
+    Location = ?CONFIG(location, TraceConfig, 'all'),
+    #trace{scope=TraceName,
+           process_filter=?REQUIRE(process_filter, TraceConfig),
+           spec=?REQUIRE(spec, TraceConfig),
+           trace_pattern=TP,
+           location=Location}.
+
+%% @private
+%% flags passed on the command line have a similar structure, but
+%% are prefixed and need reprocessing and merging with whatever
+%% configuration we've been able to load
+%% @end
+maybe_merge_config(_TraceConfig, _Flag, _Config) ->
+    %% TraceConfig could be 'noconfig' or proplist() where
+    %% --trace-pcall-location has been transformed into a structure
+    %% such as `{pcall, [{location, Value}]}`
+    ok.
+>>>>>>> da1a170e1c33e6243333bc8b1a8bcd6add1d7b90
 
 %% @private
 %% take the supplied UserConfig and for each trace key (passed on the command

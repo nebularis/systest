@@ -339,12 +339,16 @@ start_host(Identity, Sut,
 start_proc(Identity, Proc) ->
     systest_log:log(framework, "handoff to ~p~n",
                     [systest_proc:get(name, Proc)]),
-    {ok, ProcRef} = systest_proc:start(Proc),
-    ok = systest_watchdog:proc_started(Identity, ProcRef),
-    %% NB: the id field of Proc will *not* be set (correctly)
-    %% until after the gen_server has started, so an API call
-    %% is necessary rather than using systest_proc:get/2
-    {?CONFIG(id, systest_proc:proc_data(ProcRef)), ProcRef}.
+    case systest_proc:start(Proc) of
+        {ok, ProcRef} ->
+            ok = systest_watchdog:proc_started(Identity, ProcRef),
+            %% NB: the id field of Proc will *not* be set (correctly)
+            %% until after the gen_server has started, so an API call
+            %% is necessary rather than using systest_proc:get/2
+            {?CONFIG(id, systest_proc:proc_data(ProcRef)), ProcRef};
+        {error, What} ->
+            throw(What)
+    end.
 
 verify_host(Host) ->
     case systest_env:is_epmd_contactable(Host, 5000) of

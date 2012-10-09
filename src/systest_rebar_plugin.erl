@@ -29,9 +29,23 @@
 -export([systest/2]).
 
 systest(Config, _) ->
-    SystestConfig = rebar_config:get_local(Config, systest, []),
-    systest_runner:execute([{error_handler,
-                             fun handle_errors/2}|SystestConfig]).
+    case is_base_dir(Config) of
+        true->
+            SystestConfig = rebar_config:get_local(Config, systest, []),
+            TestConfig = case rebar_config:is_verbose(Config) of
+                             true  -> [{logging, "framework"},
+                                       {logging, "process"}|SystestConfig];
+                             false -> SystestConfig
+                         end,
+            systest_runner:execute([{error_handler,
+                                     fun handle_errors/2}|TestConfig]);
+        false ->
+            ok
+    end.
 
 handle_errors(Fmt, Args) ->
     rebar_utils:abort(Fmt, Args).
+
+is_base_dir(Config) ->
+    rebar_utils:get_cwd() == rebar_config:get_xconf(Config,
+                                                    base_dir, undefined).

@@ -27,15 +27,16 @@
 -export([pre_compile/2, post_compile/2]).
 -export(['publish-wiki'/2, post_doc/2]).
 
-pre_compile(Config, _) ->
-    case is_base_dir(Config) of
+pre_compile(Config, App) ->
+    case is_base_dir(Config) orelse
+        filename:basename(App) == "systest.app.src" of
         true ->
             {ok, [{env, Env}]} = file:consult(
                                     filename:join("build", "app.env")),
             {ok, Banner} = file:read_file(
                                     filename:join("build", "banner.txt")),
             AppEnv = lists:keystore(banner, 1, Env, {banner, Banner}),
-            AppVars = {env, AppEnv},            
+            AppVars = {env, AppEnv},
             ok = file:write_file("app.vars",
                         io_lib:format("~p.\n", [AppVars]), [write]);
         false ->
@@ -86,7 +87,7 @@ doc_dir(Config) ->
                 rebar_config:get_local(Config, edoc_opts, []), "doc")).
 
 static_files(BaseDir) ->
-    filelib:wildcard(filename:join([BaseDir, "static", "*.*"])) ++ 
+    filelib:wildcard(filename:join([BaseDir, "static", "*.*"])) ++
 	[filename:join(BaseDir, "ROADMAP.md")].
 
 doc_files(DocDir) ->
@@ -97,4 +98,3 @@ doc_files(DocDir) ->
 is_base_dir(Config) ->
     rebar_utils:get_cwd() == rebar_config:get_xconf(Config,
                                                     base_dir, undefined).
-

@@ -326,20 +326,20 @@ apply_hook(Hook, Item, {Proc, HState}) ->
     end.
 
 on_join(Proc, Sut, Procs, Hooks) ->
+    SutRef = systest_sut:get(id, Sut),
     log({framework, get(id, Proc)},
-        "process has joined system under test: ~p~n",
-        [systest_sut:get(id, Sut)]),
+        "process has joined system under test: ~p~n", [SutRef]),
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
     {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
                                  apply_hook(on_join,
                                             {Where, M, F,
-                                             [Sut, Procs]},
+                                             [SutRef, Procs]},
                                             Acc);
                                 ({Where, M, F, A}, Acc) ->
                                  apply_hook(on_join,
                                             {Where, M, F,
-                                                [Sut, Procs|A]},
+                                                [SutRef, Procs|A]},
                                             Acc);
                                 (What, Acc) ->
                                     throw({What, Acc})
@@ -361,9 +361,10 @@ interact(Proc=#proc{id=NodeId},
     end;
 interact(Proc, {local, Mod, Func, Args}, _) ->
     apply(Mod, Func, [Proc|Args]);
-interact(Proc=#proc{id=Id}, {remote, Mod, Func, Args}, _) ->
-    rpc:call(Id, Mod, Func, [Proc|Args]);
+interact(#proc{id=Id}, {remote, Mod, Func, Args}, _) ->
+    rpc:call(Id, Mod, Func, [self()|Args]);
 interact(#proc{id=Node}, {Mod, Func, Args}, _) ->
+    io:format(user, "calling ~p:~p on ~p~n", [Mod, Func, Node]),
     rpc:call(Node, Mod, Func, Args);
 interact(NI=#proc{handler=Handler}, Inputs, HState) ->
     Handler:handle_interaction(Inputs, NI, HState).

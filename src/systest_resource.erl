@@ -208,7 +208,7 @@ stopping({exit, Pid, Reason}, SD=#state{child=Pid,
     {stop, {stopped, Id, Reason}, SD#state{clients=Clients}}.
 
 %% TODO: child-down should trigger a change even when we're
-%% permanently locked
+%% permanently locked - probably we should go back to idle!?
 perm_locked(_Event, State) ->
     {next_state, perm_locked, State}.
 

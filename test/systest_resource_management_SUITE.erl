@@ -203,6 +203,7 @@ starting_max_lock_timeout_exceeded(_) ->
                  systest_resource:activate(ResourcePid)).
 
 starting_failures_after_max_lock_timeout_remain_locked(_) ->
+	%% TODO: should these not timeout instead???
     process_flag(trap_exit, true),
     TestPid = self(),
     ResourcePid =

@@ -34,7 +34,7 @@
          active_resource_crash/1,
          starting_resource_crash/1,
          starting_max_lock_timeout_exceeded/1,
-         starting_failures_after_max_lock_timeout_remain_locked/1,
+         starting_failures_after_max_lock_timeout_return_to_idle/1,
          stopping_resource_crash/1,
          stopping_resource_non_normal_exit/1]).
 
@@ -124,6 +124,9 @@ active_resource_crash(_) ->
     process_flag(trap_exit, true),
     ResourcePid = test_resource(),
     ManagedPid = activate_resource(ResourcePid),
+    ?assertEqual(active, systest_resource:current_state(ResourcePid)),
+    ?assertEqual(true,
+                 erlang:is_process_alive(ManagedPid)),
     exit(ManagedPid, kill),
     receive
         {'EXIT', ResourcePid, {resource_exit, killed}} ->
@@ -202,8 +205,8 @@ starting_max_lock_timeout_exceeded(_) ->
     ?assertEqual({error, {locked, permanent}},
                  systest_resource:activate(ResourcePid)).
 
-starting_failures_after_max_lock_timeout_remain_locked(_) ->
-	%% TODO: should these not timeout instead???
+starting_failures_after_max_lock_timeout_return_to_idle(_) ->
+    %% TODO: should these not timeout instead???
     process_flag(trap_exit, true),
     TestPid = self(),
     ResourcePid =
@@ -233,7 +236,7 @@ starting_failures_after_max_lock_timeout_remain_locked(_) ->
     %% 5 seconds beyond that should provide ample time for the
     %% insulator to have died
     timer:sleep(5000),
-    ?assertEqual({locked, permanent},
+    ?assertEqual(idle,
                  systest_resource:current_state(ResourcePid)),
     ?assertEqual(false,
                  erlang:is_process_alive(Insulator)).

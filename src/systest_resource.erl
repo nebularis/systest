@@ -253,8 +253,7 @@ handle_info({'EXIT', Pid, Reason},
     case StateName of
         perm_locked ->
             systest_lock_timer:release(),
-            {next_state, StateName,
-             State#state{insulator=died}};
+            {next_state, idle, State#state{insulator=died}};
         _Other ->
             {stop, {insulator_failed, StateName, Reason}, State}
     end;

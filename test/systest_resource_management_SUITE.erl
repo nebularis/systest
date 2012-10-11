@@ -41,8 +41,7 @@
          late_timeouts_are_ignored/1]).
 
 -import(systest_test_utils,
-        [perm/0,
-         wait_do/2,
+        [wait_do/2,
          wait_for/1,
          choice/2,
          choose/1,

@@ -36,7 +36,9 @@
          starting_max_lock_timeout_exceeded/1,
          starting_failures_after_max_lock_timeout_return_to_idle/1,
          stopping_resource_crash/1,
-         stopping_resource_non_normal_exit/1]).
+         stopping_resource_managed_pid_crash/1,
+         stopping_resource_non_normal_exit/1,
+         late_timeouts_are_ignored/1]).
 
 -import(systest_test_utils,
         [perm/0,
@@ -171,6 +173,27 @@ stopping_resource_crash(_) ->
     wait_for(test_element(2, return({stopped, ?MODULE, shutdown}))),
     ?assertEqual(idle, systest_resource:current_state(ResourcePid)).
 
+stopping_resource_managed_pid_crash(_) ->
+    Test = self(),
+    ResourcePid = test_resource(start_noop(),
+                                fun(_) ->
+                                        Test ! {insulator, self()},
+                                        receive
+                                            stop ->
+                                                 ok
+                                        end
+                                end),
+    unlink(ResourcePid),
+    ManagedPid = activate_resource(ResourcePid),
+    ?assertEqual(ok, systest_resource:deactivate(ResourcePid)),
+    InsulatorPid = receive {insulator, Pid} -> Pid
+                   end,
+    exit(ManagedPid, bang),
+    timer:sleep(1000),   %% urgh
+    InsulatorPid ! stop,
+    wait_for(test_element(2, return({stopped, ?MODULE, bang}))),
+    ok.
+
 stopping_resource_non_normal_exit(_) ->
     ResourcePid = test_resource(start_noop(),
                                 fun(_) -> kill end),
@@ -179,6 +202,17 @@ stopping_resource_non_normal_exit(_) ->
     ?assertEqual(ok, systest_resource:deactivate(ResourcePid)),
     wait_for(test_element(2, return({stopped, ?MODULE, kill}))),
     ok.
+
+late_timeouts_are_ignored(_) ->
+    ResourcePid = test_resource(start_noop(),
+                                stop_noop()),
+    activate_resource(ResourcePid),
+    ?assertEqual(active,
+                 systest_resource:current_state(ResourcePid)),
+    ResourcePid ! max_lock_timeout,
+    timer:sleep(1000),
+    ?assertEqual(active,
+                 systest_resource:current_state(ResourcePid)).
 
 % exit(whereis(perm), shutdown),
 

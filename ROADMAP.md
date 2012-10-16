@@ -18,3 +18,8 @@
 
 - longnames support migrated to plugin API
 - remote/ssh *process* support via plugin API
+
+## v0.9.0
+
+- resource definition language/format uses cassiopeia ?
+- configuration handling (lookups, interpolated values, etc) uses econfig ?

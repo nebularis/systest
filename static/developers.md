@@ -36,7 +36,10 @@ will tell you about the version of rebar that's being used and what dependencies
 are required.
 
 The project is built using [rebar][rebar], so you can, if you wish, build it 
-directly that way instead.
+directly using rebar instead. The build is currently dependent on a fork of
+the main (upstream) rebar repository, which is available in the *systest*
+branch of [hyperthunk/rebar][hyperthunk_rebar]. This dependency will be removed
+before the first public 1.0.0 release.
 
 ### Running the tests
 
@@ -46,7 +49,8 @@ The makefile's `test` target will run a suite of integration tests, using the
 ## Links
 
 [wiki]: https://github.com/nebularis/systest/wiki
-[rebar]: https://github.com/basho/rebar
+[rebar]: https://github.com/rebar/rebar
+[hyperthunk_rebar]: https://github.com/hyperthunk/rebar
 [gnu-make]: http://www.gnu.org/software/make/
 [ssh]: http://www.openssh.org/
 [gcc]: http://gcc.gnu.org/

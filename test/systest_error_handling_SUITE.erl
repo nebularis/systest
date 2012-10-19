@@ -46,10 +46,12 @@
 suite() -> [{timetrap, {minutes, 2}}].
 
 all() ->
-    %% the timetrap_failure test *must* run separately
+    %% The timetrap_failure test *must* run separately
     %% from the rest of the SUITE, as the error it generates
     %% cannot be handled even by a ct_hook, and therefore the
-    %%
+    %% test run will always appear to fail - we simply want
+    %% to trigger that, so we can verify the shutdown behaviour
+    %% in our CT hook properly.
     [sut_start_scripts_badly_configured,
      failing_proc_on_start_hook,
      failing_sut_on_start_hook,

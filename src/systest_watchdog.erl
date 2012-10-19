@@ -32,14 +32,19 @@
         [{read_concurrency, true},
          {write_concurrency, false}]).
 
--record(state, {sut_table, proc_table, exception_table}).
+-record(state, {
+    sut_table,
+    proc_table,
+    exception_table,
+    last_timeout = infinity
+}).
 
 -behaviour(gen_server).
 
 %% API Exports
 
 -export([start/0, sut_started/2, exceptions/1, reset/0, stop/0,
-         proc_started/2, proc_stopped/2, force_stop/1]).
+         proc_started/2, proc_stopped/2, force_stop/1, force_stop/2]).
 
 -export([clear_exceptions/0, dump/0]).
 
@@ -59,7 +64,8 @@ stop() ->
     gen_server:call(?MODULE, stop).
 
 sut_started(Id, Pid) ->
-    gen_server:call(?MODULE, {sut_started, Id, Pid}).
+    %% TODO: there *should* be a timeout here....
+    gen_server:call(?MODULE, {sut_started, Id, Pid}, infinity).
 
 reset() ->
     gen_server:call(?MODULE, reset).
@@ -68,15 +74,17 @@ force_stop(Id) ->
     force_stop(Id, infinity).
 
 force_stop(Id, Timeout) ->
-    GenServerTimeout = if is_integer(Timeout) -> Timeout * 1.5;
-                                         true -> Timeout
+    GenServerTimeout = if erlang:is_integer(Timeout) ->
+                               erlang:round(Timeout * 1.5);
+                          true ->
+                               Timeout
                        end,
     case gen_server:call(?MODULE, {force_stop, Id, Timeout},
                          GenServerTimeout) of
         {error, regname, Id} ->
             log(framework, "ignoring stop for deceased SUT ~p~n", [Id]);
-        Ok ->
-            Ok
+        Result ->
+            Result
     end.
 
 proc_started(Cid, Pid) ->
@@ -125,11 +133,13 @@ handle_call(reset, _From, State=#state{sut_table=CT,
                                        exception_table=ET}) ->
     CPids = [CPid || {_, CPid} <- ets:tab2list(CT)],
     systest_cleaner:kill_wait(CPids, fun(P) -> erlang:exit(P, reset) end),
-    kill_wait(find_procs(NT)),
+    kill_wait(find_procs(NT), infinity),
     [ets:delete_all_objects(T) || T <- [ET, NT, CT]],
     {reply, ok, State};
 handle_call({force_stop, SutId, Timeout}, _From,
             State=#state{sut_table=CT}) ->
+    log(framework, "~p force stop ~p within ~p ms~n",
+        [?MODULE, SutId, Timeout]),
     case ets:lookup(CT, SutId) of
         [] ->
             log(framework,
@@ -139,7 +149,7 @@ handle_call({force_stop, SutId, Timeout}, _From,
             %% firstly, this next call can timeout (gen_server wise)
             Reply = systest_sut:stop(Pid, Timeout),
             log(framework, "force stop complete: ~p~n", [Reply]),
-            {reply, Reply, State}
+            {reply, Reply, State#state{last_timeout=Timeout}}
     end;
 handle_call({exceptions, SutId}, _From,
             State=#state{exception_table=ET}) ->
@@ -168,7 +178,7 @@ handle_cast(_Msg, State) ->
 
 handle_info({'EXIT', Pid, Reason},
             State=#state{sut_table=CT, proc_table=NT,
-                         exception_table=ET}) ->
+                         exception_table=ET, last_timeout=Timeout}) ->
     case ets:match_object(CT, {'_', Pid}) of
         [{SutId, _}=Sut] ->
             log(framework,
@@ -189,7 +199,7 @@ handle_info({'EXIT', Pid, Reason},
                     ets:insert(ET, [{SutId, crashed, Reason}])
             end,
 
-            handle_down(Sut, NT),
+            handle_down(Sut, NT, Timeout),
             ets:delete(CT, SutId);
         [[]] ->
             log(framework,
@@ -200,7 +210,7 @@ handle_info({'EXIT', Pid, Reason},
     {noreply, State}.
 
 terminate(_Reason, #state{proc_table=ProcTable}) ->
-    kill_wait(find_procs(ProcTable)),
+    kill_wait(find_procs(ProcTable), infinity),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -224,12 +234,28 @@ find_procs(ProcTable, {SutId, _}) ->
 find_procs(ProcTable) ->
     [P || {{_, P}} <- ets:tab2list(ProcTable), erlang:is_process_alive(P)].
 
-handle_down(Sut, ProcTable) ->
-    kill_wait(find_procs(ProcTable, Sut)).
+handle_down(Sut, ProcTable, Timeout) ->
+    kill_wait(find_procs(ProcTable, Sut), Timeout).
 
-kill_wait([]) ->
+kill_wait([], _) ->
     log(framework, "watchdog: no procs to kill~n", []);
-kill_wait(Procs) ->
+kill_wait(Procs, Timeout) ->
     log(framework, "watchdog killing: ~p~n", [Procs]),
-    systest_cleaner:kill_wait(Procs, fun systest_proc:kill/1).
+    case systest_cleaner:kill_wait(Procs, fun systest_proc:kill/1, Timeout) of
+        {error, timeout, _Dead} ->
+            brutal_kill(Procs);
+        {error, {killed, _Killed}} ->
+            brutal_kill(Procs);
+        {error, Reason} ->
+            log(framework,
+                "watching saw errors trying to kill children: ~p~n",
+                [Reason]),
+            brutal_kill(Procs);
+        ok ->
+            ok
+    end.
+
+brutal_kill(Targets) ->
+    log(framework, "resorting to brutal_kill: ~p~n", [Targets]),
+    [exit(P, kill) || P <- Targets].
 

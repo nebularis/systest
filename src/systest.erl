@@ -30,7 +30,7 @@
 
 -export([main/1, get_system_under_test/1]).
 -export([start/0, stop/0, reset/0, sigkill/1]).
--export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
+-export([start_suite/2, stop_scope/2, start/2, start/3, stop/1]).
 -export([active_sut/1, suts/1, procs/1]).
 -export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
@@ -83,8 +83,8 @@ start_suite(Suite, Config) ->
 
 %% @doc immediately stops any resources associated with the supplied Scope
 %% @end
-stop_scope(Scope) when is_atom(Scope) ->
-    systest_watchdog:force_stop(Scope).
+stop_scope(Scope, Timeout) when is_atom(Scope) ->
+    systest_watchdog:force_stop(Scope, Timeout).
 
 %% @doc starts any resources associated with the given scope
 %% @end

@@ -43,15 +43,15 @@ info: $(REBAR)
 
 .PHONY: clean
 clean:
-	$(REBAR) skip_deps=true clean -v $(LOGLEVEL)
+	$(REBAR) skip_deps=true clean ${REBAR_OPTS}
 
 .PHONY: doc
 doc:
-	$(REBAR) skip_deps=true doc -v $(LOGLEVEL)
+	$(REBAR) skip_deps=true doc ${REBAR_OPTS}
 
 .PHONY: publish-wiki
 publish-wiki:
-	$(REBAR) skip_deps=true publish-wiki -v $(LOGLEVEL)
+	$(REBAR) skip_deps=true publish-wiki ${REBAR_OPTS}
 
 .PHONY: dist-clean
 dist-clean: clean
@@ -60,12 +60,12 @@ dist-clean: clean
 	rm -rf priv/bin/systest*
 
 compile: $(REBAR)
-	$(REBAR) get-deps compile -v $(LOGLEVEL)
+	$(REBAR) get-deps compile ${REBAR_OPTS}
 
 .PHONY: escriptize
 escriptize: compile
 	ERL_FLAGS="-pa ebin" \
-	    $(REBAR) skip_deps=true escriptize -v $(LOGLEVEL)
+	    $(REBAR) skip_deps=true escriptize ${REBAR_OPTS}
 
 .PHONY: verify
 verify:
@@ -74,14 +74,14 @@ verify:
 
 .PHONY: eunit
 eunit:
-	$(REBAR) skip_deps=true -C test.config eunit -v $(LOGLEVEL)
+	$(REBAR) skip_deps=true -C test.config eunit ${REBAR_OPTS}
 
 .PHONY: test-compile
 test-compile: $(REBAR)
-	$(REBAR) skip_deps=true -C test.config test-compile -v $(LOGLEVEL)
+	$(REBAR) skip_deps=true -C test.config test-compile ${REBAR_OPTS}
 
 .PHONY: test
-test: escriptize eunit test-default test-error-handling test-time-traps
+test: escriptize eunit test-default test-errors test-time-traps
 
 .PHONY: test-dependencies
 test-dependencies: escriptize test-compile
@@ -90,8 +90,15 @@ test-dependencies: escriptize test-compile
 test-default: test-dependencies
 	$(call systest,$@,$(SYSTEST_FLAGS))
 
+.PHONY: test-errors
+test-errors: test-error-handling test-timeouts
+
 .PHONY: test-error-handling
 test-error-handling: test-dependencies
+	$(call systest,$@,-c $(SYSTEST_FLAGS))
+
+.PHONY: test-timeouts
+test-timeouts: test-dependencies
 	$(call systest,$@,-c $(SYSTEST_FLAGS))
 
 .PHONY: test-time-traps

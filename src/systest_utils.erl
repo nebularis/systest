@@ -36,7 +36,8 @@
 -export([time_to_ms/1, as_atom/1, remote_load/2]).
 
 abort(Fmt, Args) ->
-    io:format(user, Fmt, Args),
+    io:format(Fmt, Args),
+    timer:sleep(500),
     erlang:halt(1).
 
 throw_unless(Cond, Msg) ->

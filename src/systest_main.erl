@@ -27,7 +27,7 @@
 -export([run/1, help/0]).
 
 help() ->
-    io:format("Usage: systest [-P <profile>] [-L <logging>] [-n] [-h]~n~n"
+    io:format("Usage: systest [-P <profile>] (Options) ~n~n"
               "-h               Show the program options~n"
               "-q, --quiet      Disable header/options output on start~n"
               "-P, --profile    Use the specified test profile~n"
@@ -39,6 +39,7 @@ help() ->
               "-L, --logging    Active logging for the specified sub-system~n"
               "-n, --dryrun     Print everything out but don't run any tests~n"
               "-w, --no_cover   Disable code coverage~n"
+              "-c, --cover-import Enables import/export of coverage data~n"
               "-i, --ignore     Ignore errors/failures~n"
               "-I, --ignore_skipped Ignore skipped test cases~n"
               "-a, --name       Specify (Erlang) node name, "
@@ -117,6 +118,7 @@ opt_spec() ->
      {logging,          'L', string},
      {dryrun,           'n', flag},
      {no_cover,         'w', flag},
+     {'cover-import',   'c', flag},
      {ignore,           'i', flag},
      {ignore_skipped,   'I', flag},
      {dump,             'X', flag},

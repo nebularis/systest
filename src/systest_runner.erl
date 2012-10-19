@@ -198,7 +198,7 @@ verify(Exec2=#execution{profile     = Prof,
 
 timed_abort(Config, Ms) ->
     AbortHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
-    AbortHandler("ABORT: reached max overall time trap: ~p ms~n", [Ms]).
+    AbortHandler("ABORT: reached max profile execution time: ~p ms~n", [Ms]).
 
 get_framework(Prof, Config) ->
     list_to_atom(case ?CONFIG(stand_alone, Config, false) of

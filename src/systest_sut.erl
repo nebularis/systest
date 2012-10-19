@@ -143,8 +143,6 @@ proc_pids(Sut) when is_record(Sut, sut) ->
 
 init([Scope, Id, Config]) ->
     process_flag(trap_exit, true),
-    %% TODO: now that we're using locally registered
-    %% names, perhaps this logic can go away?
     case systest_watchdog:sut_started(Id, self()) of
         ok ->
             LogBase = systest_env:default_log_dir(Config),
@@ -316,7 +314,7 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
             {stop, Err, State};
         Other ->
             framework("halt error: ~p~n", [Other]),
-            gen_server:reply(ReplyTo, {error, Other}),
+            gen_server:reply(ReplyTo, Other),
             {stop, {halt_error, Other}, State}
     end.
 

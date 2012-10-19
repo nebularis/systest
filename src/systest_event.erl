@@ -68,13 +68,6 @@ handle_event(#event{name=tc_done,
                     data={_Suite, FuncOrGroup, Result}}, State) ->
     {N, Desc} = descriptor(FuncOrGroup),
     case Result of
-        ok ->
-            systest_results:add_passed(?EV_SOURCE, 1),
-            LogF = case is_ct_wrap_function(N) of
-                       true -> fun systest_log:framework/2;
-                       false -> fun systest_log:console/2
-                   end,
-            LogF("~s ~p completed successfully~n", [Desc, N]);
         {skipped, SkipReason} ->
             case SkipReason of
                 {require_failed, {_, Key}} ->
@@ -91,7 +84,14 @@ handle_event(#event{name=tc_done,
             failed(N, Desc, FailReason);
         {framework_error, Other} ->
             systest_results:add_failed(?EV_SOURCE, 1),
-            failed(N, Desc, Other)
+            failed(N, Desc, Other);
+        _ ->
+            systest_results:add_passed(?EV_SOURCE, 1),
+            LogF = case is_ct_wrap_function(N) of
+                       true -> fun systest_log:framework/2;
+                       false -> fun systest_log:console/2
+                   end,
+            LogF("~s ~p completed successfully~n", [Desc, N])
     end,
     {ok, State};
 handle_event(#event{name=tc_auto_skip, data={Suite,Func,Reason}}, State) ->

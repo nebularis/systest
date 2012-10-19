@@ -74,17 +74,30 @@ kill(Targets, Server, Timeout) ->
     %% could return the actual victims and outstanding targets,
     %% which would make logging a bit nicer
     wait = gen_server:call(Server, {kill, Targets}, Timeout),
+    MRef = erlang:monitor(process, Server),
     receive
         {_Ref, {ok, Killed}} ->
-            case length(Killed) =:= length(Targets) of
-                true  -> ok;
-                false -> {error, {killed, Targets}}
-            end;
+            check_length(Targets, Killed);
         {'EXIT', Server, normal} ->
-            %% is it *possible* that the 'EXIT'
-            %% overtakes the reply?
-            ok
-    after Timeout -> {error, timeout}
+            %% is it *possible* that the 'EXIT' overtakes the reply!
+            check_length(Targets, dead_pids(Targets));
+        {'DOWN', MRef, process, Server, Reason} ->
+            {error, Reason}
+    after Timeout ->
+            {error, timeout, dead_pids(Targets)}
+    end.
+
+%%
+%% Internal API
+%%
+
+dead_pids(Targets) ->
+    lists:filter(fun erlang:is_process_alive/1, Targets).
+
+check_length(Targets, Killed) ->
+    case length(Killed) =:= length(Targets) of
+        true  -> ok;
+        false -> {error, {killed, Targets}}
     end.
 
 %%
@@ -108,7 +121,7 @@ handle_call(_Msg, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'EXIT', Pid, _},
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State=#state{targets=Targets, victims=Victims}) ->
     {Client, Nodes} = queue:head(Targets),
     case lists:member(Pid, Nodes) of
@@ -132,12 +145,13 @@ handle_info({'EXIT', Pid, _},
                         queue:cons({Client, T2}, queue:tail(Targets)),
                     {noreply, State#state{targets=RemainingQueue, victims=V2}}
             end
-    end.
+    end;
+handle_info({'EXIT', _, normal}, State) ->
+    {noreply, State}.
 
 link_and_kill(Pids, Kill) ->
-    [begin
-        link(P), Kill(P)
-     end || P <- Pids].
+    [erlang:monitor(process, P) || P <- Pids],
+    [spawn_link(fun() -> Kill(P) end) || P <- Pids].
 
 terminate(_Reason, _State) ->
     ok.

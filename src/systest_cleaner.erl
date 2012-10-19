@@ -151,11 +151,7 @@ handle_info({'EXIT', _, normal}, State) ->
 
 link_and_kill(Pids, Kill) ->
     [erlang:monitor(process, P) || P <- Pids],
-<<<<<<< HEAD
-    [Kill(P) || P <- Pids].
-=======
     [spawn_link(fun() -> Kill(P) end) || P <- Pids].
->>>>>>> per profile resource stop timeouts, aggressive (exit+kill) shutdowns
 
 terminate(_Reason, _State) ->
     ok.

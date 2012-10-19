@@ -27,6 +27,7 @@ TEST_DIR=test
 EBIN_DIR=ebin
 DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- proplists:get_value(deps, element(2, file:consult("rebar.config")))], halt(0).')
 LATEST_STABLE=$(shell git log stable --oneline -1 --format="%h")
+REBAR_OPTS ?=
 
 ## rules start here
 

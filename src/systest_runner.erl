@@ -171,7 +171,7 @@ verify(Exec2=#execution{profile     = Prof,
                   false -> run
               end,
 
-    case systest_profile:get(overall_timetrap, Prof) of
+    case systest_profile:get(execution_timetrap, Prof) of
         undefined ->
             ok;
         TimeoutNode ->

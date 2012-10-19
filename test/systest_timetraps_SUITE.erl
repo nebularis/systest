@@ -60,10 +60,11 @@ groups() ->
      {test_aggressive_shutdowns, [],
       [%% first we check the teardown for the
        %% previous group resources was successful
+       verify_hung_resource_was_handled,
+       %% then we start a sut that hangs during on_start
+       hang_on_startup,
+       %% and verify that the setup timeout handled it!
        verify_hung_resource_was_handled
-%       hang_on_startup,
-       %% and verify that the timeout handled it!
-%       verify_hung_resource_was_handled
       ]}].
 
 init_per_testcase(TC, Config) ->
@@ -83,14 +84,7 @@ init_per_group(Group, Config) ->
         not_found -> ok;
         Procs     -> save(group_procs, Procs)
     end,
-    case ?config(saved_config, Config) of
-        {{group, LastG}, Config2} ->
-            {LastTC, _} = ?config(saved_config, Config2),
-            [{last_group, LastG},
-             {last_tc, LastTC}|Config];
-        _ ->
-            Config
-    end.
+    Config.
 
 end_per_group(Group, Config) ->
     SaveConf = case lists:keytake(group_last, 1, Config) of
@@ -153,7 +147,28 @@ verify_hung_resource_was_handled(Config) ->
         test_teardown_timeouts ->
             assert_cleanup_succeeded(simple_test_case_pass_through, procs);
         test_aggressive_shutdowns ->
-            assert_cleanup_succeeded(test_teardown_timeouts, group_procs)
+            assert_cleanup_succeeded(test_teardown_timeouts, group_procs),
+            %% if this looks hack-ish, it's because we're testing the behaviour
+            %% of a function which is *designed* to never be run, by a testing
+            %% framework's pre-pre-execution hook (i.e., ct_hooks/systest_cth)
+            %% to ensure that we handled the sitation properly!!!
+            try
+                verified = read(verified_once),
+                %% we've verified once, so we need to check that
+                %% hang_on_startup has been cleaned up properly!!!
+                %% ** again ** this is quite messy due to the nature
+                %% of what we're testing here - users should never
+                %% end up in this situation....
+                {ok, Hostname} = inet:gethostname(),
+                ProcIds = [n1, n2],
+                [begin
+                     Id = systest_proc:proc_id(list_to_atom(Hostname), Proc),
+                     ?assertEqual(pang, net_adm:ping(Id))
+                 end || Proc <- ProcIds]
+            catch _:badarg ->
+                    save(verified_once, verified),
+                    save(group_procs, [])
+            end
     end.
 
 assert_cleanup_succeeded(Root, OrphansKey) ->

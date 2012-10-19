@@ -47,6 +47,7 @@
     specifications           = []       :: [file:filename()],
     hooks                    = []       :: [term()],
     aggressive_teardown      = false    :: boolean(),
+    setup_timetrap           = infinity :: {time_unit(), integer()},
     teardown_timetrap        = infinity :: {time_unit(), integer()},
     execution_timetrap                  :: {time_unit(), integer()}
 }).

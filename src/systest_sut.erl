@@ -72,22 +72,47 @@ start_link(ScopeId, SutId, Config) ->
 
 start_it(How, ScopeId, SutId, Config) ->
     framework("System Under Test: ~p~n", [SutId]),
-    case apply(gen_server, How, [{local, SutId},
-                                 ?MODULE, [ScopeId, SutId, Config], []]) of
-        {error, noconfig} ->
-            case lists:keymember(active, 1, Config) of
-                false -> [{active, none}|Config];
-                true  -> Config
-            end;
-        {error, {bad_return_value, Return}} ->
-            log_startup_errors(SutId, Return),
-            {error, Return};
-        {error, Other}=Err ->
-            log_startup_errors(SutId, Other),
-            Err;
-        {ok, Pid} ->
-            Config2 = systest_config:ensure_value(SutId, Pid, Config),
-            systest_config:replace_value(active, Pid, Config2)
+    Parent = self(),
+    Timetrap = proplists:get_value(setup_timetrap, Config, infinity),
+    Timeout = systest_utils:time_to_ms(Timetrap),
+    {Pid, MRef} =
+        spawn_monitor(
+          fun() ->
+                  case apply(gen_server, How, [{local, SutId},
+                             ?MODULE, [ScopeId, SutId, Timeout, Config], []]) of
+                      {error, noconfig} ->
+                          Conf2 = case lists:keymember(active, 1, Config) of
+                                      false -> [{active, none}|Config];
+                                      true  -> Config
+                                  end,
+                          Parent ! {self(), Conf2};
+                      {error, {bad_return_value, Return}} ->
+                          log_startup_errors(SutId, Return),
+                          Parent ! {self(), {error, Return}};
+                      {error, Other}=Err ->
+                          log_startup_errors(SutId, Other),
+                          Parent ! {self(), Err};
+                      {ok, Pid} ->
+                          Config2 =
+                              systest_config:ensure_value(SutId,
+                                                          Pid,
+                                                          Config),
+                          Parent ! {self(),
+                                    systest_config:replace_value(active,
+                                                                 Pid,
+                                                                 Config2)}
+                  end
+      end),
+    receive
+        {Pid, Result} ->
+            Result;
+        {'DOWN', MRef, process, Pid, Reason} ->
+            receive {Pid, Ret} -> Ret
+            after 0 -> {error, Reason}
+            end
+    after Timeout ->
+            exit(Pid, kill),
+            throw({error, {start, timeout}})
     end.
 
 stop(SutRef) ->
@@ -141,9 +166,9 @@ proc_pids(Sut) when is_record(Sut, sut) ->
 %% OTP gen_server API
 %%
 
-init([Scope, Id, Config]) ->
+init([Scope, Id, Timeout, Config]) ->
     process_flag(trap_exit, true),
-    case systest_watchdog:sut_started(Id, self()) of
+    case systest_watchdog:sut_started(Id, self(), Timeout) of
         ok ->
             LogBase = systest_env:default_log_dir(Config),
             case systest_log:activate_logging_subsystem(sut, Id, LogBase) of

@@ -46,6 +46,7 @@
 -record(state, {
     auto_start :: boolean(),
     aggressive :: boolean(),
+    setup      :: integer(),
     teardown   :: integer(),
     suite      :: atom(),
     failed     :: integer(),
@@ -73,11 +74,13 @@ init(systest, Opts) ->
                     Value     -> Value
                 end,
     systest_results:test_run(?SOURCE),
+    SetupTimetrap = ?CONFIG(setup_timetrap, Opts, infinity),
     TeardownTimetrap = ?CONFIG(teardown_timetrap, Opts, infinity),
     Timeout = systest_utils:time_to_ms(TeardownTimetrap),
     Aggressive = ?CONFIG(aggressive_teardown, Opts, false),
     {ok, #state{auto_start=AutoStart,
                 aggressive=Aggressive,
+                setup=SetupTimetrap,
                 teardown=Timeout,
                 failed=0,
                 skipped=0,
@@ -87,10 +90,12 @@ init(systest, Opts) ->
 %% SUT, if one is configured for this suite.
 pre_init_per_suite(Suite, Config, State=#state{auto_start=false}) ->
     {Config, State#state{suite=Suite}};
-pre_init_per_suite(Suite, Config, State) ->
+pre_init_per_suite(Suite, Config,
+                   State=#state{setup=STT}) ->
     log(framework, "pre_init_per_suite: maybe start ~p~n", [Suite]),
     %% TODO: handle init_per_suite use of SUT aliases
-    {systest:start_suite(Suite, systest:trace_on(Suite, Config)),
+    Config2 = [{setup_timetrap, STT}|Config],
+    {systest:start_suite(Suite, systest:trace_on(Suite, Config2)),
                     State#state{suite=Suite}}.
 
 post_end_per_suite(Suite, Config, Result,
@@ -105,8 +110,10 @@ post_end_per_suite(Suite, Config, Result,
 %% @doc Called before each init_per_group.
 pre_init_per_group(_Group, Config, State=#state{auto_start=false}) ->
     {Config, State};
-pre_init_per_group(Group, Config, State=#state{suite=Suite}) ->
-    {systest:start(Suite, Group, Config), State}.
+pre_init_per_group(Group, Config,
+                   State=#state{suite=Suite, setup=STT}) ->
+    Config2 = [{setup_timetrap, STT}|Config],
+    {systest:start(Suite, Group, Config2), State}.
 
 post_end_per_group(Group, Config, Result, State) ->
     stop(Group, State, Config, Result).
@@ -114,9 +121,11 @@ post_end_per_group(Group, Config, Result, State) ->
 %% @doc Called before each test case.
 pre_init_per_testcase(TC, Config, State=#state{auto_start=false}) ->
     {systest:trace_on(TC, Config), State};
-pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
+pre_init_per_testcase(TC, Config,
+                      State=#state{suite=Suite, setup=STT}) ->
     log(framework, "handling ~p pre_init_per_testcase~n", [TC]),
-    {systest:start(Suite, TC, Config), State}.
+    Config2 = [{setup_timetrap, STT}|Config],
+    {systest:start(Suite, TC, Config2), State}.
 
 post_end_per_testcase(TC, Config, Result, State) ->
     log(framework, "processing ~p post_end_per_testcase~n", [TC]),

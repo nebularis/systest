@@ -346,20 +346,24 @@ on_join(Proc, Sut, Procs, Hooks) ->
         "process has joined system under test: ~p~n", [SutRef]),
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
-    {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
-                                 apply_hook(on_join,
-                                            {Where, M, F,
-                                             [SutRef, Procs]},
-                                            Acc);
-                                ({Where, M, F, A}, Acc) ->
-                                 apply_hook(on_join,
-                                            {Where, M, F,
-                                                [SutRef, Procs|A]},
-                                            Acc);
-                                (What, Acc) ->
-                                    throw({What, Acc})
-                             end, {Proc, undefined}, Hooks),
-    Proc2.
+    try
+        {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
+                                         apply_hook(on_join,
+                                                    {Where, M, F,
+                                                     [SutRef, Procs]},
+                                                    Acc);
+                                    ({Where, M, F, A}, Acc) ->
+                                         apply_hook(on_join,
+                                                    {Where, M, F,
+                                                     [SutRef, Procs|A]},
+                                                    Acc);
+                                    (What, Acc) ->
+                                         throw({What, Acc})
+                                 end, {Proc, undefined}, Hooks),
+        Proc2
+    catch _:Err ->
+            {error, Err}
+    end.
 
 %% TODO: migrate this to systest_hooks....
 

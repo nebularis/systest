@@ -102,19 +102,22 @@ install_cth(Profile, Hooks) ->
     end.
 
 update_cth(systest_cth, Hooks, Profile) ->
+    SetupTimetrap = systest_profile:get(setup_timetrap, Profile),
     TeardownTimetrap = systest_profile:get(teardown_timetrap, Profile),
     AggressiveTeardown = systest_profile:get(aggressive_teardown, Profile),
     [{systest_cth,
-      [{teardown_timetrap, TeardownTimetrap},
+      [{setup_timetrap, SetupTimetrap},
+       {teardown_timetrap, TeardownTimetrap},
        {aggressive_teardown, AggressiveTeardown}], ?PRIORITY}|Hooks];
 update_cth({systest_cth, Opts, Priority}, Hooks, Profile) ->
-    Opts2 = lists:foldl(
-              fun(Opt, Acc) ->
-                 case lists:keymember(Opt, 1, Acc) of
-                     true  -> Acc;
-                     false -> [{Opt, systest_profile:get(Opt, Profile)}|Acc]
-                 end
-              end, Opts, [teardown_timetrap, aggressive_teardown]),
+    Opts2 =
+        lists:foldl(
+          fun(Opt, Acc) ->
+                  case lists:keymember(Opt, 1, Acc) of
+                      true  -> Acc;
+                      false -> [{Opt, systest_profile:get(Opt, Profile)}|Acc]
+                  end
+          end, Opts, [setup_timetrap, teardown_timetrap, aggressive_teardown]),
     [{systest_cth, Opts2, Priority}|Hooks].
 
 find_hook(Hooks) ->

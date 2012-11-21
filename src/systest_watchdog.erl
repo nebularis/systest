@@ -43,7 +43,7 @@
 
 %% API Exports
 
--export([start/0, sut_started/2, exceptions/1, reset/0, stop/0,
+-export([start/0, sut_started/3, exceptions/1, reset/0, stop/0,
          proc_started/2, proc_stopped/2, force_stop/1, force_stop/2]).
 
 -export([clear_exceptions/0, dump/0]).
@@ -63,9 +63,9 @@ start() ->
 stop() ->
     gen_server:call(?MODULE, stop).
 
-sut_started(Id, Pid) ->
+sut_started(Id, Pid, Timeout) ->
     %% TODO: there *should* be a timeout here....
-    gen_server:call(?MODULE, {sut_started, Id, Pid}, infinity).
+    gen_server:call(?MODULE, {sut_started, Id, Pid}, Timeout).
 
 reset() ->
     gen_server:call(?MODULE, reset).

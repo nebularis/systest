@@ -32,6 +32,7 @@ MY_ERL_LIBS="${SYSTEST_DEPS}:${SYSTEST_ERL_LIBS}"
 SYSTEST_ERL_FLAGS ?= -pa ebin -pa .test
 SYSTEST_ENV ?= 
 SYSTEST_COVER ?= --cover-dir=.test
+SYSTEST_DUMP ?= 'false'
 
 ifneq ($(SYSTEST_LOGGING), 'false')
 OPERATOR_LOG=-L operator

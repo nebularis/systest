@@ -48,7 +48,7 @@
     hooks                    = []       :: [term()],
     aggressive_teardown      = false    :: boolean(),
     teardown_timetrap        = infinity :: {time_unit(), integer()},
-    overall_timetrap                    :: {time_unit(), integer()}
+    execution_timetrap                  :: {time_unit(), integer()}
 }).
 
 -exprecs_prefix([operation]).

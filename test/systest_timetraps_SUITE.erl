@@ -151,7 +151,7 @@ verify_hung_resource_was_handled(Config) ->
             %% if this looks hack-ish, it's because we're testing the behaviour
             %% of a function which is *designed* to never be run, by a testing
             %% framework's pre-pre-execution hook (i.e., ct_hooks/systest_cth)
-            %% to ensure that we handled the sitation properly!!!
+            %% to ensure that we handled the situation properly!!!
             try
                 verified = read(verified_once),
                 %% we've verified once, so we need to check that

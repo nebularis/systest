@@ -326,7 +326,7 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
     %%
     %% Another thing to note here is that systest_cleaner runs the kill_wait
     %% function in a different process. If we put a selective receive block
-    %% here, we might well run into unexpected message ordering that could
+    %% here, we might well run into unexpected message orderings that could
     %% leave us in an inconsistent state.
     ProcRefs = [ProcRef || {_, ProcRef} <- Procs, is_process_alive(ProcRef)],
     case systest_cleaner:kill_wait(ProcRefs,

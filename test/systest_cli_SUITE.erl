@@ -144,7 +144,7 @@ handling_normal_exit_status(Config) ->
                                {name, n1},
                                {host, list_to_atom(Hostname)}|Config]),
 
-    %% oh man, we need an API for reading things like 'start.environment'!!!
+    %% TODO: we need an API for reading things like 'start.environment'
     PrivDir = ?config(priv_dir, Config),
     Scope = "handling_normal_exit_status",
     PipeDir = filename:join([PrivDir, Scope, ".PIPEDIR"]),

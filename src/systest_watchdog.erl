@@ -79,10 +79,15 @@ force_stop(Id, Timeout) ->
                           true ->
                                Timeout
                        end,
-    case gen_server:call(?MODULE, {force_stop, Id, Timeout},
-                         GenServerTimeout) of
+    case catch(gen_server:call(?MODULE, {force_stop, Id, Timeout},
+                               GenServerTimeout)) of
         {error, regname, Id} ->
             log(framework, "ignoring stop for deceased SUT ~p~n", [Id]);
+        {timeout, {Id, Pid}} ->
+            exit(Pid, kill),
+            {error, timeout};
+        {timeout, _} ->
+            {error, timeout};
         Result ->
             Result
     end.
@@ -145,9 +150,12 @@ handle_call({force_stop, SutId, Timeout}, _From,
             log(framework,
                 "~p not found in ~p~n", [SutId, ets:tab2list(CT)]),
             {reply, {error, regname, SutId}, State};
-        [{SutId, Pid}] ->
+        [{SutId, Pid}=RefId] ->
             %% firstly, this next call can timeout (gen_server wise)
-            Reply = systest_sut:stop(Pid, Timeout),
+            Reply = case systest_sut:stop(Pid, Timeout) of
+                        {timeout, _} -> {timout, RefId};
+                        Other        -> Other
+                    end,
             log(framework, "force stop complete: ~p~n", [Reply]),
             {reply, Reply, State#state{last_timeout=Timeout}}
     end;

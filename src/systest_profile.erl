@@ -46,7 +46,7 @@
     targets                  = ["ebin"] :: [testable()],
     specifications           = []       :: [file:filename()],
     hooks                    = []       :: [term()],
-    aggressive_teardown      = false    :: boolean(),
+    aggressive_teardown      = false    :: boolean() | {time_unit(), integer()},
     setup_timetrap           = infinity :: {time_unit(), integer()},
     teardown_timetrap        = infinity :: {time_unit(), integer()},
     execution_timetrap                  :: {time_unit(), integer()}

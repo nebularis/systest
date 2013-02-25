@@ -121,9 +121,11 @@ stop(SutRef) ->
 
 stop(SutRef, Timeout) ->
     GenServerTimeout = if is_atom(Timeout) -> Timeout;
-                                      true -> erlang:round(Timeout * 1.5)
+                                      true -> erlang:round(Timeout * 1.1)
                        end,
-    gen_server:call(SutRef, {stop, Timeout}, GenServerTimeout).
+    try gen_server:call(SutRef, {stop, Timeout}, GenServerTimeout)
+    catch exit:{timeout, _}=R -> R
+    end.
 
 restart_proc(SutRef, Proc) ->
     restart_proc(SutRef, Proc, infinity).

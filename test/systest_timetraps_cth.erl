@@ -87,6 +87,14 @@ post_end_per_testcase(TC=simple_test_case_pass_through,
         {OtherReturn, OtherState2} ->
             {{fail, OtherReturn}, OtherState2}
     end;
+post_end_per_testcase(TC=hang_on_startup, Config, Return, State) ->
+    case systest_cth:post_end_per_testcase(TC, Config, Return, State) of
+        {{fail,{timout,{hang_on_startup, _}}}, State2} ->
+            systest:log("ignoring expected failure of ~p~n", [TC]),
+                {proplists:delete(tc_status, Config), State2};
+        {OtherReturn, OtherState2} ->
+            {{fail, OtherReturn}, OtherState2}
+    end;
 post_end_per_testcase(TC, Config, Return, State) ->
     systest_cth:post_end_per_testcase(TC, Config, Return, State).
 

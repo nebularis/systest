@@ -45,7 +45,7 @@
 
 -record(state, {
     auto_start :: boolean(),
-    aggressive :: boolean(),
+    aggressive :: boolean() | integer(),
     setup      :: integer(),
     teardown   :: integer(),
     suite      :: atom(),
@@ -77,7 +77,10 @@ init(systest, Opts) ->
     SetupTimetrap = ?CONFIG(setup_timetrap, Opts, infinity),
     TeardownTimetrap = ?CONFIG(teardown_timetrap, Opts, infinity),
     Timeout = systest_utils:time_to_ms(TeardownTimetrap),
-    Aggressive = ?CONFIG(aggressive_teardown, Opts, false),
+    Aggressive = case ?CONFIG(aggressive_teardown, Opts, false) of
+                     {_, _}=T -> systest_utils:time_to_ms(T);
+                     Other    -> Other
+                 end,
     {ok, #state{auto_start=AutoStart,
                 aggressive=Aggressive,
                 setup=SetupTimetrap,
@@ -165,7 +168,9 @@ fail_count(State, State2) ->
 possibly_generate_killer(_, false) ->
     ok;
 possibly_generate_killer(Target, true) ->
-    timer:kill_after(?AGGRESSIVE_SHUTDOWN_MAX_WAIT, Target).
+    possibly_generate_killer(Target, ?AGGRESSIVE_SHUTDOWN_MAX_WAIT);
+possibly_generate_killer(Target, Timeout) ->
+    timer:kill_after(Timeout, Target).
 
 check_exceptions(SutId, Return,
                  State=#state{failed=F, skipped=S, passed=P}) ->

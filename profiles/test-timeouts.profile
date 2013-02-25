@@ -8,6 +8,6 @@
              100000},
             do_not_install,
             cth_log_redirect]}.
-{aggressive_teardown, true}.
+{aggressive_teardown, {seconds, 5}}.
 {setup_timetrap, {seconds, 10}}.
 {teardown_timetrap, {seconds, 10}}.

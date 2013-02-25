@@ -132,8 +132,8 @@ init(Proc=#proc{config=Config}) ->
                                {detached, Detached},
                                {rpc_enabled, RpcEnabled}],
                     LogMsg = systest_utils:proplist_format(LogInfo),
-                    framework("external process handler ~p[~p] started:~n~s~n",
-                              [Scope, Id, LogMsg]),
+                    framework("external process handler ~p [~p - ~p] started:~n~s~n",
+                              [Scope, Id, self(), LogMsg]),
                     framework("~p [~p] start-command:~n~s~n",
                               [Scope, Id, format_exec(StartCmd)]),
                     framework("~p [~p] stop-command:~n~s~n",
@@ -197,8 +197,8 @@ handle_kill(_Proc, Sh=#sh{id=Id, port=Port, detached=false, state=running}) ->
 %%                             {rpc_stop, {M,F,A}, NewState} |
 %%                             NewState.
 handle_stop(Proc, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
-    framework("running shutdown hooks for ~p~n",
-              [systest_proc:get(id, Proc)]),
+    framework("running shutdown hooks for ~p(~p)~n",
+              [systest_proc:get(id, Proc), self()]),
     run_shutdown_hook(SC, Sh);
 %% TODO: could this be core proc behaviour?
 handle_stop(_Proc, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->

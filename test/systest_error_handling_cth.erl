@@ -97,7 +97,8 @@ post_end_per_testcase(TC=timetrap_failure, Config, Return, State) ->
     [] = nodes(),
     systest_log:log(system,
                     "Test Case timetrap_failure is expected to fail, "
-                    "however this message indicates that all the "
+                    "however the failure cannot be trapped by common-test; "
+                    "this message indicates that all the "
                     "required post-conditions have been fulfilled~n", []),
     {proplists:delete(tc_status, Config), State};
 post_end_per_testcase(TC, Config, Return, State) ->

@@ -27,6 +27,7 @@ TEST_DIR=test
 EBIN_DIR=ebin
 DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- proplists:get_value(deps, element(2, file:consult("rebar.config")))], halt(0).')
 LATEST_STABLE=$(shell git log stable --oneline -1 --format="%h")
+SYSTEST_EXE ?= ./priv/bin/systest
 
 ## rules start here
 
@@ -40,6 +41,8 @@ info: $(REBAR)
 	$(info SysTest $(shell git describe --abbrev=0 ${LATEST_STABLE}))
 	$(info $(shell $(REBAR) -V))
 	$(info 3rd Party Dependencies: ${DEPS})
+	$(info Executable: ${SYSTEST_EXE})
+	@true
 
 .PHONY: clean
 clean:
@@ -61,6 +64,8 @@ dist-clean: clean
 
 compile: $(REBAR)
 	$(REBAR) get-deps compile ${REBAR_OPTS}
+
+$(SYSTEST_EXE): escriptize
 
 .PHONY: escriptize
 escriptize: compile

@@ -105,6 +105,7 @@ start_it(How, ScopeId, SutId, Config) ->
       end),
     receive
         {Pid, Result} ->
+            erlang:demonitor(MRef, [flush]),
             Result;
         {'DOWN', MRef, process, Pid, Reason} ->
             receive {Pid, Ret} -> Ret

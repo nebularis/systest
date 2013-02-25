@@ -424,10 +424,10 @@ open_port(#exec{command=ExecutableCommand, argv=Args,
     end.
 
 run_shutdown_hook(Exec, Sh=#sh{detached=Detached}) ->
-    Pid= spawn_link(fun() ->
-                        Port = open_port(Exec, Detached),
-                        exit(shutdown_loop(Port, []))
-                    end),
+    Pid = spawn_link(fun() ->
+                         Port = open_port(Exec, Detached),
+                         exit(shutdown_loop(Port, []))
+                     end),
     Sh#sh{shutdown_port=Pid, state=stopped}.
 
 %% port handling

@@ -86,7 +86,7 @@ test-compile: $(REBAR)
 	$(REBAR) skip_deps=true -C test.config test-compile ${REBAR_OPTS}
 
 .PHONY: test
-test: escriptize test-default test-errors test-time-traps
+test: eunit escriptize test-default test-errors test-time-traps
 
 .PHONY: test-dependencies
 test-dependencies: escriptize test-compile

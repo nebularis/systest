@@ -1,15 +1,9 @@
 *SysTest* is a framework aimed at distributed systems testing, with the
-express purpose of making test configuration easier and more manageable
-for test authors and operators (who run tests).
+express purpose of making test configuration and resource management
+easier for test authors and operators (who run tests).
 
-The common factor that *SysTest* tries to address is the management and
-monitoring of *Test Resources* required during testing. The idea of a
-*Test(ing) Resource* is therefore central to *SysTest*, and as we will
-see, is a pervasive concept throughout the framework. A *Test Resource*
-(which we will refer to as simply *Resource* from now on) is simply
-**something** that your tests require. At a high level, the kind of
-*Resources* you typically need for systems and integration testing are
-broken down into various categories.
+At a high level, the *Resources* you typically need for systems and
+integration testing are broken down into a few simple categories.
 
 #### *Test Resource* Categories
 
@@ -141,6 +135,117 @@ this consists of an Erlang module which conforms to the `systest_resource`
 behaviour. Several of these resource type implementations are provided
 with *SysTest* and it is possible to define your own, custom implementations
 and use these at runtime.
+
+Without paying too much attention to the details of the configuration
+script we're using, we will define these resource type
+
+```
+(the basic templates are:
+
+requires            := mandatory relationship between resource types
+a `with` b          := provided relationship between resources
+is identified by    := identifying field
+exposes             := property definitions
+where               := property setting
+
+)
+
+(an alias can be defined anywhere - remember nothing is evaluated
+ until we've parsed all the content!
+ 
+ the syntax is 'alias <id> means <ref>'
+ )
+
+alias script means "script runner".
+
+(a regex alias matches any *known* object if
+ the specified match group is non-empty. This one will match any
+ name for which there is an object called systest_<name> that we
+ know about!
+ 
+ the syntax is 'alias match <rx> on <group name>'
+ )
+
+alias match /^systest_(?<name>.*?)/ on name.
+    (e.g., systest_ec2 -> ec2, systest_cli -> cli, etc)
+
+(an alias gives a resource handler module a 'nice' name but
+ is also able to write some or all properties when defined -
+ where both a synonym and an alias exist, the alias will
+ always be chosen instead
+ 
+ the syntax is 'alias <id> means <ref>, where ...'
+     
+ if an alias already maps to a definition, like here
+ where ec2 -> systest_ec2 already exists, then we can
+ skip the 'means <ref>' part
+)
+alias ec2,
+    where
+        (a #{lookup-variable} is read from the
+         configuration immediately after parsing)
+        aws_access_key_id     = #{settings.dbtest.ec2.id},
+        aws_secret_access_key = #{settings.dbtest.ec2.key}.
+
+(some resource handler modules are parameterised by other modules,
+ an all parametric resources are reified by supplied the 'provided by')
+alias "script runner" means process, (note that process -> proc -> systest_proc)
+    provided by cli,
+    where
+        (a @{deferred-variable} is read from the configuration,
+         but gets its value only when the resource is activated!)
+        "script"           = @{init_script},
+        env.USER           = 'dbuser',
+        env.LOG_FILE       = /var/log/dbserver/@{id}, (all resources have an 'id' field!)
+        env.DB_CONFIG_FILE = /etc/dbserver/config.
+
+data Path
+    is restricted by regex [^(.*?)([^/\\]*?)(\.[^/\\.]*)?$],
+    is restricted by range [3..1024].
+
+resource type Host "host"
+    is identified by "name" (defaults to string),
+    exposes IpAddress "ip_address".
+
+resource type RemoteHost "remote host"
+    realises Host,
+    provided by ec2.
+
+resource type LocalHost "localhost"
+    realises Host,
+    provided by localhost.
+
+resource type Application "app"
+    is identified by "app id",
+    requires Path "init_script",
+    requires context Host
+        with Host.ip_address as "ip",
+    provided by script_runner.
+
+resource type ConfigFile "config file"
+    is identified by Path "file_name",
+    requires Path "source",
+    requires context Host.
+
+Application [db_client]
+    where init_script = "/var/lib/dbclient/start".
+
+resource type DbTest "database app test"
+    requires "remote host" [host1.nat.mycorp.com] 
+        (here we define a resource "inline" within the host)
+        with Application [db_server]
+            where init_script = /var/test/dbserver/start,
+                (this next item is passed on to the systest_cli provider)
+                  detached    = true
+        with "config file" [/etc/dbserver/config]
+            where source = ${settings.dbtest.server.config};
+    requires Host [host2.nat.mycorp.com]
+        (here we simply reference an existing resource, and
+         if the types aren't compatible, we get an error)
+        with db_client.
+```
+
+Or we can define the whole lot as raw Erlang terms if that is deemed preferable:
 
 ```erlang
 {resource_type, 'Host', [

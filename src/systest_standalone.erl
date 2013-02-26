@@ -164,7 +164,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 
 get_default_timetrap(Profile) ->
-    case systest_profile:get(default_timetrap, Profile) of
+    case systest_profile:get(execution_timetrap, Profile) of
         undefined -> {minutes, 1};
         Value -> Value
     end.

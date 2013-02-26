@@ -102,7 +102,7 @@ start_it(How, ScopeId, SutId, Config) ->
                                                                  Pid,
                                                                  Config2)}
                   end
-      end),
+          end),
     receive
         {Pid, Result} ->
             erlang:demonitor(MRef, [flush]),

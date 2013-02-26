@@ -203,7 +203,7 @@ verify(Exec2=#execution{profile     = Prof,
 
 timed_abort(Config, Ms) ->
     AbortHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
-    AbortHandler("ABORT: reached max profile execution time: ~p ms~n", [Ms]).
+    AbortHandler("ABORT: reached maximum profile execution time: ~p ms~n", [Ms]).
 
 get_framework(Prof, Config) ->
     as_atom(case ?CONFIG(stand_alone, Config, false) of
@@ -216,13 +216,13 @@ get_framework(Prof, Config) ->
                          end
             end).
 
-handle_failures(Prof, {How, N}, Config) ->
+handle_failures(Prof, {How, _}, Config) ->
     maybe_dump(Config),
     ProfileName = systest_profile:get(name, Prof),
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
     ErrorHandler("[failed] test profile ~s "
-                 "completed with ~p ~p test cases~n",
-                 [ProfileName, N, How]).
+                 "encountered ~p test cases~n",
+                 [ProfileName, How]).
 
 handle_errors(_Exec, Reason, Config) ->
     maybe_dump(Config),

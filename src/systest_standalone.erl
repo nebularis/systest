@@ -58,7 +58,7 @@ run(RunSpec) ->
     run_it(RunSpec, false).
 
 start() ->
-    gen_server:start(?MODULE, [], []).
+    gen_server:start({local, ?MODULE}, ?MODULE, [], []).
 
 stop() ->
     gen_server:call(?MODULE, stop).

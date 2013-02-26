@@ -42,10 +42,13 @@ dryrun(_RunSpec) ->
 
 run(RunSpec) ->
     {ok, Pid} = systest_standalone:start(),
+    MRef = erlang:monitor(process, Pid),
     case systest_standalone:run(Pid, RunSpec) of
         ok ->
-            user_drv:start(),
+            spawn(fun user_drv:start/0),
             receive
+                {'DOWN', MRef, _, _, Reason} ->
+                    {error, {unknown, Reason}};
                 {_Ref, {finished, Pid, Result}} ->
                     Result;
                 {'DOWN', _Ref, process, Pid, Reason} ->

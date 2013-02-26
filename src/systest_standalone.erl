@@ -86,9 +86,9 @@ handle_call({run, RunSpec}, From, State) ->
     Dir = filename:join(ScratchDir,
                         "standalone-" ++
                             systest_env:timestamp()),
-    filelib:ensure_dir(Dir),
+    filelib:ensure_dir(filename:join(Dir, "foo")),
     Config = [{priv_dir, Dir}|BaseConfig],
-    case systest_sut:start_link(SutId, SutId, Config) of
+    case systest_sut:start(SutId, SutId, Config) of
         {error, Reason} ->
             {stop, Reason, State2};
         Other when is_list(Other) ->

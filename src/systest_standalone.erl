@@ -108,6 +108,7 @@ handle_call({run, RunSpec}, From, State) ->
                         true ->
                             ok
                     end,
+                    application:set_env(systest, active_sut, Pid),
                     {reply, ok, State2};
                 Other ->
                     {stop, start_error, State}

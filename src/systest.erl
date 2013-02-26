@@ -28,7 +28,7 @@
 
 -include("systest.hrl").
 
--export([main/1, get_system_under_test/1]).
+-export([main/1, get_system_under_test/0, get_system_under_test/1]).
 -export([start/0, stop/0, reset/0, sigkill/1]).
 -export([start_suite/2, stop_scope/2, start/2, start/3, stop/1]).
 -export([active_sut/1, suts/1, procs/1]).
@@ -247,6 +247,16 @@ write_pid_file(Name, {dir, Dir}) ->
     file:write_file(File, Pid, [write]).
 
 %% config handling
+
+%% @doc Returns the {@link systest_sut. <em>System Under Test</em>}
+%% associated with the current session. This call is only valid for
+%% standalone, shell and debug test runners. To obtain the sut for
+%% a common_test run, use get_system_under_test/1 instead.
+get_system_under_test() ->
+    case application:get_env(?MODULE, active_sut) of
+        {ok, Sut} -> Sut;
+        _         -> undefined
+    end.
 
 %% @doc Returns the {@link systest_sut. <em>System Under Test</em>} associated
 %% with the supplied configuration. <em>NB: this function fails the active

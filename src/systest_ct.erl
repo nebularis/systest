@@ -29,17 +29,21 @@
 -behaviour(systest_runner).
 
 -export([dryrun/1, run/1]).
+-export([run_debug/2]).
 
 -include("systest.hrl").
 -define(PRIORITY, 100000).
 
 dryrun(RunSpec) ->
-    run(RunSpec, true).
+    run(RunSpec, false, true).
 
 run(RunSpec) ->
-    run(RunSpec, false).
+    run(RunSpec, false, false).
 
-run(RunSpec, DryRun) ->
+run_debug(RunSpec, DryRun) ->
+    run(RunSpec, true, DryRun).
+
+run(RunSpec, Debug, DryRun) ->
     Quiet   = systest_runner:get(quiet, RunSpec),
     Profile = systest_runner:get(profile, RunSpec),
     Targets = systest_runner:get(targets, RunSpec),
@@ -73,13 +77,17 @@ run(RunSpec, DryRun) ->
                          {ct_hooks, Hooks3}
                  end,
 
+    DebugOpts = if Debug == true -> [{step, []}];
+                   true          -> []
+                end,
+
     case TestFun([{logdir, LogDir},
                   {label, Label},
                   {auto_compile, false},
                   {allow_user_terms, true},
                   {event_handler, systest_event},
                   {enable_builtin_hooks, true},
-                  HooksEntry|Targets], Quiet) of
+                  HooksEntry|Targets] ++ DebugOpts, Quiet) of
         {error, _}=Error ->
             Error;
         _Other ->
@@ -140,7 +148,6 @@ check_skip_ok(SkipCount, Config) when SkipCount > 0 ->
         true  -> ok;
         false -> {error, {skipped, SkipCount}}
     end.
-
 
 run_test(Cfg, Quiet) ->
     case Quiet of

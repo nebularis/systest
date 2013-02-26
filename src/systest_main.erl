@@ -34,6 +34,7 @@ help() ->
               "-F, --framework  Override test framework for current profile~n"
               "-S,--stand_alone Synonym for `-F systest_standalone'~n"
               "-s, --shell      Synonym for `-F systest_shell'~n"
+              "-D, --debug      Synonym for `-F systest_debug'~n"
               "-Z, --target     Use the specified target~n"
               "-z, --sut        SUT to run (used with standalone framework)~n"
               "-L, --logging    Active logging for the specified sub-system~n"
@@ -115,6 +116,7 @@ opt_spec() ->
      {framework,        'F', string},
      {stand_alone,      'S', flag},
      {shell,            's', flag},
+     {debug,            'D', flag},
      {logging,          'L', string},
      {dryrun,           'n', flag},
      {no_cover,         'w', flag},

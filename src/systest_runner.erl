@@ -212,7 +212,12 @@ get_framework(Prof, Config) ->
                              true ->
                                  "systest_shell";
                              false ->
-                                 systest_profile:get(framework, Prof)
+                                 case ?CONFIG(debug, Config, false) of
+                                     true ->
+                                         "systest_debug";
+                                     false ->
+                                         systest_profile:get(framework, Prof)
+                                 end
                          end
             end).
 

@@ -110,8 +110,7 @@ handle_call({run, RunSpec}, From, State) ->
                     end,
                     {reply, ok, State2};
                 Other ->
-                    io:format(user, "Then what the fuck is ~p~n", [Other]),
-                    {stop, what_the_fuck, State}
+                    {stop, start_error, State}
             end
     end;
 handle_call(stop, _From, State) ->

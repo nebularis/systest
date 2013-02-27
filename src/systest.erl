@@ -90,25 +90,25 @@ stop_scope(Scope, Timeout) when is_atom(Scope) ->
 %% @end
 start(Scope, Config) ->
     try systest_sut:start(Scope, Config) of
-        {error, _}=Err ->
-            {fail, {system_under_test, start, Err}};
+        {error, Err} ->
+            {fail, Err};
         Other ->
             Other
     catch
-        What -> {fail, {system_under_test, start, What}}
+        What -> {fail, {start_failure, What}}
     end.
 
 %% @doc starts any resources associated with the given scope, using the
 %% provided identity when registering them with the testing framework
 %% @end
-start(Scope, Identify, Config) ->
-    try systest_sut:start(Scope, Identify, trace_on(Identify, Config)) of
-        {error, _}=Err ->
-            {fail, {system_under_test, start, Err}};
+start(Scope, Identity, Config) ->
+    try systest_sut:start(Scope, Identity, trace_on(Identity, Config)) of
+        {error, Err} ->
+            {fail, Err};
         Other ->
             Other
     catch
-        What -> {fail, {system_under_test, start, What}}
+        What -> {fail, {start_failure, What}}
     end.
 
 %% @doc politely asks any resources associated with the given scope to stop,

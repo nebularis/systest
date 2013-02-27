@@ -148,8 +148,13 @@ stop(Target, State=#state{aggressive=Aggressive, teardown=Timeout},
             ok ->
                 {Result2, State2};
             Stop ->
-                log(framework, "stopped: ~p~n", [Stop]),
-                {{fail, Stop}, State2#state{failed=fail_count(State, State2)}}
+                Err = case Stop of
+                          {error,timeout,Data} -> {timeout, Data};
+                          _                    -> Stop
+                      end,
+                log(framework, "stopped: ~p~n", [Err]),
+                {{fail, {shutdown_error, Err}},
+                 State2#state{failed=fail_count(State, State2)}}
         end
     catch
         %% a failure in the sut stop procedure should cause the test to fail,
@@ -157,7 +162,8 @@ stop(Target, State=#state{aggressive=Aggressive, teardown=Timeout},
         _:Error ->
             log(system, "shutdown error: ~p~n~p~n",
                 [Error, erlang:get_stacktrace()]),
-            {{fail, Error}, State2#state{failed=fail_count(State, State2)}}
+            {{fail, {shutdown_error, Error}},
+             State2#state{failed=fail_count(State, State2)}}
     after
         systest:trace_off(Config)
     end.

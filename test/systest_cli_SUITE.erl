@@ -109,10 +109,8 @@ detached_config_handling_failure(Config) ->
     systest_log:console(
       "ignoring expected bad_rpc_combo startup failure~n", []),
     ?assertEqual({fail,
-                  {system_under_test,start,
-                   {error,
-                    {illegal_config,
-                     detached_proc_requires_rpc_enabled}}}},
+                  {illegal_config,
+                   detached_proc_requires_rpc_enabled}},
                  systest:start(bad_proc_combo,
                                bad_rpc_combo,
                                Config)).
@@ -121,10 +119,8 @@ rpc_exit_config_handling_failure(Config) ->
     systest_log:console(
       "ignoring expected bad_eof_combo startup failure~n", []),
     ?assertEqual({fail,
-                  {system_under_test,start,
-                   {error,
-                    {illegal_config,
-                     non_rpc_proc_requires_exit_on_eof}}}},
+                  {illegal_config,
+                   non_rpc_proc_requires_exit_on_eof}},
                  systest:start(bad_proc_combo,
                                bad_eof_combo,
                                Config)).

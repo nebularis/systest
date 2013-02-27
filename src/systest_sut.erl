@@ -124,7 +124,8 @@ stop(SutRef, Timeout) ->
                                       true -> erlang:round(Timeout * 1.1)
                        end,
     try gen_server:call(SutRef, {stop, Timeout}, GenServerTimeout)
-    catch exit:{timeout, _}=R -> R
+    catch exit:{timeout, _}=R -> R;
+          C:T                 -> {error, {C, T}}
     end.
 
 restart_proc(SutRef, Proc) ->

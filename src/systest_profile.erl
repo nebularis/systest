@@ -31,7 +31,7 @@
 -define(lookup(W, D), systest_utils:lookup_env(W, D)).
 
 -type testable() :: file:filename() | module().
--type time_unit() :: 'hr' | 'min' | 'sec' | 'ms'.
+-type time_unit() :: 'hours' | 'minutes' | 'seconds' | 'ms' | 'milliseconds'.
 
 %% {allow_user_terms, Bool}, {label, ProfileName}
 

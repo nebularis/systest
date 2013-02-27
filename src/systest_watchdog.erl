@@ -151,7 +151,6 @@ handle_call({force_stop, SutId, Timeout}, _From,
                 "~p not found in ~p~n", [SutId, ets:tab2list(CT)]),
             {reply, {error, regname, SutId}, State};
         [{SutId, Pid}=RefId] ->
-            %% firstly, this next call can timeout (gen_server wise)
             Reply = case systest_sut:stop(Pid, Timeout) of
                         {timeout, _} -> {timout, RefId};
                         Other        -> Other

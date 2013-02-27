@@ -267,7 +267,7 @@ handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc,
                    log=Fd,
                    id=Id}) when Pid == SPort andalso
                                 ?IS_DYING(State) ->
-    framework(Id, "termination Port completed ok~n"),
+    framework(Id, "termination Port completed ok~n", []),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     case Detached of
         true  -> {stop, normal, Sh};   %% TODO: test this case more thoroughly

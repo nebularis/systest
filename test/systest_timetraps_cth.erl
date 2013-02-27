@@ -80,7 +80,7 @@ pre_init_per_testcase(TC,Config,State) ->
 post_end_per_testcase(TC=simple_test_case_pass_through,
                       Config, Return, State) ->
     case systest_cth:post_end_per_testcase(TC, Config, Return, State) of
-        {{fail,{error,timeout,[Pid1, Pid2]}}, State2}
+        {{fail,{shutdown_error, {timeout,[Pid1, Pid2]}}}, State2}
           when is_pid(Pid1) andalso is_pid(Pid2) ->
             systest:log("ignoring expected failure of ~p~n", [TC]),
             {proplists:delete(tc_status, Config), State2};
@@ -89,10 +89,11 @@ post_end_per_testcase(TC=simple_test_case_pass_through,
     end;
 post_end_per_testcase(TC=hang_on_startup, Config, Return, State) ->
     case systest_cth:post_end_per_testcase(TC, Config, Return, State) of
-        {{fail,{timout,{hang_on_startup, _}}}, State2} ->
+        {{fail,{shutdown_error,{timout,{hang_on_startup, _}}}}, State2} ->
             systest:log("ignoring expected failure of ~p~n", [TC]),
                 {proplists:delete(tc_status, Config), State2};
         {OtherReturn, OtherState2} ->
+            io:format("OTHER RETURN: ~p~n", [OtherReturn]),
             {{fail, OtherReturn}, OtherState2}
     end;
 post_end_per_testcase(TC, Config, Return, State) ->

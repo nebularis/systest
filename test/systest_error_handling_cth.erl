@@ -38,8 +38,7 @@
 
 pre_init_per_testcase(TC=sut_start_scripts_badly_configured, Config, State) ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
-        {{fail,{system_under_test, start, {error,
-                    {configuration_not_found, bad_cli}}}},_} ->
+        {{fail, {configuration_not_found, bad_cli}}, _} ->
             systest_log:console("ignoring expected sut start failure~n", []),
             systest_watchdog:clear_exceptions(),
             {Config, State};
@@ -50,9 +49,7 @@ pre_init_per_testcase(TC, Config, State)
   when TC == failing_proc_on_start_hook orelse
        TC == failing_sut_on_start_hook ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
-        {{fail,{system_under_test, start,
-                {error, {hook_failed,
-                    {local, erlang, error, _}=What, _}}}},_} ->
+        {{fail,{hook_failed, {local, erlang, error, _}=What, _}},_} ->
             systest_log:console("ignoring expected start failure ~p~n",
                                 [What]),
             systest_watchdog:clear_exceptions(),
@@ -62,23 +59,24 @@ pre_init_per_testcase(TC, Config, State)
     end;
 pre_init_per_testcase(TC=failing_proc_on_joined_hook,
                       Config, State) ->
-    case systest_cth:pre_init_per_testcase(TC, Config, State) of
-        {{fail, {system_under_test,start,
-                 {error,
-                  {{hook_failed,
-                    {local, M, F, A}, undef}, _}}}},
-         State} ->
+    case catch(systest_cth:pre_init_per_testcase(TC, Config, State)) of
+        {{fail,{{hook_failed,
+                {local, M, F, A}, undef}, _}}, State2} ->
             systest_log:console("ignoring expected sut start failure "
                                 "(call to undefined mfa ~p:~p/~p)~n",
                                 [M, F, length(A)]),
-            [{_Sut, crashed, Reason}] = systest_watchdog:exceptions(TC),
-            case Reason of
-                {{hook_failed,
-                  {local, M, F, _Args}, undef}, _} ->
-                    systest_watchdog:clear_exceptions(),
-                    {Config, State};
-                Other ->
-                    {{fail, Other}, State}
+            case systest_watchdog:exceptions(TC) of
+                [{_Sut, crashed, Reason}] ->
+                    case Reason of
+                        {{hook_failed,
+                          {local, M, F, _Args}, undef}, _} ->
+                            systest_watchdog:clear_exceptions(),
+                            {Config, State2};
+                        Other ->
+                            {{fail, Other}, State2}
+                    end;
+                [] ->
+                    {{fail, no_exceptions_found}, State2}
             end;
         Other ->
             {{fail, Other}, State}

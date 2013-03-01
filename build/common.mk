@@ -29,9 +29,9 @@ SYSTEST_DEPS ?= $(abspath $(SYSTEST_EXE)/../../../deps)
 SYSTEST_PROFILE ?=
 SYSTEST_ERL_LIBS ?= $(shell echo $$ERL_LIBS)
 MY_ERL_LIBS="${SYSTEST_DEPS}:${SYSTEST_ERL_LIBS}"
-SYSTEST_ERL_FLAGS ?= -pa ebin -pa .test
+SYSTEST_ERL_FLAGS ?= -pa ebin -pa .eunit
 SYSTEST_ENV ?= 
-SYSTEST_COVER ?= --cover-dir=.test
+SYSTEST_COVER ?= --cover-dir=.eunit
 SYSTEST_DUMP ?= 'false'
 
 ifneq ($(SYSTEST_LOGGING), 'false')

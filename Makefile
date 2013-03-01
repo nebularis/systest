@@ -61,6 +61,7 @@ dist-clean: clean
 	rm -rf deps
 	rm -rf bin
 	rm -rf priv/bin/systest*
+	rm -rf .eunit
 
 compile: $(REBAR)
 	$(REBAR) get-deps compile ${REBAR_OPTS}

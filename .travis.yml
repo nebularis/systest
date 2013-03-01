@@ -2,8 +2,7 @@ language: erlang
 otp_release:
   - R15B01
   - R15B
-  - R16B
-script: "make test-all"
+script: "epmd -daemon || make test-all"
 notifications:
   email:
     recipients:

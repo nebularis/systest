@@ -29,12 +29,46 @@
 %% ----------------------------------------------------------------------------
 -module(systest_error_handling_cth).
 
--extends(systest_cth).
-
 -include("systest.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--compile(export_all).
+-export([id/1, init/2]).
+-export([pre_init_per_suite/3]).
+-export([post_init_per_suite/4]).
+-export([pre_end_per_suite/3]).
+-export([post_end_per_suite/4]).
+-export([pre_init_per_group/3]).
+-export([post_end_per_group/4]).
+-export([pre_init_per_testcase/3]).
+-export([post_end_per_testcase/4]).
+-export([terminate/1]).
+
+%% @doc Return a unique id for this CTH.
+id(Opts) ->
+    systest_cth:id(Opts).
+
+%% @doc Always called before any other callback function. Use this to initiate
+%% any common state.
+init(systest, Opts) ->
+    systest_cth:init(systest, Opts).
+
+pre_init_per_suite(Suite, Config, State) ->
+    systest_cth:pre_init_per_suite(Suite, Config, State).
+
+post_init_per_suite(_Suite, _Config, Return, State) ->
+    {Return, State}.
+
+pre_end_per_suite(_Suite, Config, State) ->
+    {Config, State}.
+
+post_end_per_suite(Suite, Config, Result, State) ->
+    systest_cth:post_end_per_suite(Suite, Config, Result, State).
+
+pre_init_per_group(Group, Config, State) ->
+    systest_cth:pre_init_per_group(Group, Config, State).
+
+post_end_per_group(Group, Config, Result, State) ->
+    systest_cth:post_end_per_group(Group, Config, Result, State).
 
 pre_init_per_testcase(TC=sut_start_scripts_badly_configured, Config, State) ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
@@ -102,8 +136,5 @@ post_end_per_testcase(TC=timetrap_failure, Config, Return, State) ->
 post_end_per_testcase(TC, Config, Return, State) ->
     systest_cth:post_end_per_testcase(TC, Config, Return, State).
 
-post_init_per_suite(_Suite, _Config, Return, State) ->
-    {Return, State}.
-
-pre_end_per_suite(_Suite, Config, State) ->
-    {Config, State}.
+terminate(R) ->
+    systest_cth:terminate(R).

@@ -12,3 +12,4 @@ systest
 *.erl#
 .#*.erl
 .done
+.eunit

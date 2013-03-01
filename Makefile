@@ -78,7 +78,7 @@ verify:
 	    $(REBAR) skip_deps=true clean compile xref -v 4
 
 .PHONY: eunit
-eunit:
+eunit: $(REBAR)
 	$(REBAR) skip_deps=true -C test.config eunit ${REBAR_OPTS}
 
 .PHONY: test-compile
@@ -89,7 +89,7 @@ test-compile: $(REBAR)
 test-all: xref eunit test
 
 .PHONY: xref
-xref:
+xref: $(REBAR)
 	ERL_FLAGS="-pa deps/rebar/ebin" $(REBAR) skip_deps=true xref
 
 .PHONY: test

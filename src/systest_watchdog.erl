@@ -125,9 +125,9 @@ dump() ->
 
 init([]) ->
     process_flag(trap_exit, true),
-    CT = ets:new(sut_table,   [ordered_set, private|?ETS_OPTS]),
-    NT = ets:new(proc_table,      [ordered_set, named_table,
-                                   public|?ETS_OPTS]),
+    CT = ets:new(sut_table, [ordered_set, private|?ETS_OPTS]),
+    NT = ets:new(proc_table, [ordered_set, named_table,
+                              public|?ETS_OPTS]),
     OT = ets:new(exception_table, [duplicate_bag, private|?ETS_OPTS]),
     {ok, #state{sut_table=CT, proc_table=NT, exception_table=OT}}.
 

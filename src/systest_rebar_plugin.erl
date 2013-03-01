@@ -48,7 +48,14 @@ handle_errors(Fmt, Args) ->
 
 is_base_dir(Config) ->
     case erlang:function_exported(rebar_utils, processing_base_dir, 1) of
-        true  -> rebar_utils:processing_base_dir(Config);
-        false -> rebar_utils:get_cwd() ==
-                     rebar_config:get_global(base_dir, undefined)
+        true ->
+            rebar_utils:processing_base_dir(Config);
+        false ->
+            GDir = case erlang:function_exported(rebar_config, get_global, 2) of
+                       true ->
+                           rebar_config:get_global(base_dir, undefined);
+                       false ->
+                           rebar_config:get_global(Config, base_dir, undefined)
+                   end,
+            rebar_utils:get_cwd() == GDir
     end.

@@ -1,4 +1,6 @@
-# SysTest - a System Testing framework
+# SysTest - A Distributed Systems Testing framework
+
+[![Build Status](https://travis-ci.org/nebularis/systest.png?branch=master,stable)](https://travis-ci.org/nebularis/systest)
 
 This is *SysTest*, a framework for System Testing distributed applications.
 *SysTest* is written in Erlang/OTP and oriented towards testing systems built 

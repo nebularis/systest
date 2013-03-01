@@ -70,17 +70,19 @@ kill([], _Server, _Timeout) ->
 kill(Targets, Server, Timeout) ->
     MRef = erlang:monitor(process, Server),
     wait = gen_server:call(Server, {kill, Targets}, Timeout),
-    receive
-        {_Ref, {ok, Killed}} ->
-            check_length(Targets, Killed);
-        {'EXIT', Server, normal} ->
-            %% is it *possible* that the 'EXIT' overtakes the reply!
-            check_length(Targets, dead_pids(Targets));
-        {'DOWN', MRef, process, Server, Reason} ->
-            {error, Reason}
-    after Timeout ->
-            {error, timeout, dead_pids(Targets)}
-    end.
+    Result = receive
+                 {_Ref, {ok, Killed}} ->
+                     check_length(Targets, Killed);
+                 {'EXIT', Server, normal} ->
+                     %% is it *possible* that the 'EXIT' overtakes the reply!
+                     check_length(Targets, dead_pids(Targets));
+                 {'DOWN', MRef, process, Server, Reason} ->
+                     {error, Reason}
+             after Timeout ->
+                     {error, timeout, dead_pids(Targets)}
+             end,
+    erlang:demonitor(MRef, [flush]),
+    Result.
 
 %%
 %% Internal API

@@ -1,0 +1,14 @@
+language: erlang
+otp_release:
+  - R15B01
+  - R15B
+  - R16B
+script: "make test-all"
+notifications:
+  email:
+    recipients:
+      - cloud.haskell@gmail.com
+branches:
+  only:
+    - master
+    - development

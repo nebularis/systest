@@ -24,8 +24,15 @@
 %% ----------------------------------------------------------------------------
 -module(build_support).
 
+-export(['test-compile'/2]).
 -export([pre_compile/2, post_compile/2]).
 -export(['publish-wiki'/2, post_doc/2]).
+
+'test-compile'(Config, _) ->
+    case is_base_dir(Config) of
+        true  -> rebar_erlc_compiler:test_compile(Config, "eunit", ".test"), ok;
+        false -> ok
+    end.
 
 pre_compile(Config, App) ->
     case is_base_dir(Config) orelse

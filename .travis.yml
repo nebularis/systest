@@ -8,7 +8,4 @@ notifications:
   email:
     recipients:
       - cloud.haskell@gmail.com
-branches:
-  only:
-    - master
-    - development
+

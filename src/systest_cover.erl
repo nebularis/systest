@@ -77,7 +77,8 @@ do_start(ScratchDir, Config) ->
                          end
                  end,
 
-    CoverImports = ImportData ++ ?CONFIG('cover-import-extra', Config, []),
+    CoverImports = ImportData ++
+                     proplists:get_all_values('cover-extra', Config),
 
     SearchDirs = proplists:get_all_values('cover-dir', Config),
     {ok, Cwd} = file:get_cwd(),

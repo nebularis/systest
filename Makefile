@@ -89,7 +89,7 @@ test-compile: $(REBAR)
 test-all: xref eunit test
 
 .PHONY: xref
-xref: $(REBAR)
+xref: compile
 	ERL_FLAGS="-pa deps/rebar/ebin" $(REBAR) skip_deps=true xref
 
 .PHONY: test

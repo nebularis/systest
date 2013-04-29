@@ -119,12 +119,16 @@ stop(Scope) when is_pid(Scope) ->
 
 %% config/settings
 
+%% @doc lists all installed settings for the current test run.
+%% @end
 settings() ->
     case systest_config:get_static(settings) of
         {settings, Settings} -> Settings;
         _                    -> []
     end.
 
+%% @doc searches for the supplied Key in the current settings
+%% @end
 settings(Key) when is_atom(Key) ->
     systest_config:read(Key, settings());
 settings(Key) when is_list(Key) ->
@@ -133,9 +137,14 @@ settings(Key) when is_list(Key) ->
         false -> systest_config:read(Key, settings())
     end.
 
+%% @doc attempts to lookup the supplied key - see systest_config:get_config/1
+%% @end
 config(Key) ->
     systest_config:get_config(Key).
 
+%% @doc attempts to lookup the supplied environment variable -
+%% see systest_config:get_env/1
+%% @end
 env(Key) ->
     systest_config:get_env(Key).
 
@@ -159,6 +168,9 @@ trace_off(Config) ->
 
 %% interactions
 
+%% @doc Activates a <i>process</i> that has been configured to postpone
+%% startup (viz the process activate_on_start config key).
+%% @end
 activate_process(ProcRef) ->
     systest_proc:activate(ProcRef).
 

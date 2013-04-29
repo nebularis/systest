@@ -30,7 +30,8 @@
 
 'test-compile'(Config, _) ->
     case is_base_dir(Config) of
-        true  -> rebar_erlc_compiler:test_compile(Config, "eunit", ".eunit"), ok;
+        true  -> filelib:ensure_dir(filename:join(".eunit", "foo")),
+                 rebar_erlc_compiler:test_compile(Config, "eunit", ".eunit"), ok;
         false -> ok
     end.
 

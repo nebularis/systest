@@ -9,17 +9,3 @@ available execution modes.
 |rebar_plugin |Rebar build integration |Unit/Integration Build/Test Automation
 |interactive |common test interaction session support |Exploratory Testing
 |======================
-
-== The escript (executable archive) interface
-
-Options/Arguments:
-
-[options="header", width="80%", cols="1,10,1"]
-|======================
-|Option |Arguments |Description
-|+-P, --profile+ | Profile Name |Specify the name of a [[Profile]] to use
-|+-L, --logging+ | Subsystem |Activate logging for the named subsystem 
-|+-a, --node+ | Node Name |Specify a node name to use
-|+-A, --longnames+ | none |Use longnames when becoming a distributed node
-|+-n, --dryrun+ | Nonde |Load config and printout environment only
-|======================

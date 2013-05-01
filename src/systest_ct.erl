@@ -31,6 +31,8 @@
 -export([dryrun/1, run/1]).
 -export([run_debug/2]).
 
+-import(systest_utils, [as_string/1]).
+
 -include("systest.hrl").
 -define(PRIORITY, 100000).
 
@@ -68,7 +70,7 @@ run(RunSpec, Debug, DryRun) ->
                                  end,
                              code:ensure_loaded(M)
                           end || Hook <- Hooks],
-                         Hooks3 = case find_hook(Hooks) of
+                         Hooks3 = case find_hook(Hooks, Profile) of
                                       {true, Hook, Hooks2} ->
                                           update_cth(Hook, Hooks2, Profile);
                                       false ->
@@ -128,18 +130,39 @@ update_cth({systest_cth, Opts, Priority}, Hooks, Profile) ->
           end, Opts, [setup_timetrap, teardown_timetrap, aggressive_teardown]),
     [{systest_cth, Opts2, Priority}|Hooks].
 
-find_hook(Hooks) ->
+find_hook(Hooks, Profile) ->
     case lists:member(systest_cth, Hooks) of
         true ->
-            {true, systest_cth, lists:delete(systest_cth, Hooks)};
+            {true, systest_cth,
+                fix_surefire(lists:delete(systest_cth, Hooks), Profile)};
         false ->
             case lists:keytake(systest_cth, 1, Hooks) of
                 false ->
                     false;
                 {value, Hook, Rest} ->
-                    {true, Hook, Rest}
+                    {true, Hook, fix_surefire(Rest, Profile)}
             end
     end.
+
+fix_surefire(Hooks, Profile) when is_list(Hooks) ->
+    Rest = lists:delete(cth_surefire, Hooks),
+    case lists:member(cth_surefire, Hooks) of
+        true ->
+            [make_surefire(cth_surefire, Profile)|Rest];
+        false ->
+            case lists:keytake(cth_surefire, 1, Hooks) of
+                false ->
+                    Rest;
+                {value, Hook, Remaining} ->
+                    [make_surefire(Hook, Profile)|Remaining]
+            end
+    end.
+
+make_surefire(cth_surefire, Profile) ->
+    Name = systest_profile:get(name, Profile),
+    {cth_surefire, [{path, as_string(Name) ++ ".xml"}]};
+make_surefire(Hook={cth_surefire, _, _}, _) ->
+    Hook.
 
 check_skip_ok(0, _) ->
     ok;

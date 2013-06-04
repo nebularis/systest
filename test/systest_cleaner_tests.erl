@@ -59,4 +59,3 @@ loop() ->
 
 short_loop() ->
     ok.
-

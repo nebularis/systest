@@ -3,11 +3,6 @@
 %% ----------------------------------------------------------------------------
 %%
 %% Copyright (c) 2005 - 2012 Nebularis.
-%% Copyright (c) 2010 Dave Smith (dizzyd@dizzyd.com).
-%%
-%% Some portions of the code taken from sh (c) 2005 - 2012 Nebularis
-%% Some portions of the code taken from rebar (c) 2010 Dave Smith
-%% Some portions of the code taken from retest (c) 2010 Dave Smith
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), deal
@@ -46,8 +41,19 @@
 suite() -> [{timetrap, {minutes, 2}}].
 
 all() ->
+    %% The timetrap_failure test *must* run separately
+    %% from the rest of the SUITE, as the error it generates
+    %% cannot be handled even by a ct_hook, and therefore the
+    %% test run will always appear to fail - we simply want
+    %% to trigger that, so we can verify the shutdown behaviour
+    %% in our CT hook properly.
     [sut_start_scripts_badly_configured,
-     failing_sut_on_start_hook].
+     failing_proc_on_start_hook,
+     failing_sut_on_start_hook,
+     failing_proc_on_joined_hook].
+
+end_per_testcase(_, _) ->
+    ok.
 
 %%
 %% Test Case Definitions
@@ -71,6 +77,17 @@ sut_start_scripts_badly_configured() ->
 sut_start_scripts_badly_configured(_) ->
     ok.
 
+failing_proc_on_start_hook() ->
+    [{userdata, [{doc, "Fires off a deliberately failing proc on_start hook."
+                       "This testcase should never run, being simply "
+                       "a place-holder for an init_per_testcase that "
+                       "we expect to fail.\n"
+                       "The validation of this failure is performed in "
+                       "the systest_supervision_cth common test hook!"}]}].
+
+failing_proc_on_start_hook(_) ->
+    ok.
+
 failing_sut_on_start_hook() ->
     [{userdata, [{doc, "Fires off a deliberately failing sut on_start hook."
                        "This testcase should never run, being simply "
@@ -82,3 +99,13 @@ failing_sut_on_start_hook() ->
 failing_sut_on_start_hook(_) ->
     ok.
 
+failing_proc_on_joined_hook() ->
+    [{userdata, [{doc, "Fires off a deliberately failing proc on_joined hook."
+                       "This testcase should never run, being simply "
+                       "a place-holder for an init_per_testcase that "
+                       "we expect to fail.\n"
+                       "The validation of this failure is performed in "
+                       "the systest_supervision_cth common test hook!"}]}].
+
+failing_proc_on_joined_hook(_) ->
+    ok.

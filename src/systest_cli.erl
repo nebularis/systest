@@ -38,24 +38,28 @@
 -export([handle_status/2, handle_interaction/3,
          handle_msg/3, terminate/3]).
 
-%% private record for tracking...
--record(sh, {
-    id,  %% NB: this is just a convenience
-    start_command,
-    stop_command,
-    state,
-    log,
-    rpc_enabled,
-    pid,
-    port,
-    detached,
-    shutdown_port
+-record(exec, {
+    command        :: string(),
+    argv           :: [{string(), string()}],
+    environment    :: [{string(), string()}],
+    exit_on_eof    :: boolean()
 }).
 
--record(exec, {
-    command,
-    argv,
-    environment
+-type exec() :: #exec{}.
+
+%% private record for tracking...
+-record(sh, {
+    id             :: term(),  %% NB: this is just a convenience
+    start_command  :: exec(),
+    stop_command   :: exec(),
+    state          :: atom(),
+    log            :: file:io_device(),
+    rpc_enabled    :: boolean(),
+    exit_on_eof    :: boolean(),
+    detached       :: boolean(),
+    pid            :: pid(),
+    port           :: port(),
+    shutdown_port  :: port()
 }).
 
 -define(IS_DYING(State),
@@ -63,18 +67,18 @@
 
 -include("systest.hrl").
 
--import(systest_log, [log/2, log/3]).
+-import(systest_log, [log/2, log/3,
+                      framework/2, framework/3]).
 -import(systest_utils, [as_string/1]).
 
 %%
-% systest_proc API
+%% systest_proc API
 %%
 
 init(Proc=#proc{config=Config}) ->
 
     %% TODO: don't carry all the config around all the time -
     %% e.g., append the {proc, NI} tuple only when needed
-
     Scope = systest_proc:get(scope, Proc),
     Id = systest_proc:get(id, Proc),
     Config = systest_proc:get(config, Proc),
@@ -82,11 +86,16 @@ init(Proc=#proc{config=Config}) ->
 
     Startup = ?CONFIG(startup, Config, []),
     Detached = ?REQUIRE(detached, Startup),
-    {RpcEnabled, ShutdownSpec} = ?CONFIG(rpc_enabled,
-                                         Startup, {true, default}),
-
-    StartCmd = make_exec(start, Detached, RpcEnabled, Config),
-    StopCmd  = stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, Config),
+    ExitOnEof = ?CONFIG(exit_on_eof, Startup, false),
+    {RpcEnabled, ShutdownSpec} =
+        case ?CONFIG(rpc_enabled, Startup, {true, default}) of
+            false -> {false, undefined};
+            true  -> {true, default};
+            Other -> Other
+        end,
+    StartCmd = make_exec(start, Detached, RpcEnabled, ExitOnEof, Config),
+    StopCmd = stop_flags(Flags, ShutdownSpec, Detached,
+                         RpcEnabled, ExitOnEof, Config),
 
     case check_command_mode(Detached, RpcEnabled) of
         ok ->
@@ -123,13 +132,12 @@ init(Proc=#proc{config=Config}) ->
                                {detached, Detached},
                                {rpc_enabled, RpcEnabled}],
                     LogMsg = systest_utils:proplist_format(LogInfo),
-                    log(framework,
-                        "external process handler ~p[~p] started:~n~s~n",
-                        [Scope, Id, LogMsg]),
-                    log(framework, "~p [~p] start-command:~n~s~n",
-                        [Scope, Id, format_exec(StartCmd)]),
-                    log(framework, "~p [~p] stop-command:~n~s~n",
-                        [Scope, Id, format_exec(StopCmd)]),
+                    framework("external process handler ~p [~p - ~p] started:~n~s~n",
+                              [Scope, Id, self(), LogMsg]),
+                    framework("~p [~p] start-command:~n~s~n",
+                              [Scope, Id, format_exec(StartCmd)]),
+                    framework("~p [~p] stop-command:~n~s~n",
+                              [Scope, Id, format_exec(StopCmd)]),
                     {ok, N2, Sh}
                 end);
         StopError ->
@@ -177,8 +185,9 @@ handle_kill(#proc{os_pid=OsPid},
     systest:sigkill(OsPid),
     Sh#sh{state=killed};
 handle_kill(_Proc, Sh=#sh{id=Id, port=Port, detached=false, state=running}) ->
-    log({framework, Id},
-        "kill instruction received - terminating port ~p~n", [Port]),
+    framework(Id,
+              "kill instruction received - "
+              "terminating port ~p~n", [Port]),
     Port ! {self(), close},
     Sh#sh{state=killed}.
 
@@ -188,17 +197,15 @@ handle_kill(_Proc, Sh=#sh{id=Id, port=Port, detached=false, state=running}) ->
 %%                             {rpc_stop, {M,F,A}, NewState} |
 %%                             NewState.
 handle_stop(Proc, Sh=#sh{stop_command=SC}) when is_record(SC, 'exec') ->
-    log(framework, "running shutdown hooks for ~p~n",
-        [systest_proc:get(id, Proc)]),
+    framework("running shutdown hooks for ~p(~p)~n",
+              [systest_proc:get(id, Proc), self()]),
     run_shutdown_hook(SC, Sh);
 %% TODO: could this be core proc behaviour?
 handle_stop(_Proc, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->
-    %% TODO: this rpc/call logic should move into systest_proc
     Halt = case Shutdown of
                default -> {init, stop, []};
                Custom  -> Custom
            end,
-    % apply(rpc, call, [Proc#proc.id|tuple_to_list(Halt)]),
     {rpc_stop, Halt, Sh#sh{state=stopped}}.
 %% TODO: when rpc_enabled=false and shutdown is undefined???
 
@@ -209,31 +216,35 @@ handle_stop(_Proc, Sh=#sh{stop_command=Shutdown, rpc_enabled=true}) ->
 %%                                 {stop, Reason, NewState} |
 %%                                 {NewProc, NewState} |
 %%                                 NewState.
-handle_msg(sigkill, #proc{os_pid=OsPid}, Sh=#sh{state=running}) ->
-    systest:sigkill(OsPid),
-    Sh#sh{state=killed};
+handle_msg(sigkill, Proc=#proc{os_pid=OsPid}, Sh=#sh{state=running}) ->
+    case OsPid of
+        not_available -> {reply, {error, os_pid_not_available}, Proc, Sh};
+        _             -> systest:sigkill(OsPid),
+                         Sh#sh{state=killed}
+    end;
 handle_msg({Port, {data, {_, Line}}}, _Proc,
             Sh=#sh{port=Port, log=LogFd}) ->
     io:format(LogFd, "~s~n", [Line]),
     Sh;
-handle_msg({Port, {exit_status, 0}}, _Proc,
-            Sh=#sh{id=Id, port=Port, start_command=#exec{command=Cmd}}) ->
-    log({framework, Id}, "program ~s exited normally (status 0)~n", [Cmd]),
-    {stop, normal, Sh#sh{state=stopped}};
-handle_msg({Port, {exit_status, Exit}=Rc}, Proc,
-             Sh=#sh{id=Id, port=Port, state=State}) ->
-    log({framework, Id},
-        "os process ~p shut down with error/status code ~p~n",
-        [Proc#proc.id, Exit]),
+handle_msg({Port, {exit_status, 0}=Rc}, _Proc,
+            Sh=#sh{id=Id, port=Port,
+                   state=State, start_command=#exec{command=Cmd}}) ->
+    framework(Id, "program ~s exited normally (status 0)~n", [Cmd]),
     ShutdownType = case ?IS_DYING(State) of
                        true  -> normal;
                        false -> Rc
                    end,
-    {stop, ShutdownType, Sh};
+    {stop, ShutdownType, Sh#sh{state=stopped}};
+handle_msg({Port, {exit_status, Exit}=Rc}, Proc,
+           Sh=#sh{id=Id, port=Port}) ->
+    framework(Id,
+              "os process ~p shut down with error/status code ~p~n",
+              [Proc#proc.id, Exit]),
+    {stop, Rc, Sh};
 handle_msg({Port, closed}, Proc,
             Sh=#sh{id=Id, port=Port,
                    state=State, detached=false}) when ?IS_DYING(State) ->
-    log({framework, Id}, "~p (attached) closed~n", [Port]),
+    framework(Id, "~p (attached) closed~n", [Port]),
     case Sh#sh.rpc_enabled of
         true ->
             %% to account for a potential timing issue when the calling test
@@ -247,7 +258,7 @@ handle_msg({Port, closed}, Proc,
     end,
     {stop, normal, Sh};
 handle_msg({Port, closed}, _Proc, Sh=#sh{id=Id, port=Port}) ->
-    log({framework, Id}, "~p closed~n", [Port]),
+    framework(Id, "~p closed~n", [Port]),
     {stop, {port_closed, Port}, Sh};
 handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc,
             Sh=#sh{shutdown_port=SPort,
@@ -256,32 +267,33 @@ handle_msg({'EXIT', Pid, {ok, StopAcc}}, _Proc,
                    log=Fd,
                    id=Id}) when Pid == SPort andalso
                                 ?IS_DYING(State) ->
-    log({framework, Id}, "termination Port completed ok~n"),
+    framework(Id, "termination Port completed ok~n", []),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
     case Detached of
-        true  -> {stop, normal, Sh};
+        true  -> {stop, normal, Sh};   %% TODO: test this case more thoroughly
         false -> Sh
     end;
 handle_msg({'EXIT', Pid, {error, Rc, StopAcc}},
            _Proc, Sh=#sh{id=Id,
                          shutdown_port=SPort,
                          log=Fd}) when Pid == SPort ->
-    log({framework, Id},
-        "termination Port stopped abnormally (status ~p)~n", [Rc]),
+    framework(Id,
+              "termination Port stopped abnormally (status ~p)~n", [Rc]),
     io:format(Fd, "Halt Log ==============~n~s~n", [StopAcc]),
+    %% TODO: better test coverage for this scenario
     {stop, termination_port_error, Sh};
 handle_msg(Info, _Proc, Sh=#sh{id=Id, state=St, port=P, shutdown_port=SP}) ->
-    log({framework, Id},
-        "Ignoring Info Message:  ~p~n"
-        "State:                  ~p~n"
-        "Port:                   ~p~n"
-        "Termination Port:       ~p~n",
-        [Info, St, P, SP]),
+    framework(Id,
+              "Ignoring Info Message:  ~p~n"
+              "State:                  ~p~n"
+              "Port:                   ~p~n"
+              "Termination Port:       ~p~n",
+              [Info, St, P, SP]),
     Sh.
 
 %% @doc gives the handler a chance to clean up prior to being fully stopped.
 terminate(Reason, _Proc, #sh{port=Port, id=Id, log=Fd}) ->
-    log({framework, Id}, "terminating due to ~p~n", [Reason]),
+    framework(Id, "terminating due to ~p~n", [Reason]),
     %% TODO: verify that we're not *leaking* ports if we fail to close them
     case Fd of
         user -> ok;
@@ -297,6 +309,11 @@ terminate(Reason, _Proc, #sh{port=Port, id=Id, log=Fd}) ->
 %% Private API
 %%
 
+format_exec({Mod, Func, Args}) ->
+    systest_utils:proplist_format(
+      [{command, "rpc:call/4"},
+       {arguments, lists:flatten(io_lib:format("[proc.id, ~p, ~p, ~p]",
+                                                [Mod, Func, Args]))}]);
 format_exec(#exec{command=Cmd, environment=Env, argv=Argv}) ->
     systest_utils:proplist_format(
       [{command, Cmd},
@@ -323,9 +340,8 @@ on_startup(Scope, Id, Port, Detached, RpcEnabled, Env, Config, StartFun) ->
                                {"console", user}
                        end,
 
-    log(framework, "[~p] Reading OS process id from ~p~n", [Id, Port]),
-    log(framework, "[~p] RPC Enabled: ~p~n", [Id, RpcEnabled]),
-    log(framework, "[~p] StdIO Log: ~s~n", [Id, LogName]),
+    framework("~p RPC Enabled: ~p~n", [Id, RpcEnabled]),
+    framework("~p StdIO Log: ~s~n", [Id, LogName]),
 
     %% we make a hidden connection by default, so as to protect
     %% any trace handling that is going on, and to avoid 'messing up'
@@ -351,7 +367,8 @@ log_file(Suffix, Scope, Id, Env, Config) ->
 log_to(Suffix, Id, Dir) ->
     filename:join(Dir, logfile(Id, Suffix)).
 
-make_exec(FG, Detached, RpcEnabled, Config) ->
+make_exec(FG, Detached, RpcEnabled, ExitOnEof, Config) ->
+    %% TODO: error message for the FlagsGroup as a whole if this fails...
     FlagsGroup = atom_to_list(FG),
     %% TODO: provide a 'get_multi' version that avoids traversing repeatedly
     Cmd = systest_config:eval("flags." ++ FlagsGroup ++ ".program", Config,
@@ -368,11 +385,12 @@ make_exec(FG, Detached, RpcEnabled, Config) ->
                Argv      -> Argv
            end,
     RunEnv = [{env, Env}],
-    ExecutableCommand = maybe_patch_command(Cmd, RunEnv, Args,
-                                            Detached, RpcEnabled),
-    #exec{command=ExecutableCommand, argv=Args, environment=Env}.
+    ExecutableCommand = patch_command(Cmd, RunEnv, Args,
+                                      Detached, ExitOnEof, RpcEnabled),
+    #exec{command=ExecutableCommand, argv=Args,
+          environment=Env, exit_on_eof=ExitOnEof}.
 
-stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, Config) ->
+stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, ExitOnEof, Config) ->
     case ?CONFIG(stop, Flags, undefined) of
         undefined ->
             case RpcEnabled of
@@ -383,29 +401,33 @@ stop_flags(Flags, ShutdownSpec, Detached, RpcEnabled, Config) ->
         {call, M, F, Argv} ->
             {M, F, Argv};
         _Spec ->
-            make_exec(stop, Detached, RpcEnabled, Config)
+            make_exec(stop, Detached, RpcEnabled, ExitOnEof, Config)
     end.
 
 
-open_port(#exec{command=ExecutableCommand,
-                argv=Args, environment=Env}, Detached) ->
+open_port(#exec{command=ExecutableCommand, argv=Args,
+                environment=Env, exit_on_eof=ExitOnEof}, Detached) ->
     RunEnv = [{env, Env}],
     LaunchOpts = [exit_status, hide, stderr_to_stdout,
                   use_stdio, {line, 16384}] ++ RunEnv,
-    log(framework,
-        "Spawning executable [command = ~s, detached = ~p, args = ~p]~n",
-        [ExecutableCommand, Detached, Args]),
-    case Detached of
-        false -> erlang:open_port({spawn_executable, ExecutableCommand},
-                                  [{args, Args}|LaunchOpts]);
-        true  -> erlang:open_port({spawn, ExecutableCommand}, LaunchOpts)
+    framework(
+      "Spawning executable [command = ~s, detached = ~p, args = ~p]~n",
+      [ExecutableCommand, Detached, Args]),
+    case {Detached, ExitOnEof} of
+        {false, auto} ->
+            erlang:open_port({spawn, ExecutableCommand}, LaunchOpts);
+        {false, _} ->
+            erlang:open_port({spawn_executable, ExecutableCommand},
+                             [{args, Args}|LaunchOpts]);
+        {true, _} ->
+            erlang:open_port({spawn, ExecutableCommand}, LaunchOpts)
     end.
 
 run_shutdown_hook(Exec, Sh=#sh{detached=Detached}) ->
-    Pid= spawn_link(fun() ->
-                        Port = open_port(Exec, Detached),
-                        exit(shutdown_loop(Port, []))
-                    end),
+    Pid = spawn_link(fun() ->
+                         Port = open_port(Exec, Detached),
+                         exit(shutdown_loop(Port, []))
+                     end),
     Sh#sh{shutdown_port=Pid, state=stopped}.
 
 %% port handling
@@ -454,26 +476,48 @@ read_pid(ProcId, Port, Detached, RpcEnabled, Fd) ->
                             io:format(Fd, "[~p] ~p~n", [ProcId, Other]),
                             read_pid(ProcId, Port, Detached, RpcEnabled, Fd)
                     after 5000 ->
-                        log({framework, ProcId},
+                        framework(ProcId,
                             "timeout waiting for os pid... re-trying~n", []),
                         read_pid(ProcId, Port, Detached, RpcEnabled, Fd)
                     end;
                 Pid ->
                     case Detached of
-                        false -> {Port, Pid, Fd};
-                        true  -> {detached, Pid, Fd}
+                        false ->
+                            {Port, Pid, Fd};
+                        true  ->
+                            %% we need the shell process to return its os pid
+                            %% *or* to exit ( 0 ) happily....
+                            receive
+                                {Port, {data, {eol, Pid}}} ->
+                                    receive
+                                        {Port, {exit_status, 0}} ->
+                                            ok;
+                                        OtherMsg ->
+                                            throw({port_start_error, OtherMsg})
+                                    after 0 ->
+                                        ok
+                                    end,
+                                    {detached, Pid, Fd};
+                                {Port, {data, {eol, OtherPid}}}
+                                  when OtherPid /= Pid ->
+                                    throw({port_start_error,
+                                           {process_id_mismatch,
+                                            {Pid, OtherPid}}});
+                                {Port, {exit_status, 0}} ->
+                                    {detached, Pid, Fd};
+                                {Port, {exit_status, Rc}} ->
+                                    {error, {stopped, Rc}}
+                            end
                     end
             end;
         false ->
             %% NB: detached + rpc_disabled is currently disallowed, so we don't
             %% cater for {detached, Pid} here at all.
-            receive
-                {Port, {data, {eol, Pid}}} -> {Port, Pid, Fd};
-                {Port, {exit_status, Rc}}  -> {error, {stopped, Rc}}
-            end
+            {Port, not_available, Fd}
     end.
 
 wait_for_up(NodeId) ->
+    %% TODO: this should not block indefinitely
     case net_kernel:hidden_connect_node(NodeId) of
         true    -> ok;
         _       -> erlang:yield(), wait_for_up(NodeId)
@@ -487,20 +531,43 @@ check_command_mode(true, false) ->
 check_command_mode(_, _) ->
     ok.
 
-maybe_patch_command(Cmd, _, _, false, true) ->
-    Cmd;
-maybe_patch_command(Cmd, Env, Args, Detached, RpcEnabled) when Detached orelse
-                                                               RpcEnabled ->
-    %% TODO: reconsider this, as I'm not convinced it behaves properly....
-    case os:type() of
-        {win32, _} ->
-            %% TODO: the argv conversion thing here....
-            "cmd /q /c " ++ lists:foldl(fun({Key, Value}, Acc) ->
-                                        expand_env_variable(Acc, Key, Value)
-                                        end, Cmd, Env);
-        _ ->
-            Exec = string:join([Cmd|Args], " "),
-            "/usr/bin/env sh -c \"echo $$; exec " ++ Exec ++ "\""
+patch_command(Cmd, Env, Args, Detached, ExitOnEof, RpcSettings) ->
+    RpcEnabled = case RpcSettings of
+                     {true, _Shutdown} -> true;
+                     Other             -> Other
+                 end,
+    case {Detached, RpcEnabled, ExitOnEof} of
+        {true, false, _} ->
+            throw({illegal_config, detached_proc_requires_rpc_enabled});
+        {_, false, false} ->
+            throw({illegal_config, non_rpc_proc_requires_exit_on_eof});
+        {false, _, true} ->
+            Cmd;    %% we *assume* that setting {exit_on_eof, true} means
+                    %% that the operator knows what they're doing!
+        {false, true, false} ->
+            Cmd;    %% we handle shutdown with {rpc, ShutDownHook} for this case
+        {false, _, auto} ->
+            case os:type() of
+                {win32, _} ->
+                    throw({illegal_config,
+                           win32_attached_proc_requires_exit_on_eof});
+                _ ->
+                    Exec = string:join([Cmd|Args], " "),
+                    "/usr/bin/env sh -c \"(cat; kill 0) | " ++ Exec ++ " \""
+            end;
+        {true, true, _} ->
+            case os:type() of
+                {win32, _} ->
+                    %% TODO: the argv conversion thing here....
+                    "cmd /q /c " ++ lists:foldl(
+                                      fun({Key, Value}, Acc) ->
+                                          expand_env_variable(Acc, Key,
+                                                              Value)
+                                      end, Cmd, Env);
+                _ ->
+                    Exec = string:join([Cmd|Args], " "),
+                    "/usr/bin/env sh -c \"echo $$; exec " ++ Exec ++ "\""
+            end
     end.
 
 %%

@@ -54,7 +54,12 @@
     ]}
 ]}.
 
-{end_per_tc_automation, [
+{systest_supervision_SUITE, [
+    {end_per_tc_automation, three_node_cluster},
+    {trapping_nodedown_messages, three_node_cluster}
+]}.
+
+{three_node_cluster, [
     {sut, [{localhost, [x,y,z]}]},
     {processes, [
         {x, [basic_node]},

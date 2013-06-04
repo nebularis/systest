@@ -9,3 +9,7 @@ priv/bin/systes*
 doc
 app.vars
 systest
+*.erl#
+.#*.erl
+.done
+.eunit

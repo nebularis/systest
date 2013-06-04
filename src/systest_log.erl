@@ -22,11 +22,11 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
-%% @hidden 
+%% @hidden
 %% Logging Event Handler - provides a gen_event based logging infrastructure
 %% which is very lightweight, at relatively low cost. Whilst we aren't going to
 %% win any prizes for efficiency, we <i>only</i> deal with logging test related
-%% information, so we can probably afford to be relatively lazy here. This 
+%% information, so we can probably afford to be relatively lazy here. This
 %% approach also enables us to remain basically framework agnostic, and does
 %% allow a user (in theory) to provide a custom log handler that delegates to
 %% their own logging framework of choice.
@@ -51,6 +51,10 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
+
+-export([framework/2,
+         framework/3,
+         console/2]).
 
 -record(state, {id, mod, fd}).
 
@@ -78,7 +82,7 @@ start(File) ->
         true  -> start_file(system, File);
         false -> start(system, ?MODULE, File)
     end.
-    
+
 %% @doc Starts a logging handler registered with 'Id', that outputs to File.
 %% @end
 start_file(Id, File) ->
@@ -122,6 +126,15 @@ activate_logging_subsystem(SubSys, Id, LogBase) ->
             end
     end.
 
+console(Msg, Args) ->
+    log(Msg, Args).
+
+framework(Msg, Args) ->
+    log(framework, Msg, Args).
+
+framework(Id, Msg, Args) ->
+    log({framework, Id}, Msg, Args).
+
 %% @doc Writes to the logging handler Scope, formatting Fmt with Args. This
 %% should work in much the same way as io:format/2 does, although this is
 %% implementation dependent to some extent.
@@ -129,7 +142,7 @@ activate_logging_subsystem(SubSys, Id, LogBase) ->
 log(Scope, Fmt, Args) ->
     %% NB: we avoid gen_event:call/3 because it requires {Module, Id} to be
     %% maintained *somewhere* in order to identify a recipient, which is about
-    %% as useful as a chocolate teapot here. Instead we match on id in 
+    %% as useful as a chocolate teapot here. Instead we match on id in
     %% the handle_event callback and filter out unwanted messages that way.
     gen_event:sync_notify(systest_event_log, {Scope, Fmt, Args}).
 
@@ -142,8 +155,8 @@ log(Fmt, Args) ->
 %% systest_log callback API!
 %%
 
-write_log({framework, EvId}, Fd, What, Args) ->
-    write_log(EvId, Fd, What, Args);
+write_log(EvId, systest_shell, What, Args) ->
+    io:format("[~p]  " ++ What, [EvId|Args]);
 write_log(EvId, Fd, What, Args) ->
     io:format(Fd, "[~p]  " ++ What, [EvId|Args]).
 
@@ -155,8 +168,11 @@ init([Id, Mod, Fd]) ->
     {ok, #state{id=Id, mod=Mod, fd=Fd}}.
 
 handle_event({Scope, Fmt, Args},
-             State=#state{id=Id, mod=Mod, fd=Fd}) when Scope == Id orelse
-                                                       Id == ct ->
+            State=#state{id=ct, mod=Mod, fd=Fd}) ->
+    write(Mod, Fd, Scope, Fmt, Args),
+    {ok, State};
+handle_event({Scope, Fmt, Args},
+             State=#state{id=Id, mod=Mod, fd=Fd}) when Scope == Id ->
     write(Mod, Fd, Id, Fmt, Args),
     {ok, State};
 handle_event({Fmt, Args},
@@ -183,5 +199,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 write(_, devnull, _, _, _) ->
     ok;
+write(Mod, Fd, {framework, EvId}, Fmt, Args) ->
+    write(Mod, Fd, EvId, Fmt, Args);
 write(Mod, Fd, EvId, Fmt, Args) ->
     catch(Mod:write_log(EvId, Fd, Fmt, Args)).

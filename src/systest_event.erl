@@ -29,24 +29,20 @@
 -include("systest.hrl").
 -include_lib("common_test/include/ct_event.hrl").
 
--export([console/2,
-         init/1,
+-export([init/1,
          handle_event/2,
          handle_call/2,
          handle_info/2,
          terminate/2,
          code_change/3]).
 
-descriptor({_Conf, GroupName, _}) ->
-    {GroupName, "test case group"};
+-import(systest_log, [console/2,
+                      framework/2]).
+
+descriptor({Conf, GroupName, _}) ->
+    {Conf, io_lib:format("group ~p", [GroupName])};
 descriptor(Other) ->
     {Other, "test case"}.
-
-console(Msg, Args) ->
-    systest_log:log(Msg, Args).
-
-framework(Msg, Args) ->
-    systest_log:log(framework, Msg, Args).
 
 init([]) ->
     {ok, []}.
@@ -54,7 +50,7 @@ init([]) ->
 handle_event(#event{name=tc_start, data={Suite,FuncOrGroup}}, State) ->
     case FuncOrGroup of
         init_per_suite ->
-            framework("starting test suite ~p~n", [Suite]);
+            systest_log:framework("starting test suite ~p~n", [Suite]);
         end_per_suite ->
             ok;
         {Conf,GroupName,_GroupProperties} ->
@@ -72,25 +68,30 @@ handle_event(#event{name=tc_done,
                     data={_Suite, FuncOrGroup, Result}}, State) ->
     {N, Desc} = descriptor(FuncOrGroup),
     case Result of
-        ok ->
-            LogF = case is_ct_wrap_function(N) of
-                       true  -> fun framework/2;
-                       false -> fun console/2
-                   end,
-            LogF("~s ~p completed successfully~n", [Desc, N]);
         {skipped, SkipReason} ->
             case SkipReason of
                 {require_failed, {_, Key}} ->
+                    systest_results:add_skipped(?EV_SOURCE, 1),
                     console("~s ~p failed: "
                             "required config element ~p missing~n",
                             [Desc, N, Key]);
                 {failed, {_Suite, init_per_testcase, FailInfo}} ->
+                    systest_results:add_failed(?EV_SOURCE, 1),
                     failed([N, init_per_testcase], Desc, FailInfo)
             end;
         {failed, FailReason} ->
+            systest_results:add_failed(?EV_SOURCE, 1),
             failed(N, Desc, FailReason);
         {framework_error, Other} ->
-            failed(N, Desc, Other)
+            systest_results:add_failed(?EV_SOURCE, 1),
+            failed(N, Desc, Other);
+        _ ->
+            systest_results:add_passed(?EV_SOURCE, 1),
+            LogF = case is_ct_wrap_function(N) of
+                       true -> fun systest_log:framework/2;
+                       false -> fun systest_log:console/2
+                   end,
+            LogF("~s ~p completed successfully~n", [Desc, N])
     end,
     {ok, State};
 handle_event(#event{name=tc_auto_skip, data={Suite,Func,Reason}}, State) ->
@@ -98,12 +99,17 @@ handle_event(#event{name=tc_auto_skip, data={Suite,Func,Reason}}, State) ->
     {ok, State};
 handle_event(#event{name=test_stats}=Ev, _State) ->
     {ok, Ev};
-handle_event(#event{name=test_done}, #event{data={_Ok, Failed, _Skipped}}=S) ->
-    PreviousFailed = case application:get_env(systest, failures) of
-                         undefined -> 0;
-                         Value     -> Value
-                     end,
-    application:set_env(systest, failures, PreviousFailed + Failed),
+handle_event(#event{name=test_done},
+             #event{data={Passed, Failed, SkipSet}}=S) ->
+    %% sometimes test results aren't passed to the listener properly
+    %% or are incomplete - thanks common_test, for making this such a mess...
+    EvSource = 'systest_ev_final',
+    systest_results:test_run(EvSource),
+    Skipped = case SkipSet of
+                  Skip when is_integer(Skip) -> Skip;
+                  {UserSkip, AutoSkip}       -> UserSkip + AutoSkip
+              end,
+    systest_results:add_results(EvSource, Passed, Skipped, Failed),
     {ok, S};
 handle_event(_Message, State) ->
     {ok, State}.
@@ -127,10 +133,10 @@ fail_info(Other) ->
     io_lib:format("Fail Info ~p", [Other]).
 
 is_ct_wrap_function(init_per_testcase)  -> true;
-is_ct_wrap_function(init_per_group)     -> true;
+%is_ct_wrap_function(init_per_group)     -> true;
 is_ct_wrap_function(init_per_suite)     -> true;
 is_ct_wrap_function(end_per_testcase)   -> true;
-is_ct_wrap_function(end_per_group)      -> true;
+%is_ct_wrap_function(end_per_group)      -> true;
 is_ct_wrap_function(end_per_suite)      -> true;
 is_ct_wrap_function(_)                  -> false.
 

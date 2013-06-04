@@ -40,7 +40,8 @@
 
 -include("systest.hrl").
 
--import(systest_log, [log/2, log/3]).
+-import(systest_log, [log/2, log/3,
+                      framework/2, framework/3]).
 -import(systest_utils, [safe_call/3, call/2]).
 
 -exprecs_prefix([operation]).
@@ -70,33 +71,70 @@ start_link(ScopeId, SutId, Config) ->
     start_it(start_link, ScopeId, SutId, Config).
 
 start_it(How, ScopeId, SutId, Config) ->
-    log(framework, "System Under Test: ~p~n", [SutId]),
-    case apply(gen_server, How, [{local, SutId},
-                                 ?MODULE, [ScopeId, SutId, Config], []]) of
-        {error, noconfig} ->
-            Config;
-        {error, {bad_return_value, Return}} ->
-            {error, Return};
-        {error, _Other}=Err ->
-            Err;
-        {ok, Pid} ->
-            Config2 = systest_config:ensure_value(SutId, Pid, Config),
-            systest_config:replace_value(active, Pid, Config2)
+    framework("System Under Test: ~p~n", [SutId]),
+    Parent = self(),
+    Timetrap = proplists:get_value(setup_timetrap, Config, infinity),
+    Timeout = systest_utils:time_to_ms(Timetrap),
+    {Pid, MRef} =
+        spawn_monitor(
+          fun() ->
+                  case apply(gen_server, How, [{local, SutId},
+                             ?MODULE, [ScopeId, SutId, Timeout, Config], []]) of
+                      {error, noconfig} ->
+                          Conf2 = case lists:keymember(active, 1, Config) of
+                                      false -> [{active, none}|Config];
+                                      true  -> Config
+                                  end,
+                          Parent ! {self(), Conf2};
+                      {error, {bad_return_value, Return}} ->
+                          log_startup_errors(SutId, Return),
+                          Parent ! {self(), {error, Return}};
+                      {error, Other}=Err ->
+                          log_startup_errors(SutId, Other),
+                          Parent ! {self(), Err};
+                      {ok, Pid} ->
+                          Config2 =
+                              systest_config:ensure_value(SutId,
+                                                          Pid,
+                                                          Config),
+                          Parent ! {self(),
+                                    systest_config:replace_value(active,
+                                                                 Pid,
+                                                                 Config2)}
+                  end
+          end),
+    receive
+        {Pid, Result} ->
+            erlang:demonitor(MRef, [flush]),
+            Result;
+        {'DOWN', MRef, process, Pid, Reason} ->
+            receive {Pid, Ret} -> Ret
+            after 0 -> {error, Reason}
+            end
+    after Timeout ->
+            exit(Pid, kill),
+            throw({error, {start, timeout}})
     end.
 
 stop(SutRef) ->
     stop(SutRef, infinity).
 
 stop(SutRef, Timeout) ->
-    gen_server:call(SutRef, stop, Timeout).
+    GenServerTimeout = if is_atom(Timeout) -> Timeout;
+                                      true -> erlang:round(Timeout * 1.1)
+                       end,
+    try gen_server:call(SutRef, {stop, Timeout}, GenServerTimeout)
+    catch exit:{timeout, _}=R -> R;
+          C:T                 -> {error, {C, T}}
+    end.
 
 restart_proc(SutRef, Proc) ->
     restart_proc(SutRef, Proc, infinity).
 
 restart_proc(SutRef, Proc, Timeout) ->
-    systest_log:log(framework,
-                    "restart requested for ~p by ~p~n",
-                    [Proc, self()]),
+    systest_log:framework(
+      "restart requested for ~p by ~p~n",
+      [Proc, self()]),
     case gen_server:call(SutRef, {restart, Proc}, Timeout) of
         {restarted, {_OldProc, NewProc}} ->
             {ok, NewProc};
@@ -114,7 +152,7 @@ print_status(Sut) ->
     log(lists:flatten([print_status_info(N) || N <- status(Sut)]), []).
 
 log_status(Sut) ->
-    log(framework,
+    framework(
         lists:flatten([print_status_info(N) || N <- status(Sut)]), []).
 
 check_config(Sut, Config) ->
@@ -132,18 +170,16 @@ proc_pids(Sut) when is_record(Sut, sut) ->
 %% OTP gen_server API
 %%
 
-init([Scope, Id, Config]) ->
+init([Scope, Id, Timeout, Config]) ->
     process_flag(trap_exit, true),
-    %% TODO: now that we're using locally registered
-    %% names, perhaps this logic can go away?
-    case systest_watchdog:sut_started(Id, self()) of
+    case systest_watchdog:sut_started(Id, self(), Timeout) of
         ok ->
             LogBase = systest_env:default_log_dir(Config),
             case systest_log:activate_logging_subsystem(sut, Id, LogBase) of
                 {error, _} ->
-                    log(framework, "per-system logging is disabled~n", []);
+                    framework("per-system logging is disabled~n", []);
                 {ok, Dest} ->
-                    log(framework, "per-system logging to ~p~n", [Dest])
+                    framework("per-system logging to ~p~n", [Dest])
             end,
             case with_sut({Scope, Id}, fun start_host/4, Config) of
                 Sut=#sut{procs=Procs} ->
@@ -151,15 +187,28 @@ init([Scope, Id, Config]) ->
                         maybe_run_hooks(Id, Sut),
                         [begin
                              {_, Ref} = Proc,
-                             log(framework, "~p has joined~n", [Proc]),
+                             framework("~p has joined~n", [Proc]),
                              systest_proc:joined_sut(Ref, Sut, Procs -- [Proc])
                          end || Proc <- Procs],
                         {ok, Sut}
                     catch
-                        _:Error -> {stop, Error}
+                        throw:{on_start, Reason} ->
+                            {stop, Reason};
+                        _:Err ->
+                            systest_log:log("ERROR: "
+                                            "system under test startup "
+                                            "failed - see the test log(s) "
+                                            "for details~n",
+                                            []),
+                            systest_log:framework(
+                              "sut on_join hooks failed: ~p~n",
+                              [Err]),
+                            {stop, Err}
                     end;
-                Error ->
-                    {stop, Error}
+                {error, Error} ->
+                    {stop, Error};
+                Other ->
+                    {stop, Other}
             end;
         {error, clash} ->
             {stop, name_in_use}
@@ -168,13 +217,20 @@ init([Scope, Id, Config]) ->
 maybe_run_hooks(Id, Sut=#sut{on_start=Hooks}) ->
     case Hooks of
         [{on_start, Run}|_] ->
-            log({framework, Id},
-                "running on_start hooks ~p~n", [Run]),
-            [systest_hooks:run(Sut,
-                               Hook, Sut) || Hook <- Run];
+            framework(Id,
+                      "running on_start hooks ~p~n", [Run]),
+            [try
+                 systest_hooks:run(Sut, Hook, Sut)
+             catch _:Reason ->
+                 systest_log:log("ERROR: "
+                                 "system under test on_start hook(s) "
+                                 "failed - see the test log(s) for details~n",
+                                 []),
+                 throw({on_start, Reason})
+             end || Hook <- Run];
         Other ->
-            log({framework, Id},
-                "ignoring on_start hooks ~p~n", [Other]),
+            framework(Id,
+                      "ignoring SUT on_start hooks ~p~n", [Other]),
             ok
     end.
 
@@ -193,9 +249,9 @@ handle_call({restart, Proc}, From,
         [] ->
             {reply, {error, Proc}, State};
         [{_, Ref}=Found] ->
-            systest_log:log({framework, Id},
-                            "restarting process ~p"
-                            "on behalf of ~p~n", [Found, From]),
+            systest_log:framework(Id,
+                                  "restarting process ~p"
+                                  "on behalf of ~p~n", [Found, From]),
             systest_proc:stop(Ref),
             State2 = State#sut{ pending=[{restart, Found, From}|P] },
             {noreply, State2}
@@ -210,10 +266,10 @@ handle_info({'EXIT', Pid, normal}=Ev, State=#sut{id=Id}) ->
     systest_watchdog:proc_stopped(Id, Pid),
     {noreply, clear_pending(Ev, State)};
 handle_info({'EXIT', Pid, Reason}=Ev, State=#sut{id=Sut}) ->
-    systest_log:log({framework, Sut},
-                    "unexpected systest process exit "
-                    "from ~p: ~p~n",
-                    [Pid, Reason]),
+    systest_log:framework(Sut,
+                          "unexpected systest process exit "
+                          "from ~p: ~p~n",
+                          [Pid, Reason]),
     {stop, {proc_exit, Pid, Reason}, clear_pending(Ev, State)}.
 
 terminate(_Reason, _State) ->
@@ -227,27 +283,34 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal API
 %%
 
+log_startup_errors(SutId, Return) ->
+    systest_log:log(system,
+                    "ERROR: unable to start ~p~n",
+                    [SutId]),
+    systest_log:framework("sut startup returned ~p~n", [Return]).
+
 clear_pending({'EXIT', Pid, _},
               #sut{id = Identity, name = SutName,
                    config = Config, procs = Procs,
                    pending = Pending}=State) ->
-    systest_log:log({framework, Identity},
-                    "checking ~p against pending restarts~n", [Pid]),
+    systest_log:framework(Identity,
+                          "checking ~p against pending restarts~n", [Pid]),
     case [P || {_, {_, DyingPid}, _}=P <- Pending, DyingPid == Pid] of
         [{restart, {Id, Pid}=DeadProc, Client}]=Restart ->
-            systest_log:log({framework, Identity},
-                            "found ~p~n", [DeadProc]),
+            systest_log:framework(Identity,
+                                  "found ~p~n", [DeadProc]),
             {ProcName, Host} = systest_utils:proc_id_and_hostname(Id),
             [Proc] = build_procs(Identity, SutName,
                                  {Host, [ProcName]}, Config),
+            %% TODO: allow restarts to fail!!
             NewProc = start_proc(Identity, Proc),
             RemainingProcs = Procs -- [DeadProc],
 
-            systest_log:log({framework, Identity},
+            systest_log:framework(Identity,
                     "running on_join hooks for restarted process~n", []),
             systest_proc:joined_sut(element(2, NewProc),
                                         State, RemainingProcs),
-            systest_log:log({framework, Identity},
+            systest_log:framework(Identity,
                             "restart complete: notifying ~p~n", [Client]),
             gen_server:reply(Client, {restarted, {DeadProc, NewProc}}),
             NewProcState = [NewProc|(RemainingProcs)],
@@ -264,7 +327,7 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
     %%
     %% Another thing to note here is that systest_cleaner runs the kill_wait
     %% function in a different process. If we put a selective receive block
-    %% here, we might well run into unexpected message ordering that could
+    %% here, we might well run into unexpected message orderings that could
     %% leave us in an inconsistent state.
     ProcRefs = [ProcRef || {_, ProcRef} <- Procs, is_process_alive(ProcRef)],
     case systest_cleaner:kill_wait(ProcRefs,
@@ -274,26 +337,26 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
             gen_server:reply(ReplyTo, ok),
             {stop, normal, State};
         {error, {killed, StoppedOk}} ->
-            log(framework, "halt error: killed~n", []),
+            framework("halt error: killed~n", []),
             Err = {halt_error, orphans, ProcRefs -- StoppedOk},
             gen_server:reply(ReplyTo, Err),
             {stop, Err, State};
         Other ->
-            log(framework, "halt error: ~p~n", [Other]),
-            gen_server:reply(ReplyTo, {error, Other}),
+            framework("halt error: ~p~n", [Other]),
+            gen_server:reply(ReplyTo, Other),
             {stop, {halt_error, Other}, State}
     end.
 
 with_sut({Scope, Identity}, Handler, Config) ->
-    case systest_config:sut_config(Scope, Identity) of
+    try systest_config:sut_config(Scope, Identity) of
         {_, noconfig} ->
             noconfig;
         {Alias, SutConfig} ->
             {Hosts, Hooks} = lists:splitwith(fun(E) ->
                                                  element(1, E) =/= on_start
                                              end, SutConfig),
-            log({framework, Identity},
-                "configured hosts: ~p~n", [Hosts]),
+            framework(Identity,
+                      "configured hosts: ~p~n", [Hosts]),
             Procs = lists:flatten([Handler(Identity, Alias,
                                         Host, Config) || Host <- Hosts]),
 
@@ -303,6 +366,8 @@ with_sut({Scope, Identity}, Handler, Config) ->
                  procs = Procs,
                  config = Config,
                  on_start = Hooks}
+    catch _:Err ->
+        {error, Err}
     end.
 
 %% TODO: make a Handler:status call to get detailed information back...
@@ -312,7 +377,7 @@ print_status_info({Proc, Status}) ->
                   "~n----------------------------------------------------~n").
 
 build_procs(Identity, Sut, {Host, Procs}, Config) ->
-    systest_log:log(framework, "building processes...~n", []),
+    systest_log:framework("building processes...~n", []),
     [systest_proc:make_proc(Sut, N, [{host, Host}, {scope, Identity},
                                      {name, N}|Config]) || N <- Procs].
 
@@ -333,25 +398,38 @@ start_host(Identity, Sut,
         true  -> verify_host(Host);
         false -> ok
     end,
-    [start_proc(Identity, Proc) ||
-            Proc <- build_procs(Identity, Sut, HostConf, Config)].
+    [try start_proc(Identity, Proc) of
+         {error, Err} -> throw(Err);
+         Ret          -> Ret
+     catch _:E        -> throw(E)
+     end || Proc <- build_procs(Identity, Sut, HostConf, Config)].
 
 start_proc(Identity, Proc) ->
-    systest_log:log(framework, "handoff to ~p~n",
-                    [systest_proc:get(name, Proc)]),
-    {ok, ProcRef} = systest_proc:start(Proc),
-    ok = systest_watchdog:proc_started(Identity, ProcRef),
-    %% NB: the id field of Proc will *not* be set (correctly)
-    %% until after the gen_server has started, so an API call
-    %% is necessary rather than using systest_proc:get/2
-    {?CONFIG(id, systest_proc:proc_data(ProcRef)), ProcRef}.
+    try
+        case systest_proc:start(Proc) of
+            {ok, ProcRef} ->
+                ok = systest_watchdog:proc_started(Identity, ProcRef),
+
+                %% NB: the id field of Proc will *not* be set (correctly)
+                %% until after the gen_server has started, so an API call
+                %% is necessary rather than using systest_proc:get/2
+                {?CONFIG(id, systest_proc:proc_data(ProcRef)), ProcRef};
+            {error, _}=Error ->
+                Error
+        end
+    catch _:Err ->
+        systest_log:log(system,
+                        "ERROR: ~p unable to start or configure process ~p~n",
+                        [Identity, systest_proc:get(name, Proc)]),
+        throw(Err)
+    end.
 
 verify_host(Host) ->
     case systest_env:is_epmd_contactable(Host, 5000) of
         true ->
             ok;
         {false, Reason} ->
-            log(framework, "unable to contact ~p: ~p~n", [Host, Reason]),
+            framework("unable to contact ~p: ~p~n", [Host, Reason]),
             throw({host_unavailable, Host})
     end.
 

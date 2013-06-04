@@ -1,4 +1,6 @@
-%% -------------------------------------------------------------------
+%% -*- tab-width: 4;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+%% ex: ts=4 sw=4 et
+%% ----------------------------------------------------------------------------
 %%
 %% Copyright (c) 2005 - 2012 Nebularis.
 %%
@@ -20,24 +22,17 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% -----------------------------------------------------------------------------
-%% @hidden 
-%% Module systest_ct_log - provides a logging callback handler that prints
-%% to the common test log. Both raw and HTML outputs are generated this way.
-%% @end
-%% -----------------------------------------------------------------------------
--module(systest_ct_log).
+%% @hidden
+%% ----------------------------------------------------------------------------
+-module(systest_debug).
 
--behaviour(systest_log).
--export([write_log/4, start/0]).
+-behaviour(systest_runner).
 
--import(systest_utils, [as_string/1]).
+-export([dryrun/1, run/1]).
 
-start() ->
-    ok = systest_log:start(ct, systest_ct_log, common_test).
+dryrun(Spec) ->
+    systest_ct:run_debug(Spec, true).
 
-%%
-%% systest_log callback API!
-%%
+run(Spec) ->
+    systest_ct:run_debug(Spec, false).
 
-write_log(EvId, _Fd, What, Args) ->
-    ct:log("[" ++ as_string(EvId) ++ "] " ++ as_string(What), Args).

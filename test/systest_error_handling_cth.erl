@@ -25,35 +25,93 @@
 %% @doc Module systest_verify_cth
 %% This module extends the default common test hook (systest_cth) to allow for
 %% expected failing test cases.
+%% @end
 %% ----------------------------------------------------------------------------
 -module(systest_error_handling_cth).
-
--extends(systest_cth).
 
 -include("systest.hrl").
 -include_lib("common_test/include/ct.hrl").
 
--compile(export_all).
+-export([id/1, init/2]).
+-export([pre_init_per_suite/3]).
+-export([post_init_per_suite/4]).
+-export([pre_end_per_suite/3]).
+-export([post_end_per_suite/4]).
+-export([pre_init_per_group/3]).
+-export([post_end_per_group/4]).
+-export([pre_init_per_testcase/3]).
+-export([post_end_per_testcase/4]).
+-export([terminate/1]).
+
+%% @doc Return a unique id for this CTH.
+id(Opts) ->
+    systest_cth:id(Opts).
+
+%% @doc Always called before any other callback function. Use this to initiate
+%% any common state.
+init(systest, Opts) ->
+    systest_cth:init(systest, Opts).
+
+pre_init_per_suite(Suite, Config, State) ->
+    systest_cth:pre_init_per_suite(Suite, Config, State).
+
+post_init_per_suite(_Suite, _Config, Return, State) ->
+    {Return, State}.
+
+pre_end_per_suite(_Suite, Config, State) ->
+    {Config, State}.
+
+post_end_per_suite(Suite, Config, Result, State) ->
+    systest_cth:post_end_per_suite(Suite, Config, Result, State).
+
+pre_init_per_group(Group, Config, State) ->
+    systest_cth:pre_init_per_group(Group, Config, State).
+
+post_end_per_group(Group, Config, Result, State) ->
+    systest_cth:post_end_per_group(Group, Config, Result, State).
 
 pre_init_per_testcase(TC=sut_start_scripts_badly_configured, Config, State) ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
-        {{fail,{system_under_test, start, {error,
-                    {configuration_not_found, bad_cli}}}},_} ->
-            systest_event:console("ignoring expected sut start failure~n", []),
+        {{fail, {configuration_not_found, bad_cli}}, _} ->
+            systest_log:console("ignoring expected sut start failure~n", []),
             systest_watchdog:clear_exceptions(),
             {Config, State};
         Other ->
             {{fail, Other}, State}
     end;
-pre_init_per_testcase(TC=failing_sut_on_start_hook, Config, State) ->
+pre_init_per_testcase(TC, Config, State)
+  when TC == failing_proc_on_start_hook orelse
+       TC == failing_sut_on_start_hook ->
     case systest_cth:pre_init_per_testcase(TC, Config, State) of
-        {{fail,{system_under_test, start,
-                {error, {hook_failed,
-                    {local,erlang,error,[]}=What, _}}}},_} ->
-            systest_event:console("ignoring expected sut start failure ~p~n",
-                                  [What]),
+        {{fail,{hook_failed, {local, erlang, error, _}=What, _}},_} ->
+            systest_log:console("ignoring expected start failure ~p~n",
+                                [What]),
             systest_watchdog:clear_exceptions(),
             {Config, State};
+        Other ->
+            {{fail, Other}, State}
+    end;
+pre_init_per_testcase(TC=failing_proc_on_joined_hook,
+                      Config, State) ->
+    case catch(systest_cth:pre_init_per_testcase(TC, Config, State)) of
+        {{fail,{{hook_failed,
+                {local, M, F, A}, undef}, _}}, State2} ->
+            systest_log:console("ignoring expected sut start failure "
+                                "(call to undefined mfa ~p:~p/~p)~n",
+                                [M, F, length(A)]),
+            case systest_watchdog:exceptions(TC) of
+                [{_Sut, crashed, Reason}] ->
+                    case Reason of
+                        {{hook_failed,
+                          {local, M, F, _Args}, undef}, _} ->
+                            systest_watchdog:clear_exceptions(),
+                            {Config, State2};
+                        Other ->
+                            {{fail, Other}, State2}
+                    end;
+                [] ->
+                    {{fail, no_exceptions_found}, State2}
+            end;
         Other ->
             {{fail, Other}, State}
     end;
@@ -71,14 +129,12 @@ post_end_per_testcase(TC=timetrap_failure, Config, Return, State) ->
     [] = nodes(),
     systest_log:log(system,
                     "Test Case timetrap_failure is expected to fail, "
-                    "however this message indicates that all the "
+                    "however the failure cannot be trapped by common-test; "
+                    "this message indicates that all the "
                     "required post-conditions have been fulfilled~n", []),
     {proplists:delete(tc_status, Config), State};
 post_end_per_testcase(TC, Config, Return, State) ->
     systest_cth:post_end_per_testcase(TC, Config, Return, State).
 
-post_init_per_suite(_Suite, _Config, Return, State) ->
-    {Return, State}.
-
-pre_end_per_suite(_Suite, Config, State) ->
-    {Config, State}.
+terminate(R) ->
+    systest_cth:terminate(R).

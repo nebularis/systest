@@ -33,9 +33,11 @@
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
 -export([record_to_proplist/2, border/2, print_heading/1, print_section/2]).
 -export([ets_dump/1, quiet/1, safe_call/3, call/2]).
+-export([time_to_ms/1, as_atom/1, remote_load/2]).
 
 abort(Fmt, Args) ->
-    io:format(user, "ERROR:  " ++ Fmt, Args),
+    io:format(Fmt, Args),
+    timer:sleep(500),
     erlang:halt(1).
 
 throw_unless(Cond, Msg) ->
@@ -80,11 +82,17 @@ combine(V1, V2) when is_list(V1) -> [V2|V1];
 combine(V1, V2) when is_list(V2) -> [V1|V2];
 combine(V1, V2)                  -> [V1,V2].
 
-as_string(X) when is_atom(X)    -> atom_to_list(X);
-as_string(X) when is_integer(X) -> integer_to_list(X);
-as_string(X) when is_float(X)   -> float_to_list(X);
-as_string(X) when is_binary(X)  -> binary_to_list(X);
-as_string(X)                    -> X.
+as_string(X) when is_atom(X)          -> atom_to_list(X);
+as_string(X) when is_integer(X)       -> integer_to_list(X);
+as_string(X) when is_float(X)         -> float_to_list(X);
+as_string(X) when is_binary(X)        -> binary_to_list(X);
+as_string([H|_]=X) when is_integer(H) -> X.
+
+as_atom(X) when is_atom(X)          -> X;
+as_atom([H|_]=X) when is_integer(H) -> list_to_atom(X);
+as_atom(X) when is_binary(X)        -> binary_to_atom(X, utf8);
+as_atom(X) when is_integer(X)       -> as_atom(integer_to_list(X));
+as_atom(X) when is_float(X)         -> as_atom(float_to_list(X)).
 
 %% @doc recursive search in Dir for files matching Regex
 %% @end
@@ -112,6 +120,10 @@ rm_rf(Path, ok) ->
                 {error, Err}    -> {error, {Path, Err}}
             end
     end.
+
+remote_load(Node, Module) ->
+    {Mod, Bin, Fname} = code:get_object_code(Module),
+    rpc:call(Node, code, load_binary, [Mod, Fname, Bin]).
 
 %% @doc makes a gen_server:call with 'infinity' timeout.
 %% @end
@@ -171,6 +183,7 @@ proplist_format(L) ->
         [begin
              Fmt = if is_list(V) andalso
                       is_integer(hd(V)) -> "~s~n";
+                      V == [] -> "~s~n";
                       true -> "~p~n"
                    end,
              io_lib:format(LenPrefix ++ "s: " ++ Fmt, [as_string(K), V])
@@ -192,4 +205,12 @@ ets_dump(Tab) ->
     print_section("Table Dump - " ++ as_string(Tab),
                   [{"Name", Tab},
                    {"Ets Info", ets:info(Tab)}|ets:tab2list(Tab)]).
+
+time_to_ms(infinity)           -> infinity;
+time_to_ms({milliseconds, MS}) -> MS;
+time_to_ms({ms, MS})           -> MS;
+time_to_ms({UoM, Val}=TS)      -> case systest_env:is_exported(timer, UoM, 1) of
+                                      true  -> erlang:apply(timer, UoM, [Val]);
+                                      false -> throw({invalid_timespec, TS})
+                                  end.
 

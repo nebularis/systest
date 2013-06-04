@@ -29,11 +29,16 @@
 -export([default_log_dir/1, default_scratch_dir/0, temp_dir/0]).
 -export([is_epmd_contactable/2, hostname/1]).
 -export([work_directory/3, lookup_env/2, timestamp/0]).
+-export([is_exported/3]).
 
 -define(DEFAULT_EPMD_PORT, 4369).
 
 -include_lib("kernel/include/inet.hrl").
 -include("systest.hrl").
+
+is_exported(M, F, A) ->
+    code:ensure_loaded(M),
+    erlang:function_exported(M, F, A).
 
 default_log_dir(Config) ->
     ?CONFIG(log_dir, Config, filename:join(default_scratch_dir(), "logs")).

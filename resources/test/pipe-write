@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+pipe="$PIPE_DIR/$1"
+echo "$2" >$pipe
+

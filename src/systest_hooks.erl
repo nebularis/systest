@@ -46,10 +46,14 @@
 
 -spec run(Item::term(), Hook::systest_hook(), Context::term()) -> any().
 run(Item, Hook, Context) ->
-    try 
+    try
         run_it(Item, Hook, Context)
-    catch 
-        _:Error -> throw({hook_failed, Hook, Error})
+    catch
+        _:Error ->
+            systest_log:log(framework,
+                            "Hook ~p failed: ~p~n",
+                            [Hook, Error]),
+            throw({hook_failed, Hook, Error})
     end.
 
 run_it(Item, {eval, Where, Mod, Func, Args}, Context) ->

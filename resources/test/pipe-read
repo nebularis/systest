@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+
+mkdir -p "$PIPE_DIR"
+pipe="$PIPE_DIR/$1"
+trap "rm -f $pipe" EXIT
+
+if [[ ! -p $pipe ]]; then
+    mkfifo $pipe
+fi
+
+while true
+do
+    if read line <$pipe; then
+        if [[ "$line" == 'quit' ]]; then
+            break
+        fi
+        if [[ "$line" == 'bang' ]]; then
+            exit 1
+        fi
+        echo "$line"
+    fi
+done
+
+echo "$0 exiting"
+

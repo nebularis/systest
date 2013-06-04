@@ -68,16 +68,33 @@ kill(Targets, Server) ->
 kill([], _Server, _Timeout) ->
     no_targets;
 kill(Targets, Server, Timeout) ->
+    MRef = erlang:monitor(process, Server),
     wait = gen_server:call(Server, {kill, Targets}, Timeout),
-    receive
-        {_Ref, {ok, Killed}} ->
-            case length(Killed) =:= length(Targets) of
-                true  -> ok;
-                false -> {error, {killed, Targets}}
-            end;
-        {'EXIT', Server, normal} ->
-            ok
-    after Timeout -> {error, timeout}
+    Result = receive
+                 {_Ref, {ok, Killed}} ->
+                     check_length(Targets, Killed);
+                 {'EXIT', Server, normal} ->
+                     %% is it *possible* that the 'EXIT' overtakes the reply!
+                     check_length(Targets, dead_pids(Targets));
+                 {'DOWN', MRef, process, Server, Reason} ->
+                     {error, Reason}
+             after Timeout ->
+                     {error, timeout, dead_pids(Targets)}
+             end,
+    erlang:demonitor(MRef, [flush]),
+    Result.
+
+%%
+%% Internal API
+%%
+
+dead_pids(Targets) ->
+    lists:filter(fun erlang:is_process_alive/1, Targets).
+
+check_length(Targets, Killed) ->
+    case length(Killed) =:= length(Targets) of
+        true  -> ok;
+        false -> {error, {killed, Targets}}
     end.
 
 %%
@@ -101,7 +118,7 @@ handle_call(_Msg, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'EXIT', Pid, _},
+handle_info({'DOWN', _MRef, process, Pid, _Reason},
             State=#state{targets=Targets, victims=Victims}) ->
     {Client, Nodes} = queue:head(Targets),
     case lists:member(Pid, Nodes) of
@@ -125,12 +142,13 @@ handle_info({'EXIT', Pid, _},
                         queue:cons({Client, T2}, queue:tail(Targets)),
                     {noreply, State#state{targets=RemainingQueue, victims=V2}}
             end
-    end.
+    end;
+handle_info({'EXIT', _, normal}, State) ->
+    {noreply, State}.
 
 link_and_kill(Pids, Kill) ->
-    [begin
-        link(P), Kill(P)
-     end || P <- Pids].
+    [erlang:monitor(process, P) || P <- Pids],
+    [spawn_link(fun() -> Kill(P) end) || P <- Pids].
 
 terminate(_Reason, _State) ->
     ok.

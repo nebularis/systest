@@ -28,11 +28,28 @@ kill_some_maybe_dead_test() ->
     [?assertEqual(false, erlang:is_process_alive(P)) || P <- Pids],
     true.
 
+kill_with_timeout_test_() ->
+    {timeout, 60,
+     fun() ->
+             Pids = [spawn(fun loop/0) || _ <- lists:seq(1, 100) ],
+             case systest_cleaner:kill_wait(Pids,
+                                            fun kill_it_slowly/1, 10000) of
+                 {error, timeout, Survivors} ->
+                     ?assert(length(Survivors) > 0);
+                 Other ->
+                     ?assertEqual(ok, Other)
+             end
+    end}.
+
 kill_many_test() ->
     Pids = [ spawn(fun loop/0) || _ <- lists:seq(1, 100) ],
     systest_cleaner:kill_wait(Pids, fun kill_it/1),
     [?assertEqual(false, erlang:is_process_alive(P)) || P <- Pids],
     true.
+
+kill_it_slowly(Pid) ->
+    timer:sleep(20000),
+    exit(Pid, kill).
 
 kill_it(Pid) ->
     exit(Pid, boom).
@@ -42,4 +59,3 @@ loop() ->
 
 short_loop() ->
     ok.
-

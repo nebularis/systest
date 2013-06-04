@@ -36,6 +36,8 @@
         systest_config:replace_value(Key, Value, Conf)).
 -define(ENV(A, B), systest_utils:lookup_env(A, B)).
 
+-define(EV_SOURCE, 'systest-common-test-event-handler').
+
 -type application_info() :: {atom(), [{atom(), term()}]}.
 
 -type command()          :: atom().
@@ -94,5 +96,12 @@
     config          :: systest_config:config(),
     on_start        :: [hook()],
     pending = []    :: [{term(), atom()}]
+}).
+
+-record(results, {
+    source      :: atom(),
+    passed  = 0 :: integer(),
+    failed  = 0 :: integer(),
+    skipped = 0 :: integer()
 }).
 

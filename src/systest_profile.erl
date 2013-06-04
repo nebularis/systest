@@ -26,27 +26,30 @@
 -include("systest.hrl").
 
 -export([load/1, load/2]).
--import(systest_utils, [combine/2, as_list/1]).
+-import(systest_utils, [combine/2]).
 
 -define(lookup(W, D), systest_utils:lookup_env(W, D)).
 
 -type testable() :: file:filename() | module().
--type time_unit() :: 'hr' | 'min' | 'sec' | 'ms'.
+-type time_unit() :: 'hours' | 'minutes' | 'seconds' | 'ms' | 'milliseconds'.
 
 %% {allow_user_terms, Bool}, {label, ProfileName}
 
 -record(profile, {
-    name                        :: string(),        %% {label, Label}
-    framework = systest_ct      :: module(),
-    source                      :: file:filename(),
-    output_dir                  :: file:filename(),
-    log_dir                     :: file:filename(),
-    settings_base               :: file:filename(),
-    resources        = []       :: [file:filename()],
-    targets          = ["ebin"] :: [testable()],
-    specifications   = []       :: [file:filename()],
-    hooks            = []       :: [term()],
-    default_timetrap            :: {integer(), time_unit()}
+    name                                :: string(),        %% {label, Label}
+    framework           = "systest_ct"  :: module() | string(),
+    source                              :: file:filename(),
+    output_dir                          :: file:filename(),
+    log_dir                             :: file:filename(),
+    settings_base                       :: file:filename(),
+    resources                = []       :: [file:filename()],
+    targets                  = ["ebin"] :: [testable()],
+    specifications           = []       :: [file:filename()],
+    hooks                    = []       :: [term()],
+    aggressive_teardown      = false    :: boolean() | {time_unit(), integer()},
+    setup_timetrap           = infinity :: {time_unit(), integer()},
+    teardown_timetrap        = infinity :: {time_unit(), integer()},
+    execution_timetrap                  :: {time_unit(), integer()}
 }).
 
 -exprecs_prefix([operation]).
@@ -64,11 +67,10 @@
 %% @end
 -spec load(systest_config:config()) -> profile().
 load(Config) ->
-    BaseDir = ?REQUIRE(base_dir, Config),
-    case ?CONFIG(profile, Config, undefined) of
-        undefined -> load_configured_profile_data(Config, BaseDir);
-        Name      -> Profile = load_named_profile_data(Name, BaseDir),
-                     Profile#profile{ name=Name }
+    Profile = load_profile(Config),
+    case ?CONFIG(framework, Config, undefined) of
+        undefined -> Profile;
+        Framework -> set([{framework, Framework}], Profile)
     end.
 
 %%
@@ -86,6 +88,14 @@ load(ProfFile, BaseDir) ->
 %%
 %% Private/Internal API
 %%
+
+load_profile(Config) ->
+    BaseDir = ?REQUIRE(base_dir, Config),
+    case ?CONFIG(profile, Config, undefined) of
+        undefined -> load_configured_profile_data(Config, BaseDir);
+        Name      -> Profile = load_named_profile_data(Name, BaseDir),
+                     Profile#profile{ name=Name }
+    end.
 
 load_configured_profile_data(Config, BaseDir) ->
     case ?CONFIG(systest_profile, Config, undefined) of

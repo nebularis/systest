@@ -34,6 +34,8 @@
 
 -export([behaviour_info/1, execute/1]).
 
+-export([timed_abort/2]).
+
 -type execution() :: #execution{}.
 -export_type([execution/0]).
 
@@ -46,6 +48,8 @@
 
 -compile({parse_transform, exprecs}).
 -export_records([execution]).
+
+-import(systest_utils, [as_atom/1]).
 
 behaviour_info(callbacks) ->
     [{run, 1}, {dryrun, 1}];
@@ -100,7 +104,10 @@ start_logging(Config) ->
                              io:format(user, "quiet: (logging to ~s)~n",
                                        [LogName]),
                              filename:absname(LogName);
-                    false -> user
+                    false -> case ?CONFIG(shell, Config, false) of
+                                 false -> user;
+                                 true  -> systest_shell
+                             end
                 end,
     systest_log:start(SystemLog),
     Active = proplists:get_all_values(logging, Config),
@@ -115,7 +122,7 @@ start_logging(Config) ->
             false -> io:format(user, "activating logging sub-system ~p~n",
                                [Target])
         end,
-        ok = systest_log:start(Target, systest_log, user)
+        ok = systest_log:start(Target, systest_log, SystemLog)
      end || SubSystem <- Active],
     if length(Active) > 0 -> io:nl();
                      true -> ok
@@ -134,7 +141,7 @@ verify(Exec2=#execution{profile     = Prof,
     %% so we store it in systest_config as a static config element
     systest_config:set_static(settings, [{base_dir, BaseDir}|Settings]),
 
-    Mod = systest_profile:get(framework, Prof),
+    Mod = get_framework(Prof, Config),
 
     case quiet(Config) of
         true ->
@@ -164,6 +171,14 @@ verify(Exec2=#execution{profile     = Prof,
                   false -> run
               end,
 
+    case systest_profile:get(execution_timetrap, Prof) of
+        undefined ->
+            ok;
+        TimeoutNode ->
+            Ms = systest_utils:time_to_ms(TimeoutNode),
+            timer:apply_after(Ms, ?MODULE, timed_abort, [Config, Ms])
+    end,
+
     Result = case catch( erlang:apply(Mod, TestFun, [Exec2]) ) of
                  R -> R
              end,
@@ -177,25 +192,47 @@ verify(Exec2=#execution{profile     = Prof,
                 true  -> io:format("[dryrun] done~n");
                 false -> io:format("[passed] all test cases succeeded~n")
             end;
-        {error,{failures, N}} ->
-            handle_failures(Prof, N, Config);
+        {error,{Failure, _}=F} when Failure == skipped orelse
+                                    Failure == failed ->
+            handle_failures(Prof, F, Config);
         {'EXIT', Reason} ->
             handle_errors(Exec2, Reason, Config);
         Errors ->
             handle_errors(Exec2, Errors, Config)
     end.
 
-handle_failures(Prof, N, Config) ->
+timed_abort(Config, Ms) ->
+    AbortHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
+    AbortHandler("ABORT: reached maximum profile execution time: ~p ms~n", [Ms]).
+
+get_framework(Prof, Config) ->
+    as_atom(case ?CONFIG(stand_alone, Config, false) of
+                true  -> "systest_standalone";
+                false -> case ?CONFIG(shell, Config, false) of
+                             true ->
+                                 "systest_shell";
+                             false ->
+                                 case ?CONFIG(debug, Config, false) of
+                                     true ->
+                                         "systest_debug";
+                                     false ->
+                                         systest_profile:get(framework, Prof)
+                                 end
+                         end
+            end).
+
+handle_failures(Prof, {How, _}, Config) ->
     maybe_dump(Config),
     ProfileName = systest_profile:get(name, Prof),
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
-    ErrorHandler("[failed] Execution Profile ~p: ~p failed test cases~n",
-                 [ProfileName, N]).
+    ErrorHandler("[failed] test profile ~s "
+                 "encountered ~p test cases~n",
+                 [ProfileName, How]).
 
 handle_errors(_Exec, Reason, Config) ->
     maybe_dump(Config),
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
-    ErrorHandler("[error] Framework Encountered Unhandled Errors: ~p~n",
+    ErrorHandler("[error] framework encountered unhandled errors: ~p~n",
                  [Reason]).
 
 maybe_dump(Config) ->
@@ -205,17 +242,34 @@ maybe_dump(Config) ->
     end.
 
 load_test_targets(Prof, Config) ->
-    case proplists:get_all_values(testsuite, Config) of
-        [] ->
-            case ?CONFIG(testcase, Config, undefined) of
-                undefined   -> load_test_targets(Prof);
-                {Suite, TC} -> [{suite, Suite},
-                                {testcase, TC},
-                                {dir, test_dir(list_to_atom(Suite))}]
-            end;
-        Suites ->
-            [{suite, Suites},
-             {dir, systest_utils:uniq([test_dir(M) || M <- Suites])}]
+    %% TODO: this explicit handling of a known framework is pretty
+    %% awful - we should have a way to delegate to the framework!
+    %% see https://github.com/nebularis/systest/issues/40
+    case get_framework(Prof, Config) of
+        F when F == systest_standalone orelse
+               F == systest_shell ->
+            [];
+        _F ->
+            case proplists:get_all_values(testsuite, Config) of
+                [] ->
+                    case ?CONFIG(testcase, Config, undefined) of
+                        undefined   -> load_test_targets(Prof);
+                        {Mod, Func} -> Suite = list_to_atom(Mod),
+                                       TC = list_to_atom(Func),
+                                       systest_utils:throw_unless(
+                                         systest_env:is_exported(Suite, TC, 1),
+                                         "~p:~p/1 is not a valid test case "
+                                         "- have you checked the code path?~n",
+                                         [Suite, TC]),
+                                       [{suite, Suite},
+                                        {testcase, TC},
+                                        {dir, test_dir(Suite)}]
+                    end;
+                [Configured] ->
+                    Suite = list_to_atom(lists:flatten(Configured)),
+                    [{suite, Suite},
+                     {dir, test_dir(Suite)}]
+            end
     end.
 
 load_test_targets(Prof) ->
@@ -317,7 +371,20 @@ maybe_start_net_kernel(Config) ->
                 true  ->
                     ok
             end,
-            io:format(user, "[systest.net] ~s~n", [os:cmd("epmd -names")]),
+            case re:run(os:cmd("epmd -names"), "[^\\n]+",
+                        [global, {capture, all, list}]) of
+                {match, EpmdData} ->
+                    EpmdRunInfo = re:replace(hd(EpmdData),
+                                             "with data:",
+                                             ""),
+                    [begin
+                         io:format(user, "[systest.net] ~s~n",
+                                   [re:replace(hd(re:split(Line, "\\r")),
+                                               "name", "found")])
+                     end || Line <- [EpmdRunInfo|tl(EpmdData)]];
+                _ ->
+                    ok
+            end,
             if
                 UseLongNames =:= true ->
                     {ok, _} = net_kernel:start([NodeName, longnames]);

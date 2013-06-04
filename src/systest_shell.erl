@@ -22,32 +22,50 @@
 %% FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 %% IN THE SOFTWARE.
 %% ----------------------------------------------------------------------------
--module(systest_sup).
+-module(systest_shell).
 
--behaviour(supervisor).
+-behaviour(systest_runner).
+-behaviour(systest_log).
 
-%% API
--export([start_link/0]).
+-include("systest.hrl").
 
-%% Supervisor callbacks
--export([init/1]).
+%% systest_runner Exports
+-export([dryrun/1, run/1]).
+-export([start_log/0, write_log/4]).
 
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+%%
+%% Public API
+%%
 
-init([]) ->
-    {ok, {{one_for_one, 5, 10}, [
-        {systest_event_log,
-            {systest_log, start_link, []},
-                permanent, 5000, worker, dynamic},
-        {systest_config_server,
-            {systest_config, start_link, []},
-                permanent, 5000, worker, [gen_server]},
-        {systest_watchdog,
-            {systest_watchdog, start, []},
-                permanent, 5000, worker, [gen_server]},
-        {systest_results,
-            {systest_results, init, []},
-                temporary, infinity, worker, dynamic}
-    ]}}.
+dryrun(_RunSpec) ->
+    ok.
 
+run(RunSpec) ->
+    {ok, Pid} = systest_standalone:start(),
+    MRef = erlang:monitor(process, Pid),
+    case systest_standalone:run(Pid, RunSpec) of
+        ok ->
+            spawn(fun user_drv:start/0),
+            receive
+                {'DOWN', MRef, _, _, Reason} ->
+                    {error, {unknown, Reason}};
+                {_Ref, {finished, Pid, Result}} ->
+                    Result;
+                {'DOWN', _Ref, process, Pid, Reason} ->
+                    {error, {died, Reason}};
+                Other ->
+                    {error, Other}
+            end;
+        {finished, Pid, Result} ->
+            Result
+    end.
+
+start_log() ->
+    ok = systest_log:start(shell, ?MODULE, user).
+
+%%
+%% systest_log callback API!
+%%
+
+write_log(EvId, user, What, Args) ->
+    io:format("[~p]  " ++ What, [EvId|Args]).

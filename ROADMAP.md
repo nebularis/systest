@@ -1,9 +1,5 @@
 # Combined Feature & Bugfix Releases
 
-## v0.8.4
-
-see https://github.com/nebularis/systest/issues?milestone=1&state=open
-
 ## v0.9.0 and beyond
 
 - support for nested SUTs
@@ -16,3 +12,4 @@ see https://github.com/nebularis/systest/issues?milestone=1&state=open
 - declarative, per-node, per-scope tracing
 - support for parallel test runs
 - support for parallel node starts
+- proper resource handling (see https://github.com/nebularis/systest/wiki/The-Big-Refactor)

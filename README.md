@@ -1,4 +1,4 @@
-# SysTest - A Distributed Systems Testing framework
+# SysTest - A Systems Testing framework
 
 [![Build Status](https://travis-ci.org/nebularis/systest.png?branch=master,stable)](https://travis-ci.org/nebularis/systest)
 
@@ -13,8 +13,8 @@ and API documentation are also available.
 
 ## Status
 
-This project is in alpha at the moment and should be considered such until we
-reach a 1.x release number.
+This project is in early beta at the moment and should be considered such
+until we reach a 1.x release number.
 
 ## License
 
@@ -26,10 +26,6 @@ accompanying LICENCE document for details).
 This project will adhere to the principles of 
 [semantic versioning](http://semver.org)  once a first public API is declared.
 
-## Installation
-
-See the accompanying INSTALL file.
-
 ## Issue Tracking
 
 Please register issues using the
@@ -38,4 +34,3 @@ Please register issues using the
 ## Links
 
 [wiki]: https://github.com/nebularis/systest/wiki
-[rebar]: (https://github.com/basho/rebar)

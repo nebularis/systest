@@ -81,29 +81,61 @@ start_it(How, ScopeId, SutId, Config) ->
 
 start_it(How, ScopeId, SutId, Config, Opts) ->
     framework("System Under Test: ~p~n", [SutId]),
-    case apply(gen_server, How, [{local, SutId},
-                                 ?MODULE, [ScopeId, SutId, Config], Opts]) of
-        {error, noconfig} ->
-            case lists:keymember(active, 1, Config) of
-                false -> [{active, none}|Config];
-                true  -> Config
-            end;
-        {error, {bad_return_value, Return}} ->
-            log_startup_errors(SutId, Return),
-            {error, Return};
-        {error, Other}=Err ->
-            log_startup_errors(SutId, Other),
-            Err;
-        {ok, Pid} ->
-            Config2 = systest_config:ensure_value(SutId, Pid, Config),
-            systest_config:replace_value(active, Pid, Config2)
+    Parent = self(),
+    Timetrap = proplists:get_value(setup_timetrap, Config, infinity),
+    Timeout = systest_utils:time_to_ms(Timetrap),
+    {Pid, MRef} =
+        spawn_monitor(
+          fun() ->
+                  case apply(gen_server, How, [{local, SutId},
+                             ?MODULE, [ScopeId, SutId, Timeout, Config], []]) of
+                      {error, noconfig} ->
+                          Conf2 = case lists:keymember(active, 1, Config) of
+                                      false -> [{active, none}|Config];
+                                      true  -> Config
+                                  end,
+                          Parent ! {self(), Conf2};
+                      {error, {bad_return_value, Return}} ->
+                          log_startup_errors(SutId, Return),
+                          Parent ! {self(), {error, Return}};
+                      {error, Other}=Err ->
+                          log_startup_errors(SutId, Other),
+                          Parent ! {self(), Err};
+                      {ok, Pid} ->
+                          Config2 =
+                              systest_config:ensure_value(SutId,
+                                                          Pid,
+                                                          Config),
+                          Parent ! {self(),
+                                    systest_config:replace_value(active,
+                                                                 Pid,
+                                                                 Config2)}
+                  end
+          end),
+    receive
+        {Pid, Result} ->
+            erlang:demonitor(MRef, [flush]),
+            Result;
+        {'DOWN', MRef, process, Pid, Reason} ->
+            receive {Pid, Ret} -> Ret
+            after 0 -> {error, Reason}
+            end
+    after Timeout ->
+            exit(Pid, kill),
+            throw({error, {start, timeout}})
     end.
 
 stop(SutRef) ->
     stop(SutRef, infinity).
 
 stop(SutRef, Timeout) ->
-    gen_server:call(SutRef, stop, Timeout).
+    GenServerTimeout = if is_atom(Timeout) -> Timeout;
+                                      true -> erlang:round(Timeout * 1.1)
+                       end,
+    try gen_server:call(SutRef, {stop, Timeout}, GenServerTimeout)
+    catch exit:{timeout, _}=R -> R;
+          C:T                 -> {error, {C, T}}
+    end.
 
 restart_proc(SutRef, Proc) ->
     restart_proc(SutRef, Proc, infinity).
@@ -147,11 +179,9 @@ proc_pids(Sut) when is_record(Sut, sut) ->
 %% OTP gen_server API
 %%
 
-init([Scope, Id, Config]) ->
+init([Scope, Id, Timeout, Config]) ->
     process_flag(trap_exit, true),
-    %% TODO: now that we're using locally registered
-    %% names, perhaps this logic can go away?
-    case systest_watchdog:sut_started(Id, self()) of
+    case systest_watchdog:sut_started(Id, self(), Timeout) of
         ok ->
             LogBase = systest_env:default_log_dir(Config),
             case systest_log:activate_logging_subsystem(sut, Id, LogBase) of
@@ -306,7 +336,7 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
     %%
     %% Another thing to note here is that systest_cleaner runs the kill_wait
     %% function in a different process. If we put a selective receive block
-    %% here, we might well run into unexpected message ordering that could
+    %% here, we might well run into unexpected message orderings that could
     %% leave us in an inconsistent state.
     ProcRefs = [ProcRef || {_, ProcRef} <- Procs, is_process_alive(ProcRef)],
     case systest_cleaner:kill_wait(ProcRefs,
@@ -322,7 +352,7 @@ shutdown(State=#sut{name=Id, procs=Procs}, Timeout, ReplyTo) ->
             {stop, Err, State};
         Other ->
             framework("halt error: ~p~n", [Other]),
-            gen_server:reply(ReplyTo, {error, Other}),
+            gen_server:reply(ReplyTo, Other),
             {stop, {halt_error, Other}, State}
     end.
 

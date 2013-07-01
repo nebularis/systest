@@ -28,9 +28,9 @@
 
 -include("systest.hrl").
 
--export([main/1, get_system_under_test/1]).
+-export([main/1, get_system_under_test/0, get_system_under_test/1]).
 -export([start/0, stop/0, reset/0, sigkill/1]).
--export([start_suite/2, stop_scope/1, start/2, start/3, stop/1]).
+-export([start_suite/2, stop_scope/2, start/2, start/3, stop/1]).
 -export([active_sut/1, suts/1, procs/1]).
 -export([trace_on/2, trace_off/1]).
 -export([interact/2, write_pid_file/0, write_pid_file/1, write_pid_file/2]).
@@ -83,32 +83,32 @@ start_suite(Suite, Config) ->
 
 %% @doc immediately stops any resources associated with the supplied Scope
 %% @end
-stop_scope(Scope) when is_atom(Scope) ->
-    systest_watchdog:force_stop(Scope).
+stop_scope(Scope, Timeout) when is_atom(Scope) ->
+    systest_watchdog:force_stop(Scope, Timeout).
 
 %% @doc starts any resources associated with the given scope
 %% @end
 start(Scope, Config) ->
     try systest_sut:start(Scope, Config) of
-        {error, _}=Err ->
-            {fail, {system_under_test, start, Err}};
+        {error, Err} ->
+            {fail, Err};
         Other ->
             Other
     catch
-        What -> {fail, {system_under_test, start, What}}
+        What -> {fail, {start_failure, What}}
     end.
 
 %% @doc starts any resources associated with the given scope, using the
 %% provided identity when registering them with the testing framework
 %% @end
-start(Scope, Identify, Config) ->
-    try systest_sut:start(Scope, Identify, trace_on(Identify, Config)) of
-        {error, _}=Err ->
-            {fail, {system_under_test, start, Err}};
+start(Scope, Identity, Config) ->
+    try systest_sut:start(Scope, Identity, trace_on(Identity, Config)) of
+        {error, Err} ->
+            {fail, Err};
         Other ->
             Other
     catch
-        What -> {fail, {system_under_test, start, What}}
+        What -> {fail, {start_failure, What}}
     end.
 
 %% @doc politely asks any resources associated with the given scope to stop,
@@ -119,12 +119,16 @@ stop(Scope) when is_pid(Scope) ->
 
 %% config/settings
 
+%% @doc lists all installed settings for the current test run.
+%% @end
 settings() ->
     case systest_config:get_static(settings) of
         {settings, Settings} -> Settings;
         _                    -> []
     end.
 
+%% @doc searches for the supplied Key in the current settings
+%% @end
 settings(Key) when is_atom(Key) ->
     systest_config:read(Key, settings());
 settings(Key) when is_list(Key) ->
@@ -133,9 +137,14 @@ settings(Key) when is_list(Key) ->
         false -> systest_config:read(Key, settings())
     end.
 
+%% @doc attempts to lookup the supplied key - see systest_config:get_config/1
+%% @end
 config(Key) ->
     systest_config:get_config(Key).
 
+%% @doc attempts to lookup the supplied environment variable -
+%% see systest_config:get_env/1
+%% @end
 env(Key) ->
     systest_config:get_env(Key).
 
@@ -159,6 +168,9 @@ trace_off(Config) ->
 
 %% interactions
 
+%% @doc Activates a <i>process</i> that has been configured to postpone
+%% startup (viz the process activate_on_start config key).
+%% @end
 activate_process(ProcRef) ->
     systest_proc:activate(ProcRef).
 
@@ -247,6 +259,16 @@ write_pid_file(Name, {dir, Dir}) ->
     file:write_file(File, Pid, [write]).
 
 %% config handling
+
+%% @doc Returns the {@link systest_sut. <em>System Under Test</em>}
+%% associated with the current session. This call is only valid for
+%% standalone, shell and debug test runners. To obtain the sut for
+%% a common_test run, use get_system_under_test/1 instead.
+get_system_under_test() ->
+    case application:get_env(?MODULE, active_sut) of
+        {ok, Sut} -> Sut;
+        _         -> undefined
+    end.
 
 %% @doc Returns the {@link systest_sut. <em>System Under Test</em>} associated
 %% with the supplied configuration. <em>NB: this function fails the active

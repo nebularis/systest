@@ -31,22 +31,25 @@
 -define(lookup(W, D), systest_utils:lookup_env(W, D)).
 
 -type testable() :: file:filename() | module().
--type time_unit() :: 'hr' | 'min' | 'sec' | 'ms'.
+-type time_unit() :: 'hours' | 'minutes' | 'seconds' | 'ms' | 'milliseconds'.
 
 %% {allow_user_terms, Bool}, {label, ProfileName}
 
 -record(profile, {
-    name                        :: string(),        %% {label, Label}
-    framework = systest_ct      :: module(),
-    source                      :: file:filename(),
-    output_dir                  :: file:filename(),
-    log_dir                     :: file:filename(),
-    settings_base               :: file:filename(),
-    resources        = []       :: [file:filename()],
-    targets          = ["ebin"] :: [testable()],
-    specifications   = []       :: [file:filename()],
-    hooks            = []       :: [term()],
-    default_timetrap            :: {integer(), time_unit()}
+    name                                :: string(),        %% {label, Label}
+    framework           = "systest_ct"  :: module() | string(),
+    source                              :: file:filename(),
+    output_dir                          :: file:filename(),
+    log_dir                             :: file:filename(),
+    settings_base                       :: file:filename(),
+    resources                = []       :: [file:filename()],
+    targets                  = ["ebin"] :: [testable()],
+    specifications           = []       :: [file:filename()],
+    hooks                    = []       :: [term()],
+    aggressive_teardown      = false    :: boolean() | {time_unit(), integer()},
+    setup_timetrap           = infinity :: {time_unit(), integer()},
+    teardown_timetrap        = infinity :: {time_unit(), integer()},
+    execution_timetrap                  :: {time_unit(), integer()}
 }).
 
 -exprecs_prefix([operation]).

@@ -1,11 +1,7 @@
 ## Installing SysTest
 
 To install from source, clone the repository using git, or download the version
-you want to use from the [github downloads page][downloads]. The git clone
-command is fairly simple: `git clone https://github.com/nebularis/systest.git`
-should do the job. This guide is written for the _latest_ *SysTest* release, so
-you should avoid downloading a _SNAPSHOT_ and take the zip (or tar) ball for
-the _master_ branch instead.
+you want to use from the [github downloads page][downloads].
 
 To build the sources, execute the default make rule using `make`.
 Although you *can* build the sources using rebar, the makefile currently assumes
@@ -74,8 +70,7 @@ on.
 It is important that any file system paths are absolute, as common test will
 change to a temporary directory before running our tests and relative paths will
 therefore fail to produce the desired effect. This resource definition describes
-an Erlang node that is started using the
-http://www.erlang.org/doc/man/slave.html[Slave module] from stdlib, and having
+an Erlang node that is started using the [slave module][slave] from stdlib, and having
 some additional command line arguments. Note the use of a _string expression_ to
 evaluate the `base_dir` (the starting directory in which *SysTest* is run) from
 our settings, so that we use an absolute path when setting the code path.
@@ -198,3 +193,4 @@ are left in exactly the state we expect them to be in.
 [wiki]: https://github.com/nebularis/systest/wiki
 [downloads]: https://github.com/nebularis/systest/downloads
 [systest-rebar]: https://github.com/hyperthunk/rebar/branches/systest
+[slave]: http://www.erlang.org/doc/man/slave.html

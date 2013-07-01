@@ -40,4 +40,3 @@ stopping_and_restarting_nodes(Config) ->
     %% and our assertions....
     ?assertEqual(pang, net_adm:ping(Id1)),
     ?assertEqual(pong, net_adm:ping(Id2)).
-

@@ -3,11 +3,6 @@
 %% ----------------------------------------------------------------------------
 %%
 %% Copyright (c) 2005 - 2012 Nebularis.
-%% Copyright (c) 2010 Dave Smith (dizzyd@dizzyd.com).
-%%
-%% Some portions of the code taken from sh (c) 2005 - 2012 Nebularis
-%% Some portions of the code taken from rebar (c) 2010 Dave Smith
-%% Some portions of the code taken from retest (c) 2010 Dave Smith
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), deal
@@ -46,10 +41,12 @@
 suite() -> [{timetrap, {minutes, 2}}].
 
 all() ->
-    %% the timetrap_failure test *must* run separately
+    %% The timetrap_failure test *must* run separately
     %% from the rest of the SUITE, as the error it generates
     %% cannot be handled even by a ct_hook, and therefore the
-    %%
+    %% test run will always appear to fail - we simply want
+    %% to trigger that, so we can verify the shutdown behaviour
+    %% in our CT hook properly.
     [sut_start_scripts_badly_configured,
      failing_proc_on_start_hook,
      failing_sut_on_start_hook,

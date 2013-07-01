@@ -45,6 +45,9 @@
 
 -record(state, {
     auto_start :: boolean(),
+    aggressive :: boolean() | integer(),
+    setup      :: integer(),
+    teardown   :: integer(),
     suite      :: atom(),
     failed     :: integer(),
     skipped    :: integer(),
@@ -52,6 +55,7 @@
 }).
 
 -define(SOURCE, 'systest-common-test-hooks').
+-define(AGGRESSIVE_SHUTDOWN_MAX_WAIT, 20000).
 
 %% @doc Return a unique id for this CTH.
 id(_Opts) ->
@@ -59,7 +63,7 @@ id(_Opts) ->
 
 %% @doc Always called before any other callback function. Use this to initiate
 %% any common state.
-init(systest, _Opts) ->
+init(systest, Opts) ->
     case application:start(systest, permanent) of
         {error, {already_started, systest}} -> systest:reset();
         {error, _Reason}=Err                -> Err;
@@ -70,10 +74,17 @@ init(systest, _Opts) ->
                     Value     -> Value
                 end,
     systest_results:test_run(?SOURCE),
-%    TeardownTimetrap = ?CONFIG(teardown_timetrap, Opts, infinity),
-%    Timeout = systest_utils:time_to_ms(TeardownTimetrap),
-%    Aggressive = ?CONFIG(aggressive_teardown, Opts, false),
+    SetupTimetrap = ?CONFIG(setup_timetrap, Opts, infinity),
+    TeardownTimetrap = ?CONFIG(teardown_timetrap, Opts, infinity),
+    Timeout = systest_utils:time_to_ms(TeardownTimetrap),
+    Aggressive = case ?CONFIG(aggressive_teardown, Opts, false) of
+                     {_, _}=T -> systest_utils:time_to_ms(T);
+                     Other    -> Other
+                 end,
     {ok, #state{auto_start=AutoStart,
+                aggressive=Aggressive,
+                setup=SetupTimetrap,
+                teardown=Timeout,
                 failed=0,
                 skipped=0,
                 passed=0}}.
@@ -82,10 +93,12 @@ init(systest, _Opts) ->
 %% SUT, if one is configured for this suite.
 pre_init_per_suite(Suite, Config, State=#state{auto_start=false}) ->
     {Config, State#state{suite=Suite}};
-pre_init_per_suite(Suite, Config, State) ->
+pre_init_per_suite(Suite, Config,
+                   State=#state{setup=STT}) ->
     log(framework, "pre_init_per_suite: maybe start ~p~n", [Suite]),
     %% TODO: handle init_per_suite use of SUT aliases
-    {systest:start_suite(Suite, systest:trace_on(Suite, Config)),
+    Config2 = [{setup_timetrap, STT}|Config],
+    {systest:start_suite(Suite, systest:trace_on(Suite, Config2)),
                     State#state{suite=Suite}}.
 
 post_end_per_suite(Suite, Config, Result,
@@ -94,82 +107,76 @@ post_end_per_suite(Suite, Config, Result,
                                 passed=Passed}) ->
     systest_results:add_results(?SOURCE, Passed, Skipped, Failed),
     %% TODO: check and see whether there *is* actually an active SUT
-    case ?CONFIG(systest_utils:strip_suite_suffix(Suite), Config, undefined) of
-        undefined ->
-            log(framework, "no configured suite to stop~n", []);
-        SutPid ->
-            log(framework, "stopping ~p~n", [SutPid]),
-            log(framework, "stopped ~p~n",
-                   [systest_sut:stop(SutPid)])
-    end,
-    systest:trace_off(Config),
-    {Result, State}.
+    What = systest_utils:strip_suite_suffix(Suite),
+    {stop(What, State, Config, Result), State}.
 
 %% @doc Called before each init_per_group.
 pre_init_per_group(_Group, Config, State=#state{auto_start=false}) ->
     {Config, State};
-pre_init_per_group(Group, Config, State=#state{suite=Suite}) ->
-    {systest:start(Suite, Group, Config), State}.
+pre_init_per_group(Group, Config,
+                   State=#state{suite=Suite, setup=STT}) ->
+    Config2 = [{setup_timetrap, STT}|Config],
+    {systest:start(Suite, Group, Config2), State}.
 
 post_end_per_group(Group, Config, Result, State) ->
-    case ?CONFIG(Group, Config, undefined) of
-        undefined ->
-            {Result, State};
-        SutPid ->
-            {systest_sut:stop(SutPid), State}
-    end.
+    stop(Group, State, Config, Result).
 
 %% @doc Called before each test case.
 pre_init_per_testcase(TC, Config, State=#state{auto_start=false}) ->
     {systest:trace_on(TC, Config), State};
-pre_init_per_testcase(TC, Config, State=#state{suite=Suite}) ->
+pre_init_per_testcase(TC, Config,
+                      State=#state{suite=Suite, setup=STT}) ->
     log(framework, "handling ~p pre_init_per_testcase~n", [TC]),
-    {systest:start(Suite, TC, Config), State}.
+    Config2 = [{setup_timetrap, STT}|Config],
+    {systest:start(Suite, TC, Config2), State}.
 
-post_end_per_testcase(TC, Config, Return, State) ->
+post_end_per_testcase(TC, Config, Result, State) ->
     log(framework, "processing ~p post_end_per_testcase~n", [TC]),
-    log(framework, "~p returned ~p~n", [TC, Return]),
-    {Result, State2} = check_exceptions(TC, Return, State),
-    try
-        case ?CONFIG(TC, Config, undefined) of
-            undefined ->
-                stop(TC);
-            SutPid ->
-                case erlang:is_process_alive(SutPid) of
-                    true ->
-                        stop(SutPid);
-                    false ->
-                        log(framework, "sut ~p is already down~n", [SutPid])
-                end
-        end,
-        {Result, State2}
-    catch
-        %% a failure in the sut stop procedure should cause the test to fail,
-        %% so that the operator has a useful indication that all is not well
-        _:Error ->
-            {{fail, Error},
-             State2#state{failed=erlang:min(State#state.failed,
-                                            State2#state.failed)}}
-    after
-        systest:trace_off(Config)
-    end.
+    stop(TC, State, Config, Result).
 
 terminate(_) ->
     ok.
 
-stop(Target) ->
-    log(framework, "stopping ~p~n", [Target]),
+stop(Target, State=#state{aggressive=Aggressive, teardown=Timeout},
+     Config, Result) ->
+    log(framework, "~p returned ~p. Stopping....~n", [Target, Result]),
+    {Result2, State2} = check_exceptions(Target, Result, State),
+    possibly_generate_killer(Target, Aggressive),  %% TODO: if this fails?
     try
-        case is_pid(Target) of
-            true ->
-                ok = systest_sut:stop(Target);
-            false ->
-                ok = systest:stop_scope(Target)
+        %% TODO: check the shutdown succedded, otherwise fail!
+        case systest:stop_scope(Target, Timeout) of
+            ok ->
+                {Result2, State2};
+            Stop ->
+                Err = case Stop of
+                          {error,timeout,Data} -> {timeout, Data};
+                          _                    -> Stop
+                      end,
+                log(framework, "stopped: ~p~n", [Err]),
+                {{fail, {shutdown_error, Err}},
+                 State2#state{failed=fail_count(State, State2)}}
         end
     catch
-        _:Err -> log(system, "sut ~p shutdown error: ~p~n",
-                     [Target, Err])
+        %% a failure in the sut stop procedure should cause the test to fail,
+        %% so that the operator has a useful indication that all is not well
+        _:Error ->
+            log(system, "shutdown error: ~p~n~p~n",
+                [Error, erlang:get_stacktrace()]),
+            {{fail, {shutdown_error, Error}},
+             State2#state{failed=fail_count(State, State2)}}
+    after
+        systest:trace_off(Config)
     end.
+
+fail_count(State, State2) ->
+    erlang:min(State#state.failed, State2#state.failed).
+
+possibly_generate_killer(_, false) ->
+    ok;
+possibly_generate_killer(Target, true) ->
+    possibly_generate_killer(Target, ?AGGRESSIVE_SHUTDOWN_MAX_WAIT);
+possibly_generate_killer(Target, Timeout) ->
+    timer:kill_after(Timeout, Target).
 
 check_exceptions(SutId, Return,
                  State=#state{failed=F, skipped=S, passed=P}) ->
@@ -193,7 +200,7 @@ check_exceptions(SutId, Return,
         Ex ->
             log(system,
                 "ERROR ~p: unexpected process exits "
-                "detected - see the log(s) for details~n",
+                "detected - see test log(s) for details~n",
                 [SutId]),
 
             [begin

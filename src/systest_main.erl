@@ -28,26 +28,28 @@
 
 help() ->
     io:format("Usage: systest [-P <profile>] (Options) ~n~n"
-              "-h               Show the program options~n"
-              "-q, --quiet      Disable header/options output on start~n"
-              "-P, --profile    Use the specified test profile~n"
-              "-F, --framework  Override test framework for current profile~n"
-              "-S,--stand_alone Synonym for `-F systest_standalone'~n"
-              "-s, --shell      Synonym for `-F systest_shell'~n"
-              "-Z, --target     Use the specified target~n"
-              "-z, --sut        SUT to run (used with standalone framework)~n"
-              "-L, --logging    Active logging for the specified sub-system~n"
-              "-n, --dryrun     Print everything out but don't run any tests~n"
-              "-w, --no_cover   Disable code coverage~n"
-              "-c, --cover-import Enables import/export of coverage data~n"
-              "-i, --ignore     Ignore errors/failures~n"
-              "-I, --ignore_skipped Ignore skipped test cases~n"
-              "-a, --name       Specify (Erlang) node name, "
-                                "default = systest_runner~n"
-              "-A, --longnames  Use long instead of short names with -a~n"
-              "-X, --dump       Dump configuration/status information if the "
-                                "run fails~n"
-              "--<s>-<k>=<v>    Set [k]ey for [s]ubsystem to [v]alue~n"
+              "-h                       Show the program options~n"
+              "-q, --quiet              Disable header/options output on start~n"
+              "-P, --profile <name>     Use the specified test profile~n"
+              "-F, --framework <name>   Override test framework for current profile~n"
+              "-S,--stand_alone         Synonym for `-F systest_standalone'~n"
+              "-s, --shell              Synonym for `-F systest_shell'~n"
+              "-D, --debug              Synonym for `-F systest_debug'~n"
+              "-Z, --target <target>    Use the specified target~n"
+              "-z, --sut <sut>          SUT to run (used with standalone framework)~n"
+              "-L, --logging <name>     Active logging for the specified sub-system~n"
+              "-n, --dryrun             Print everything out but don't run any tests~n"
+              "-w, --no_cover           Disable code coverage~n"
+              "-c, --cover-import       Enables import/export of coverage data~n"
+              "-M, --cover-extra <file> Import additional cover analysis files~n"
+              "-i, --ignore             Ignore errors/failures~n"
+              "-I, --ignore_skipped     Ignore skipped test cases~n"
+              "-a, --name <name>        Specify (Erlang) node name, "
+                                        "default = systest_runner~n"
+              "-A, --longnames          Use long instead of short names with -a~n"
+              "-X, --dump               Dump configuration/status information if the "
+                                        "run fails~n"
+              "--<s>-<k>=<v>            Set [k]ey for [s]ubsystem to [v]alue~n"
               "~n").
 
 run(["-h"]) ->
@@ -115,10 +117,12 @@ opt_spec() ->
      {framework,        'F', string},
      {stand_alone,      'S', flag},
      {shell,            's', flag},
+     {debug,            'D', flag},
      {logging,          'L', string},
      {dryrun,           'n', flag},
      {no_cover,         'w', flag},
      {'cover-import',   'c', flag},
+     {'cover-extra',    'M', string},
      {ignore,           'i', flag},
      {ignore_skipped,   'I', flag},
      {dump,             'X', flag},

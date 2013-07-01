@@ -341,29 +341,28 @@ apply_hook(Hook, Item, {Proc, HState}) ->
     end.
 
 on_join(Proc, Sut, Procs, Hooks) ->
-    framework(get(id, Proc),
-              "process has joined system under test: ~p~n",
-              [systest_sut:get(id, Sut)]),
-
+    SutRef = systest_sut:get(id, Sut),
+    log({framework, get(id, Proc)},
+        "process has joined system under test: ~p~n", [SutRef]),
     %% TODO: this is COMPLETELY inconsistent with the rest of the
     %% hooks handling - this whole area needs some serious tidy up
     try
         {Proc2, _} = lists:foldl(fun({Where, M, F}, Acc) ->
                                          apply_hook(on_join,
                                                     {Where, M, F,
-                                                     [Sut, Procs]},
+                                                     [SutRef, Procs]},
                                                     Acc);
                                     ({Where, M, F, A}, Acc) ->
                                          apply_hook(on_join,
                                                     {Where, M, F,
-                                                     [Sut, Procs|A]},
+                                                     [SutRef, Procs|A]},
                                                     Acc);
                                     (What, Acc) ->
                                          throw({What, Acc})
                                  end, {Proc, undefined}, Hooks),
         Proc2
     catch _:Err ->
-        {error, Err}
+            {error, Err}
     end.
 
 %% TODO: migrate this to systest_hooks....
@@ -381,8 +380,8 @@ interact(Proc=#proc{id=NodeId},
     end;
 interact(Proc, {local, Mod, Func, Args}, _) ->
     apply(Mod, Func, [Proc|Args]);
-interact(Proc=#proc{id=Id}, {remote, Mod, Func, Args}, _) ->
-    rpc:call(Id, Mod, Func, [Proc|Args]);
+interact(#proc{id=Id}, {remote, Mod, Func, Args}, _) ->
+    rpc:call(Id, Mod, Func, [self()|Args]);
 interact(#proc{id=Node}, {Mod, Func, Args}, _) ->
     rpc:call(Node, Mod, Func, Args);
 interact(NI=#proc{handler=Handler}, Inputs, HState) ->
@@ -532,6 +531,8 @@ stopping_callback(Mod, Func, Proc, Args) ->
     case get(cover, Proc) of
         true ->
             Id = get(id, Proc),
+            %% TODO: systest_cover needs to become a gen_server
+            %% so that we can timeout on the call to stop remote cover
             systest_cover:stop_cover(Id);
         _ ->
             ok
@@ -662,3 +663,4 @@ setup(NI, {App, Vars}, HState) ->
     interact(NI, {applicaiton, load, [App]}, HState),
     [interact(NI, {application, set_env,
                     [App, Env, Var]}, HState) || {Env, Var} <- Vars].
+

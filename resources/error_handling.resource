@@ -1,7 +1,8 @@
 
 {clean_node, [
     {startup, [
-        {handler, systest_slave}
+        {handler, systest_slave},
+        {link_to_parent, true}
     ]},
     {flags, [
         {start, "-boot start_sasl -pa ebin "
@@ -54,5 +55,36 @@
     {sut, [{localhost, [n1]}]},
     {processes, [
          {n1, [clean_node, bad_on_join]}
+    ]}
+]}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%
+
+{no_start, [
+    {on_start, [{timer, sleep, [16#ffffffff]}]}
+]}.
+
+{no_stop, [
+    {on_stop, [{timer, sleep, [16#ffffffff]}]}
+]}.
+
+{simple_test_case_pass_through, [
+    {sut, [{localhost, [n1, n2]}]},
+    {processes, [
+         {n1, [clean_node, no_stop]},
+         {n2, [clean_node, no_stop]}
+    ]}
+]}.
+
+{test_teardown_timeouts, [
+    {sut, [{localhost, [n3]}]},
+    {processes, [{n3, [clean_node, no_stop]}]}
+]}.
+
+{hang_on_startup, [
+    {sut, [{localhost, [n1, n2]}]},
+    {processes, [
+         {n1, [clean_node, no_start]},
+         {n2, [clean_node, no_start]}
     ]}
 ]}.

@@ -58,7 +58,7 @@ run(RunSpec) ->
     run_it(RunSpec, false).
 
 start() ->
-    gen_server:start(?MODULE, [], []).
+    gen_server:start({local, ?MODULE}, ?MODULE, [], []).
 
 stop() ->
     gen_server:call(?MODULE, stop).
@@ -86,9 +86,9 @@ handle_call({run, RunSpec}, From, State) ->
     Dir = filename:join(ScratchDir,
                         "standalone-" ++
                             systest_env:timestamp()),
-    filelib:ensure_dir(Dir),
+    filelib:ensure_dir(filename:join(Dir, "foo")),
     Config = [{priv_dir, Dir}|BaseConfig],
-    case systest_sut:start_link(SutId, SutId, Config) of
+    case systest_sut:start(SutId, SutId, Config) of
         {error, Reason} ->
             {stop, Reason, State2};
         Other when is_list(Other) ->
@@ -108,10 +108,10 @@ handle_call({run, RunSpec}, From, State) ->
                         true ->
                             ok
                     end,
+                    application:set_env(systest, active_sut, Pid),
                     {reply, ok, State2};
                 Other ->
-                    io:format(user, "Then what the fuck is ~p~n", [Other]),
-                    {stop, what_the_fuck, State}
+                    {stop, start_error, State}
             end
     end;
 handle_call(stop, _From, State) ->
@@ -164,7 +164,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 
 get_default_timetrap(Profile) ->
-    case systest_profile:get(default_timetrap, Profile) of
+    case systest_profile:get(execution_timetrap, Profile) of
         undefined -> {minutes, 1};
         Value -> Value
     end.

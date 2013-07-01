@@ -33,10 +33,11 @@
 -export([throw_unless/2, throw_unless/3, throw_unless/4]).
 -export([record_to_proplist/2, border/2, print_heading/1, print_section/2]).
 -export([ets_dump/1, quiet/1, safe_call/3, call/2]).
--export([time_to_ms/1, as_atom/1]).
+-export([time_to_ms/1, as_atom/1, remote_load/2]).
 
 abort(Fmt, Args) ->
-    io:format(user, Fmt, Args),
+    io:format(Fmt, Args),
+    timer:sleep(500),
     erlang:halt(1).
 
 throw_unless(Cond, Msg) ->
@@ -119,6 +120,10 @@ rm_rf(Path, ok) ->
                 {error, Err}    -> {error, {Path, Err}}
             end
     end.
+
+remote_load(Node, Module) ->
+    {Mod, Bin, Fname} = code:get_object_code(Module),
+    rpc:call(Node, code, load_binary, [Mod, Fname, Bin]).
 
 %% @doc makes a gen_server:call with 'infinity' timeout.
 %% @end

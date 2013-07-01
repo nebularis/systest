@@ -29,15 +29,23 @@
 -behaviour(systest_runner).
 
 -export([dryrun/1, run/1]).
+-export([run_debug/2]).
+
+-import(systest_utils, [as_string/1]).
 
 -include("systest.hrl").
+-define(PRIORITY, 100000).
+
 dryrun(RunSpec) ->
-    run(RunSpec, true).
+    run(RunSpec, false, true).
 
 run(RunSpec) ->
-    run(RunSpec, false).
+    run(RunSpec, false, false).
 
-run(RunSpec, DryRun) ->
+run_debug(RunSpec, DryRun) ->
+    run(RunSpec, true, DryRun).
+
+run(RunSpec, Debug, DryRun) ->
     Quiet   = systest_runner:get(quiet, RunSpec),
     Profile = systest_runner:get(profile, RunSpec),
     Targets = systest_runner:get(targets, RunSpec),
@@ -53,8 +61,7 @@ run(RunSpec, DryRun) ->
 
     HooksEntry = case Hooks of
                      [] ->
-                         {ct_hooks, [cth_log_redirect,
-                                     {systest_cth, [], 100000}]};
+                         {ct_hooks, install_cth(Profile, [cth_log_redirect])};
                      _  ->
                          [begin
                              M = case Hook of
@@ -63,8 +70,18 @@ run(RunSpec, DryRun) ->
                                  end,
                              code:ensure_loaded(M)
                           end || Hook <- Hooks],
-                         {ct_hooks, Hooks}
+                         Hooks3 = case find_hook(Hooks, Profile) of
+                                      {true, Hook, Hooks2} ->
+                                          update_cth(Hook, Hooks2, Profile);
+                                      false ->
+                                          install_cth(Profile, Hooks)
+                                  end,
+                         {ct_hooks, Hooks3}
                  end,
+
+    DebugOpts = if Debug == true -> [{step, []}];
+                   true          -> []
+                end,
 
     case TestFun([{logdir, LogDir},
                   {label, Label},
@@ -72,7 +89,7 @@ run(RunSpec, DryRun) ->
                   {allow_user_terms, true},
                   {event_handler, systest_event},
                   {enable_builtin_hooks, true},
-                  HooksEntry|Targets], Quiet) of
+                  HooksEntry|Targets] ++ DebugOpts, Quiet) of
         {error, _}=Error ->
             Error;
         _Other ->
@@ -87,6 +104,65 @@ run(RunSpec, DryRun) ->
                 application:set_env(systest, failures, undefined)
             end
     end.
+
+install_cth(Profile, Hooks) ->
+    case lists:member(do_not_install, Hooks) of
+        false -> update_cth(systest_cth, Hooks, Profile);
+        true  -> lists:delete(do_not_install, Hooks)
+    end.
+
+update_cth(systest_cth, Hooks, Profile) ->
+    SetupTimetrap = systest_profile:get(setup_timetrap, Profile),
+    TeardownTimetrap = systest_profile:get(teardown_timetrap, Profile),
+    AggressiveTeardown = systest_profile:get(aggressive_teardown, Profile),
+    [{systest_cth,
+      [{setup_timetrap, SetupTimetrap},
+       {teardown_timetrap, TeardownTimetrap},
+       {aggressive_teardown, AggressiveTeardown}], ?PRIORITY}|Hooks];
+update_cth({systest_cth, Opts, Priority}, Hooks, Profile) ->
+    Opts2 =
+        lists:foldl(
+          fun(Opt, Acc) ->
+                  case lists:keymember(Opt, 1, Acc) of
+                      true  -> Acc;
+                      false -> [{Opt, systest_profile:get(Opt, Profile)}|Acc]
+                  end
+          end, Opts, [setup_timetrap, teardown_timetrap, aggressive_teardown]),
+    [{systest_cth, Opts2, Priority}|Hooks].
+
+find_hook(Hooks, Profile) ->
+    case lists:member(systest_cth, Hooks) of
+        true ->
+            {true, systest_cth,
+                fix_surefire(lists:delete(systest_cth, Hooks), Profile)};
+        false ->
+            case lists:keytake(systest_cth, 1, Hooks) of
+                false ->
+                    false;
+                {value, Hook, Rest} ->
+                    {true, Hook, fix_surefire(Rest, Profile)}
+            end
+    end.
+
+fix_surefire(Hooks, Profile) when is_list(Hooks) ->
+    Rest = lists:delete(cth_surefire, Hooks),
+    case lists:member(cth_surefire, Hooks) of
+        true ->
+            [make_surefire(cth_surefire, Profile)|Rest];
+        false ->
+            case lists:keytake(cth_surefire, 1, Hooks) of
+                false ->
+                    Rest;
+                {value, Hook, Remaining} ->
+                    [make_surefire(Hook, Profile)|Remaining]
+            end
+    end.
+
+make_surefire(cth_surefire, Profile) ->
+    Name = systest_profile:get(name, Profile),
+    {cth_surefire, [{path, as_string(Name) ++ ".xml"}]};
+make_surefire(Hook={cth_surefire, _, _}, _) ->
+    Hook.
 
 check_skip_ok(0, _) ->
     ok;

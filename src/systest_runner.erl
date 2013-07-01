@@ -34,6 +34,8 @@
 
 -export([behaviour_info/1, execute/1]).
 
+-export([timed_abort/2]).
+
 -type execution() :: #execution{}.
 -export_type([execution/0]).
 
@@ -176,6 +178,14 @@ verify(Exec2=#execution{profile     = Prof,
                   false -> run
               end,
 
+    case systest_profile:get(execution_timetrap, Prof) of
+        undefined ->
+            ok;
+        TimeoutNode ->
+            Ms = systest_utils:time_to_ms(TimeoutNode),
+            timer:apply_after(Ms, ?MODULE, timed_abort, [Config, Ms])
+    end,
+
     Result = case catch( erlang:apply(Mod, TestFun, [Exec2]) ) of
                  R -> R
              end,
@@ -198,6 +208,10 @@ verify(Exec2=#execution{profile     = Prof,
             handle_errors(Exec2, Errors, Config)
     end.
 
+timed_abort(Config, Ms) ->
+    AbortHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
+    AbortHandler("ABORT: reached maximum profile execution time: ~p ms~n", [Ms]).
+
 get_framework(Prof, Config) ->
     as_atom(case ?CONFIG(stand_alone, Config, false) of
                 true  -> "systest_standalone";
@@ -205,17 +219,22 @@ get_framework(Prof, Config) ->
                              true ->
                                  "systest_shell";
                              false ->
-                                 systest_profile:get(framework, Prof)
+                                 case ?CONFIG(debug, Config, false) of
+                                     true ->
+                                         "systest_debug";
+                                     false ->
+                                         systest_profile:get(framework, Prof)
+                                 end
                          end
             end).
 
-handle_failures(Prof, {How, N}, Config) ->
+handle_failures(Prof, {How, _}, Config) ->
     maybe_dump(Config),
     ProfileName = systest_profile:get(name, Prof),
     ErrorHandler = ?CONFIG(error_handler, Config, fun systest_utils:abort/2),
     ErrorHandler("[failed] test profile ~s "
-                 "completed with ~p ~p test cases~n",
-                 [ProfileName, N, How]).
+                 "encountered ~p test cases~n",
+                 [ProfileName, How]).
 
 handle_errors(_Exec, Reason, Config) ->
     maybe_dump(Config),

@@ -47,6 +47,14 @@ descriptor(Other) ->
 init([]) ->
     {ok, []}.
 
+handle_event(#event{name = start_logging}, State) ->
+    %% Since R16B01 - logging to test_server outside of a commont_test
+    %% run will crash the system, so we delay adding the logger until now
+    systest_ct_log:start(),
+    {ok, State};
+handle_event(#event{name = stop_logging}, State) ->
+    systest_ct_log:stop(),
+    {ok, State};
 handle_event(#event{name=tc_start, data={Suite,FuncOrGroup}}, State) ->
     case FuncOrGroup of
         init_per_suite ->

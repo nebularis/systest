@@ -53,8 +53,6 @@ run(RunSpec, Debug, DryRun) ->
     LogDir  = systest_profile:get(log_dir, Profile),
     Hooks   = systest_profile:get(hooks, Profile),
 
-    systest_ct_log:start(),
-
     TestFun = if DryRun =:= false -> fun run_test/2;
                             true  -> fun print_test/2
               end,

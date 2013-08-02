@@ -68,8 +68,9 @@ execute(Config) ->
     BaseDir = Exec#execution.base_dir,
     Prof = Exec#execution.profile,
     
-    systest_raw_log:start(
-      filename:join(systest_profile:get(log_dir, Prof), RawLog)),
+    RawLog2 = filename:join(systest_profile:get(log_dir, Prof),
+                            filename:basename(RawLog)),
+    systest_raw_log:start(RawLog2),
     
     DefaultSettings = systest_profile:get(settings_base, Prof),
     Resources = verify_resources(Prof, BaseDir),

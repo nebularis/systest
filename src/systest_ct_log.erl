@@ -20,7 +20,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% -----------------------------------------------------------------------------
-%% @hidden 
+%% @hidden
 %% Module systest_ct_log - provides a logging callback handler that prints
 %% to the common test log. Both raw and HTML outputs are generated this way.
 %% @end
@@ -42,5 +42,15 @@ stop() ->
 %% systest_log callback API!
 %%
 
+-ifndef(CT_FIXED).
+write_log(framework, _, _, _) ->
+    ok;
+write_log({framework, _}, _, _, _) ->
+    ok;
 write_log(EvId, _Fd, What, Args) ->
     ct:log("[" ++ as_string(EvId) ++ "] " ++ as_string(What), Args).
+-else.
+write_log(EvId, _Fd, What, Args) ->
+    ct:log("[" ++ as_string(EvId) ++ "] " ++ as_string(What), Args).
+-endif.
+

@@ -42,9 +42,5 @@ stop() ->
 %% systest_log callback API!
 %%
 
-write_log(framework, _, _, _) ->
-    ok;
-write_log({framework, _}, _, _, _) ->
-    ok;
 write_log(EvId, _Fd, What, Args) ->
     ct:log("[" ++ as_string(EvId) ++ "] " ++ as_string(What), Args).

@@ -91,6 +91,7 @@ start_file(Id, File) ->
 %% @doc as start_file/2, but takes a callback module.
 %% @end
 start_file(Id, Mod, Path) when is_list(Path) ->
+    filelib:ensure_dir(Path),
     {ok, IoDevice} = file:open(Path, [write]),
     start_file(Id, Mod, IoDevice);
 start_file(Id, Mod, Dest) ->

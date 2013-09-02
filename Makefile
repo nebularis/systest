@@ -28,10 +28,16 @@ EBIN_DIR=ebin
 DEPS=$(shell erl -noshell -eval '[io:format("~p~n", [element(1, D)]) || D <- proplists:get_value(deps, element(2, file:consult("rebar.config")))], halt(0).')
 LATEST_STABLE=$(shell git log stable --oneline -1 --format="%h")
 SYSTEST_EXE ?= ./priv/bin/systest
+CT_FIXED = $(shell erl -noshell -eval 'io:format([list_to_integer(X) || X <- string:tokens(erlang:system_info(version), ".")] >= [5,10,3]), halt().')
 
 ## rules start here
 
 REBAR=bin/rebar
+REBAR_CLI=$(REBAR_OPTS) $(call erlc_minusd_flag,$(CT_FIXED),CT_FIXED)
+
+define erlc_minusd_flag
+$(if $(filter true,$(1)),-D$(2))
+endef
 
 .PHONY: all
 all: escriptize
@@ -64,7 +70,7 @@ dist-clean: clean
 	rm -rf .eunit
 
 compile: $(REBAR)
-	$(REBAR) get-deps compile ${REBAR_OPTS}
+	$(REBAR) get-deps compile ${REBAR_CLI}
 
 $(SYSTEST_EXE): escriptize
 

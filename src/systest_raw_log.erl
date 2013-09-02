@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2005 - 2012 Nebularis.
+%% Copyright (c) 2005 - 2013 Nebularis.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -20,37 +20,22 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% -----------------------------------------------------------------------------
-%% @hidden
-%% Module systest_ct_log - provides a logging callback handler that prints
-%% to the common test log. Both raw and HTML outputs are generated this way.
+%% @hidden 
 %% @end
 %% -----------------------------------------------------------------------------
--module(systest_ct_log).
+-module(systest_raw_log).
 
 -behaviour(systest_log).
--export([write_log/4, start/0, stop/0]).
+-export([write_log/4, start/1]).
 
 -import(systest_utils, [as_string/1]).
 
-start() ->
-    ok = systest_log:start(ct, systest_ct_log, common_test).
-
-stop() ->
-    ok = systest_log:stop(ct, systest_ct_log, common_test).
+start(File) ->
+    ok = systest_log:start_file(raw, ?MODULE, File).
 
 %%
 %% systest_log callback API!
 %%
 
--ifndef(CT_FIXED).
-write_log(framework, _, _, _) ->
-    ok;
-write_log({framework, _}, _, _, _) ->
-    ok;
-write_log(EvId, _Fd, What, Args) ->
-    ct:log("[" ++ as_string(EvId) ++ "] " ++ as_string(What), Args).
--else.
-write_log(EvId, _Fd, What, Args) ->
-    ct:log("[" ++ as_string(EvId) ++ "] " ++ as_string(What), Args).
--endif.
-
+write_log(EvId, Fd, What, Args) ->
+    io:format(Fd, "[" ++ as_string(EvId) ++ "] " ++ as_string(What), Args).

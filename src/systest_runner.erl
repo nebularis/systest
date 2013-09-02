@@ -61,12 +61,17 @@ behaviour_info(_) ->
 -spec execute(systest_config:config()) -> 'ok'.
 execute(Config) ->
     systest:start(),
-    start_logging(Config),
+    {ok, RawLog} = start_logging(Config),
     maybe_start_net_kernel(Config),
     {ok, BaseDir} = file:get_cwd(),
     Exec = build_exec([{base_dir, BaseDir}|Config]),
     BaseDir = Exec#execution.base_dir,
     Prof = Exec#execution.profile,
+    
+    RawLog2 = filename:join(systest_profile:get(log_dir, Prof),
+                            filename:basename(RawLog)),
+    systest_raw_log:start(RawLog2),
+    
     DefaultSettings = systest_profile:get(settings_base, Prof),
     Resources = verify_resources(Prof, BaseDir),
 
@@ -97,13 +102,13 @@ print_banner(Config) ->
     end.
 
 start_logging(Config) ->
+    LogName = lists:flatten(io_lib:format("systest.~s.log",
+                            [systest_env:timestamp()])),
+    RawLog = filename:absname(LogName),
     SystemLog = case quiet(Config) of
-                    true  -> LogName = lists:flatten(
-                                io_lib:format("systest.~s.log",
-                                              [systest_env:timestamp()])),
-                             io:format(user, "quiet: (logging to ~s)~n",
+                    true  -> io:format(user, "quiet: (logging to ~s)~n",
                                        [LogName]),
-                             filename:absname(LogName);
+                             RawLog;
                     false -> case ?CONFIG(shell, Config, false) of
                                  false -> user;
                                  true  -> systest_shell
@@ -126,7 +131,8 @@ start_logging(Config) ->
      end || SubSystem <- Active],
     if length(Active) > 0 -> io:nl();
                      true -> ok
-    end.
+    end,
+    {ok, RawLog}.
 
 quiet(Config) ->
     ?CONFIG(quiet, Config, false).

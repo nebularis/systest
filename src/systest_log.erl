@@ -40,7 +40,7 @@
 
 -export([behaviour_info/1]).
 -export([start_link/0]).
--export([start/0, start/1, start/3, start_file/2, start_file/3]).
+-export([start/0, start/1, start/3, start_file/2, start_file/3, stop/1]).
 -export([log/2, log/3]).
 -export([write_log/4]).
 -export([activate_logging_subsystem/3]).
@@ -91,6 +91,7 @@ start_file(Id, File) ->
 %% @doc as start_file/2, but takes a callback module.
 %% @end
 start_file(Id, Mod, Path) when is_list(Path) ->
+    filelib:ensure_dir(Path),
     {ok, IoDevice} = file:open(Path, [write]),
     start_file(Id, Mod, IoDevice);
 start_file(Id, Mod, Dest) ->
@@ -102,6 +103,10 @@ start_file(Id, Mod, Dest) ->
 %% @end
 start(Id, Mod, Output) ->
     gen_event:add_handler(systest_event_log, {?MODULE, Id}, [Id, Mod, Output]).
+
+%% @doc Stop the log handler registered with Id.
+stop(Id) ->
+    gen_event:delete_handler(systest_event_log, {?MODULE, Id}, []).
 
 activate_logging_subsystem(SubSys, Id, LogBase) ->
     Handlers = gen_event:which_handlers(systest_event_log),
@@ -168,7 +173,8 @@ init([Id, Mod, Fd]) ->
     {ok, #state{id=Id, mod=Mod, fd=Fd}}.
 
 handle_event({Scope, Fmt, Args},
-            State=#state{id=ct, mod=Mod, fd=Fd}) ->
+            State=#state{id=Id, mod=Mod, fd=Fd}) when Id == ct orelse
+                                                      Id == raw ->
     write(Mod, Fd, Scope, Fmt, Args),
     {ok, State};
 handle_event({Scope, Fmt, Args},
@@ -177,7 +183,8 @@ handle_event({Scope, Fmt, Args},
     {ok, State};
 handle_event({Fmt, Args},
              State=#state{id=Id, mod=Mod, fd=Fd}) when Id == system orelse
-                                                       Id == ct ->
+                                                       Id == ct     orelse
+                                                       Id == raw ->
     write(Mod, Fd, system, Fmt, Args),
     {ok, State};
 handle_event(_Message, State) ->

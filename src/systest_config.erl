@@ -113,7 +113,7 @@ eval(Path, Config, Search=#search{return=Spec, key_func=KF}) ->
         Parts = string:tokens(Path, "."),
         Result = search_eval(Parts, Config, Search),
         case param_eval(Result, Config, Search) of
-            not_found -> not_found;
+            not_found -> throw({not_found, Path});
             Result2   -> case Spec of
                              key   -> Key = hd(lists:reverse(Parts)),
                                       {KF(Key), Result2};

@@ -97,8 +97,10 @@ print_banner(Config) ->
     case quiet(Config) of
         true  -> ok;
         false ->
-            {ok, Banner} = application:get_env(systest, banner),
-            io:format("~s~n", [Banner])
+            case application:get_env(systest, banner) of
+				{ok, Banner} -> io:format("~s~n", [Banner]);
+				_ -> ok
+			end
     end.
 
 start_logging(Config) ->

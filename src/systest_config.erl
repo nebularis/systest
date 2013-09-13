@@ -270,8 +270,8 @@ get_static(Key) ->
                     "reading config key ~p~n", [Key]),
     case call(?MODULE, {get_static, Key}) of
         [Config] -> Config;
-        []              -> noconfig;
-        Other           -> Other
+        []       -> noconfig;
+        Other    -> Other
     end.
 
 set_static(Key, Value) ->

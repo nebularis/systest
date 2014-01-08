@@ -97,6 +97,9 @@ init(Proc=#proc{config=Config}) ->
     StopCmd = stop_flags(Flags, ShutdownSpec, Detached,
                          RpcEnabled, ExitOnEof, Config),
 
+    systest_log:framework(Id, "Start Command: ~p~n", [StartCmd]),
+    systest_log:framework(Id, "Stop Command: ~p~n", [StopCmd]),
+
     case check_command_mode(Detached, RpcEnabled) of
         ok ->
             Port = open_port(StartCmd, Detached),

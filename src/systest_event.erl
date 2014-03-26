@@ -127,18 +127,17 @@ failed(What, Desc, FailInfo) when is_list(What) ->
                 io_lib:format("~p", [Thing]) || Thing <- What]), "|")),
           Desc, FailInfo);
 failed(What, Desc, FailInfo) when is_atom(What) ->
-    console("~s ~p failed.~n", [Desc, What]),
-    systest_log:log(framework,
-                    "~s~n", [lists:flatten(fail_info(FailInfo))]).
+    console("~s ~p failed: ~s~n", [Desc, What,
+                                   lists:flatten(fail_info(FailInfo))]).
 
 fail_info({error,FailInfo}) ->
     fail_info(FailInfo);
 fail_info({timetrap_timeout, Value}) ->
     io_lib:format("timetrap timeout (~p)", [Value]);
 fail_info({failed,{_Suite,end_per_testcase,FailInfo}}) ->
-    io_lib:format("end_per_testcase failure: ~s", [fail_info(FailInfo)]);
+    io_lib:format("(end_per_testcase failure) ~s", [fail_info(FailInfo)]);
 fail_info(Other) ->
-    io_lib:format("Fail Info ~p", [Other]).
+    io_lib:format("~p", [Other]).
 
 is_ct_wrap_function(init_per_testcase)  -> true;
 %is_ct_wrap_function(init_per_group)     -> true;

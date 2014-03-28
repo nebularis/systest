@@ -140,10 +140,10 @@ fail_info(Other) ->
     io_lib:format("~p", [Other]).
 
 is_ct_wrap_function(init_per_testcase)  -> true;
-%is_ct_wrap_function(init_per_group)     -> true;
+is_ct_wrap_function(init_per_group)     -> true;
 is_ct_wrap_function(init_per_suite)     -> true;
 is_ct_wrap_function(end_per_testcase)   -> true;
-%is_ct_wrap_function(end_per_group)      -> true;
+is_ct_wrap_function(end_per_group)      -> true;
 is_ct_wrap_function(end_per_suite)      -> true;
 is_ct_wrap_function(_)                  -> false.
 
